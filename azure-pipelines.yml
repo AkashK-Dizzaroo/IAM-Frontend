@@ -1,0 +1,75 @@
+# Node.js with React
+# Build a Node.js project that uses React.
+# Add steps that analyze code, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/javascript
+
+trigger:
+- main
+
+variables:
+  nodeVersion: '20.x'
+
+steps:
+# 0️⃣ Checkout code
+- checkout: self
+  displayName: 'Checkout Repository'
+
+# 1️⃣ Install Node.js
+- task: NodeTool@0
+  inputs:
+    versionSpec: $(nodeVersion)
+  displayName: 'Install Node.js'
+
+# 2️⃣ Clean previous builds
+- script: |
+    rm -rf $(Build.SourcesDirectory)/dist
+  displayName: 'Clean Previous Build'
+
+# 3️⃣ Install dependencies
+- script: |
+    npm ci || npm install
+  workingDirectory: $(Build.SourcesDirectory)
+  displayName: 'Install Dependencies'
+
+# 4️⃣ Build the app with environment variables
+- script: |
+    npm run build
+  workingDirectory: $(Build.SourcesDirectory)
+  displayName: 'Build Application'
+  env:
+    VITE_API_URL: $(VITE_API_URL)
+    VITE_HUB_URL: $(VITE_HUB_URL)
+
+# 5️⃣ Copy Static Web App config to dist
+- script: |
+    if [ -f "$(Build.SourcesDirectory)/staticwebapp.config.json" ]; then
+      cp $(Build.SourcesDirectory)/staticwebapp.config.json $(Build.SourcesDirectory)/dist/
+      echo "✅ staticwebapp.config.json copied to dist folder"
+    else
+      echo "❌ ERROR: staticwebapp.config.json not found in repository root"
+      exit 1
+    fi
+  displayName: 'Copy Static Web App Config'
+
+# 6️⃣ Check build output
+- script: |
+    echo "📁 Build output contents:"
+    ls -la $(Build.SourcesDirectory)/dist
+    echo ""
+    echo "📄 Checking for staticwebapp.config.json:"
+    if [ -f "$(Build.SourcesDirectory)/dist/staticwebapp.config.json" ]; then
+      echo "✅ staticwebapp.config.json found in dist"
+      cat $(Build.SourcesDirectory)/dist/staticwebapp.config.json
+    else
+      echo "❌ staticwebapp.config.json NOT found in dist"
+    fi
+  displayName: 'Verify Build Output'
+
+# 7️⃣ Deploy to Azure Static Web App
+- task: AzureStaticWebApp@0
+  inputs:
+    azure_static_web_apps_api_token: $(AZURE_STATIC_WEB_APPS_API_TOKEN_IAM)
+    app_location: 'dist'
+    output_location: ''
+    skip_app_build: true
+  displayName: 'Deploy to Azure Static Web App'
