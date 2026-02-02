@@ -1,262 +1,166 @@
-// import { createContext, useState, useEffect } from 'react'
-// import api from '../services/api'
-// import { getValidHubUrl } from '../utils/hubUrl'
-
-// export const AuthContext = createContext(null)
-
-// const TOKEN_FROM_URL_KEY = 'iam_token_from_url'
-
-// export const AuthProvider = ({ children }) => {
-//   const [user, setUser] = useState(null)
-//   const [loading, setLoading] = useState(true)
-//   const [isAuthenticated, setIsAuthenticated] = useState(false)
-//   const [authError, setAuthError] = useState(null)
-
-//   // Helper to redirect back to the Hub (source of truth for login)
-//   const redirectToHub = (path = '') => {
-//     const hubUrl = getValidHubUrl()
-//     window.location.href = path ? `${hubUrl}${path.startsWith('/') ? path : `/${path}`}` : hubUrl
-//   }
-
-//   useEffect(() => {
-//     const initializeAuth = async () => {
-//       try {
-//         // 1. At the very start: check URL for accessToken BEFORE reading localStorage
-//         const params = new URLSearchParams(window.location.search)
-//         const accessTokenFromUrl = params.get('accessToken')
-//         if (accessTokenFromUrl) {
-//           localStorage.setItem('platform_token', accessTokenFromUrl)
-//           sessionStorage.setItem(TOKEN_FROM_URL_KEY, '1')
-//           const url = new URL(window.location.href)
-//           url.searchParams.delete('accessToken')
-//           window.history.replaceState({}, '', url.toString())
-//           console.log('[Auth] Token extracted from URL and saved to localStorage')
-//         }
-
-//         // 2. Now read platform_token from localStorage (may have just been set above)
-//         const token = localStorage.getItem('platform_token')
-//         const isDevEnv = import.meta.env.DEV || import.meta.env.VITE_DEV_MODE === 'true'
-//         // Clear any old dev_mode flag - we always verify with backend now
-//         if (localStorage.getItem('dev_mode') === 'true') {
-//           console.log('[Auth] Clearing old dev_mode flag')
-//           localStorage.removeItem('dev_mode')
-//         }
-        
-//         console.log('[Auth] Initializing auth:', { 
-//           hasToken: !!token, 
-//           isDevEnv,
-//           tokenPreview: token ? token.substring(0, 30) + '...' : 'none'
-//         })
-
-//         // No token at all - redirect to hub for authentication
-//         if (!token) {
-//           setLoading(false)
-//           setIsAuthenticated(false)
-//           setUser(null)
-//           redirectToHub()
-//           return
-//         }
-
-//         // Always verify the token with the backend
-//         try {
-//           const response = await api.get('/auth/verify', { timeout: 15000 })
-//           const data = response.data
-
-//           if (!data?.success || !data?.data?.user) {
-//             throw new Error('Invalid auth response')
-//           }
-
-//           const backendUser = data.data.user
-
-//           // Use backend-provided globalRole as the single source of truth.
-//           // Only default to 'USER' if globalRole is missing.
-//           if (!backendUser.globalRole) {
-//             backendUser.globalRole = 'USER'
-//           }
-
-//           // Persist normalized user for other apps if needed
-//           // This overwrites any old dummy data
-//           localStorage.setItem('platform_user', JSON.stringify(backendUser))
-          
-//           console.log('[IAM Auth] User loaded from backend:', {
-//             email: backendUser.email,
-//             globalRole: backendUser.globalRole,
-//             id: backendUser.id,
-//             firstName: backendUser.firstName,
-//             lastName: backendUser.lastName
-//           })
-
-//           setUser(backendUser)
-//           setIsAuthenticated(true)
-//         } catch (error) {
-//           // Backend verification failed - clear session
-//           console.error('[IAM Auth] Backend verification failed:', error.message)
-//           const justReceivedFromUrl = sessionStorage.getItem(TOKEN_FROM_URL_KEY) !== null
-//           localStorage.removeItem('platform_token')
-//           localStorage.removeItem('platform_user')
-//           localStorage.removeItem('dev_mode')
-//           sessionStorage.removeItem(TOKEN_FROM_URL_KEY)
-//           setUser(null)
-//           setIsAuthenticated(false)
-
-//           // If we just received token from URL, show error instead of redirecting
-//           // to avoid redirect loop (Hub -> IAM -> verify fails -> Hub -> IAM...)
-//           if (justReceivedFromUrl) {
-//             setAuthError('Could not verify your session. The token may be invalid or the server is unreachable.')
-//             return
-//           }
-
-//           redirectToHub()
-//           return
-//         }
-//       } catch (error) {
-//         console.error('Auth initialization error:', error)
-//         const justReceivedFromUrl = sessionStorage.getItem(TOKEN_FROM_URL_KEY) !== null
-//         localStorage.removeItem('platform_token')
-//         localStorage.removeItem('platform_user')
-//         localStorage.removeItem('dev_mode')
-//         sessionStorage.removeItem(TOKEN_FROM_URL_KEY)
-//         setUser(null)
-//         setIsAuthenticated(false)
-//         if (justReceivedFromUrl) {
-//           setAuthError('An error occurred while verifying your session.')
-//         } else {
-//           redirectToHub()
-//         }
-//       } finally {
-//         setLoading(false)
-//       }
-//     }
-
-//     initializeAuth()
-//   }, [])
-
-//   const logout = async () => {
-//     try {
-//       // Best-effort backend logout for audit purposes
-//       await api.post('/auth/logout').catch(() => {})
-//     } finally {
-//       localStorage.removeItem('platform_token')
-//       localStorage.removeItem('platform_user')
-//       setUser(null)
-//       setIsAuthenticated(false)
-//       window.location.href = `${getValidHubUrl()}/logout`
-//     }
-//   }
-
-//   // Auth error (e.g. verification failed after token-from-URL)
-//   if (authError) {
-//     return (
-//       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-//         <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
-//           <div className="text-6xl mb-4">⚠️</div>
-//           <h1 className="text-xl font-bold mb-2 text-gray-800">Authentication Failed</h1>
-//           <p className="text-gray-600 mb-6">{authError}</p>
-//           <button
-//             onClick={() => redirectToHub()}
-//             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-//           >
-//             Back to Hub
-//           </button>
-//         </div>
-//       </div>
-//     )
-//   }
-
-//   // Don't render children until auth check is complete
-//   if (loading) {
-//     return (
-//       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-//         <div className="text-center">
-//           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-//           <p className="text-gray-600 font-medium">Authenticating...</p>
-//         </div>
-//       </div>
-//     )
-//   }
-
-//   return (
-//     <AuthContext.Provider
-//       value={{
-//         user,
-//         loading,
-//         isAuthenticated,
-//         logout,
-//       }}
-//     >
-//       {children}
-//     </AuthContext.Provider>
-//   )
-// }
-
-
-
-import { createContext, useState, useEffect } from 'react'
+import { createContext, useEffect, useState } from 'react'
+import { useGoogleLogin } from '@react-oauth/google'
 import api from '../services/api'
 import { getValidHubUrl } from '../utils/hubUrl'
 
 export const AuthContext = createContext(null)
 
-const TOKEN_FROM_URL_KEY = 'iam_token_from_url'
+const PLATFORM_TOKEN_KEY = 'platform_token'
+const PLATFORM_USER_KEY = 'platform_user'
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authError, setAuthError] = useState(null)
+
+  const clearSession = () => {
+    localStorage.removeItem(PLATFORM_TOKEN_KEY)
+    localStorage.removeItem(PLATFORM_USER_KEY)
+    localStorage.removeItem('dev_mode')
+    setUser(null)
+    setIsAuthenticated(false)
+  }
+
+  const normalizeUser = (backendUser) => {
+    if (!backendUser.globalRole) {
+      backendUser.globalRole = 'USER'
+    }
+    return backendUser
+  }
+
+  const verifyExistingToken = async () => {
+    const response = await api.get('/auth/verify', { timeout: 15000 })
+    const data = response.data
+
+    if (!data?.success || !data?.data?.user) {
+      throw new Error('Invalid auth response')
+    }
+
+    const backendUser = normalizeUser(data.data.user)
+    localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(backendUser))
+    setUser(backendUser)
+    setIsAuthenticated(true)
+  }
+
+  const googleLogin = useGoogleLogin({
+    flow: 'auth-code',
+    onSuccess: async (codeResponse) => {
+      try {
+        setLoading(true)
+        setAuthError(null)
+
+        const response = await api.post('/auth/google', { code: codeResponse.code })
+        const data = response.data
+
+        if (!data?.success || !data?.data?.token) {
+          throw new Error('Invalid Google auth response')
+        }
+
+        localStorage.setItem(PLATFORM_TOKEN_KEY, data.data.token)
+
+        if (data.data.user) {
+          const backendUser = normalizeUser(data.data.user)
+          localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(backendUser))
+          setUser(backendUser)
+          setIsAuthenticated(true)
+          setLoading(false)
+          return
+        }
+
+        await verifyExistingToken()
+        setLoading(false)
+      } catch (error) {
+        console.error('[IAM Auth] Google login failed:', error.message)
+        clearSession()
+        setAuthError('Google authentication failed. Please try again.')
+        setLoading(false)
+      }
+    },
+    onError: () => {
+      clearSession()
+      setAuthError('Google authentication failed. Please try again.')
+      setLoading(false)
+    },
+  })
 
   useEffect(() => {
-    const debugAuth = async () => {
-      // 1. FREEZE execution and show us the URL
-      const currentUrl = window.location.href;
-      const searchParams = new URLSearchParams(window.location.search);
-      
-      // CHECK 1: Did the Hub send 'accessToken' or 'token'?
-      const tokenA = searchParams.get('accessToken');
-      const tokenB = searchParams.get('token');
-      const foundToken = tokenA || tokenB;
+    const initializeAuth = async () => {
+      const token = localStorage.getItem(PLATFORM_TOKEN_KEY)
 
-      if (!localStorage.getItem('platform_token')) {
-          // Alert is BLOCKING - it stops the redirect so you can read this
-          alert(`DEBUG MODE:\n\nURL: ${currentUrl}\n\nToken (accessToken): ${tokenA}\nToken (token): ${tokenB}`);
+      if (token) {
+        try {
+          await verifyExistingToken()
+        } catch (error) {
+          console.error('[IAM Auth] Backend verification failed:', error.message)
+          clearSession()
+          setAuthError('Could not verify your session. Please sign in again.')
+        } finally {
+          setLoading(false)
+        }
+        return
       }
 
-      // 2. If token found in URL, save it immediately
-      if (foundToken) {
-        localStorage.setItem('platform_token', foundToken);
-        sessionStorage.setItem(TOKEN_FROM_URL_KEY, 'true');
-        // Clean URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-
-      // 3. Now check storage
-      const storedToken = localStorage.getItem('platform_token');
-
-      if (!storedToken) {
-        console.warn("No token found. Redirecting to Hub...");
-        // Comment out this line if you want to stop the redirect completely to debug
-        window.location.href = getValidHubUrl(); 
-        return;
-      }
-
-      // 4. Verify with Backend (Using GET to avoid 405)
       try {
-        // alert("Token found! Attempting to verify with backend..."); // Optional pause
-        await api.get('/auth/verify'); 
-        // If success, set user...
-        setUser({ name: "Debug User" }); // Simplified for test
-      } catch (err) {
-        alert(`Backend Verification Failed:\n${err.message}`);
-        // Do not redirect yet, let us see the error
-      } finally {
-        setLoading(false);
+        googleLogin()
+      } catch (error) {
+        console.error('[IAM Auth] Failed to start Google login:', error.message)
+        setAuthError('Unable to start Google sign-in.')
+        setLoading(false)
       }
     }
 
-    debugAuth()
-  }, [])
+    initializeAuth()
+  }, [googleLogin])
+
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout').catch(() => {})
+    } finally {
+      clearSession()
+      window.location.href = `${getValidHubUrl()}/logout`
+    }
+  }
+
+  if (authError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
+          <div className="text-2xl mb-4">!</div>
+          <h1 className="text-xl font-bold mb-2 text-gray-800">Authentication Failed</h1>
+          <p className="text-gray-600 mb-6">{authError}</p>
+          <button
+            onClick={() => googleLogin()}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Try Google Sign-In
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600 font-medium">Authenticating...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <AuthContext.Provider value={{ user, loading }}>
-      {loading ? <div>Loading (Debug Mode)...</div> : children}
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        isAuthenticated,
+        logout,
+      }}
+    >
+      {children}
     </AuthContext.Provider>
   )
 }
