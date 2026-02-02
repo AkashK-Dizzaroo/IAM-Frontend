@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { getValidHubUrl } from '../utils/hubUrl';
 
+const PROD_BACKEND_URL = 'https://hub-iam-backend-ceecf8ewejc8b0ay.canadacentral-01.azurewebsites.net';
+
 // When IAM runs on localhost, use local backend so verify hits same server that issued the token (avoids ERR_NETWORK/CORS to Azure)
 function getApiBaseURL() {
   if (typeof window !== 'undefined') {
@@ -9,7 +11,8 @@ function getApiBaseURL() {
       return 'http://localhost:4001';
     }
   }
-  return import.meta.env.VITE_API_URL || 'http://localhost:4001';
+  // In non-localhost environments, prefer env var and fall back to production backend URL
+  return import.meta.env.VITE_API_URL || PROD_BACKEND_URL;
 }
 
 const api = axios.create({
