@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getValidHubUrl } from '../utils/hubUrl';
 
 // When IAM runs on localhost, use local backend so verify hits same server that issued the token (avoids ERR_NETWORK/CORS to Azure)
 function getApiBaseURL() {
@@ -47,10 +48,10 @@ api.interceptors.response.use(
         // The error will be handled by the calling code
         console.warn('[API] 401 error in dev mode - backend rejected dummy token');
       } else if (!isDevEnv) {
-        // Only redirect in production when not in dev mode
+        // Only redirect in production when not in dev mode - go to Hub for re-auth
         localStorage.removeItem('platform_token');
         localStorage.removeItem('platform_user');
-        window.location.href = '/login';
+        window.location.href = getValidHubUrl();
       }
       // In dev env without dev_mode flag, let the AuthContext handle the error
     }

@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { getValidHubUrl } from '../utils/hubUrl'
 import { Shield, Users, Key, Activity, ArrowLeft, LogOut, User, Globe, FileText, Layers, Clock, UserCheck } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 
@@ -37,22 +38,11 @@ const DashboardPage = () => {
   const tabs = isUserRole ? userTabs : adminTabs
 
   const handleBackToHub = () => {
-    const hubUrl = import.meta.env.VITE_HUB_URL;
-    if (hubUrl && !hubUrl.includes('$(VITE_HUB_URL)')) {
-      window.location.href = hubUrl + '/hub';
-    } else {
-      window.location.href = 'https://blue-pond-0b001410f.2.azurestaticapps.net/hub';
-    }
+    window.location.href = getValidHubUrl() + '/hub'
   }
 
   const handleLogout = () => {
     logout()
-    const hubUrl = import.meta.env.VITE_HUB_URL;
-    if (hubUrl && !hubUrl.includes('$(VITE_HUB_URL)')) {
-      window.location.href = hubUrl + '/login';
-    } else {
-      window.location.href = 'https://blue-pond-0b001410f.2.azurestaticapps.net/login';
-    }
   }
 
   return (

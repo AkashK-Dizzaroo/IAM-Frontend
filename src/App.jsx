@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { getValidHubUrl } from './utils/hubUrl'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './config/queryClient'
 import { AuthProvider } from './contexts/AuthContext'
@@ -79,8 +80,7 @@ function AppRoutes() {
               </p>
               <button
                 onClick={() => {
-                  const hubUrl = import.meta.env.VITE_HUB_URL || 'http://localhost:5000'
-                  window.location.href = hubUrl
+                  window.location.href = getValidHubUrl()
                 }}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >

@@ -13,6 +13,7 @@ function bootstrapAuthFromQuery() {
     const accessToken = url.searchParams.get('accessToken')
     if (accessToken) {
       localStorage.setItem('platform_token', accessToken)
+      sessionStorage.setItem('iam_token_from_url', '1')
       const userParam = url.searchParams.get('user')
       if (userParam) {
         try {
@@ -49,6 +50,7 @@ function bootstrapAuthFromQuery() {
     // Persist token and user to IAM localStorage
     localStorage.setItem('platform_token', tokenParam)
     localStorage.setItem('platform_user', JSON.stringify(userObject))
+    sessionStorage.setItem('iam_token_from_url', '1')
 
     // Clean URL to avoid leaking token in history
     url.searchParams.delete('token')

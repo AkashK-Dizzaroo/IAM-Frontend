@@ -1,17 +1,21 @@
 import { createContext, useState, useEffect } from 'react'
 import api from '../services/api'
+import { getValidHubUrl } from '../utils/hubUrl'
 
 export const AuthContext = createContext(null)
+
+const TOKEN_FROM_URL_KEY = 'iam_token_from_url'
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authError, setAuthError] = useState(null)
 
   // Helper to redirect back to the Hub (source of truth for login)
-  const redirectToHub = () => {
-    const hubUrl = import.meta.env.VITE_HUB_URL || 'http://localhost:5000'
-    window.location.href = hubUrl
+  const redirectToHub = (path = '') => {
+    const hubUrl = getValidHubUrl()
+    window.location.href = path ? `${hubUrl}${path.startsWith('/') ? path : `/${path}`}` : hubUrl
   }
 
   useEffect(() => {
@@ -72,24 +76,40 @@ export const AuthProvider = ({ children }) => {
           setUser(backendUser)
           setIsAuthenticated(true)
         } catch (error) {
-          // Backend verification failed - clear session and redirect to hub
+          // Backend verification failed - clear session
           console.error('[IAM Auth] Backend verification failed:', error.message)
+          const justReceivedFromUrl = sessionStorage.getItem(TOKEN_FROM_URL_KEY) !== null
           localStorage.removeItem('platform_token')
           localStorage.removeItem('platform_user')
           localStorage.removeItem('dev_mode')
+          sessionStorage.removeItem(TOKEN_FROM_URL_KEY)
           setUser(null)
           setIsAuthenticated(false)
+
+          // If we just received token from URL, show error instead of redirecting
+          // to avoid redirect loop (Hub -> IAM -> verify fails -> Hub -> IAM...)
+          if (justReceivedFromUrl) {
+            setAuthError('Could not verify your session. The token may be invalid or the server is unreachable.')
+            return
+          }
+
           redirectToHub()
           return
         }
       } catch (error) {
         console.error('Auth initialization error:', error)
+        const justReceivedFromUrl = sessionStorage.getItem(TOKEN_FROM_URL_KEY) !== null
         localStorage.removeItem('platform_token')
         localStorage.removeItem('platform_user')
         localStorage.removeItem('dev_mode')
+        sessionStorage.removeItem(TOKEN_FROM_URL_KEY)
         setUser(null)
         setIsAuthenticated(false)
-        redirectToHub()
+        if (justReceivedFromUrl) {
+          setAuthError('An error occurred while verifying your session.')
+        } else {
+          redirectToHub()
+        }
       } finally {
         setLoading(false)
       }
@@ -107,10 +127,27 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('platform_user')
       setUser(null)
       setIsAuthenticated(false)
-
-      const hubUrl = import.meta.env.VITE_HUB_URL || 'http://localhost:5000'
-      window.location.href = `${hubUrl}/logout`
+      window.location.href = `${getValidHubUrl()}/logout`
     }
+  }
+
+  // Auth error (e.g. verification failed after token-from-URL)
+  if (authError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h1 className="text-xl font-bold mb-2 text-gray-800">Authentication Failed</h1>
+          <p className="text-gray-600 mb-6">{authError}</p>
+          <button
+            onClick={() => redirectToHub()}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Back to Hub
+          </button>
+        </div>
+      </div>
+    )
   }
 
   // Don't render children until auth check is complete
