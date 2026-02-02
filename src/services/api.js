@@ -1,16 +1,27 @@
 import axios from 'axios';
 
+// When IAM runs on localhost, use local backend so verify hits same server that issued the token (avoids ERR_NETWORK/CORS to Azure)
+function getApiBaseURL() {
+  if (typeof window !== 'undefined') {
+    const o = window.location.origin;
+    if (o.startsWith('http://localhost') || o.startsWith('http://127.0.0.1')) {
+      return 'http://localhost:4001';
+    }
+  }
+  return import.meta.env.VITE_API_URL || 'http://localhost:4001';
+}
+
 const api = axios.create({
-  // Prefer VITE_API_URL, but fall back to the Backend-Clinical-trial-Platform local port
-  baseURL: `${import.meta.env.VITE_API_URL || 'http://localhost:4001'}/api`,
+  baseURL: `${getApiBaseURL()}/api`,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add a request interceptor to add the auth token
+// Add a request interceptor to add the auth token and resolve baseURL for localhost
 api.interceptors.request.use(
   (config) => {
+    config.baseURL = `${getApiBaseURL()}/api`;
     const token = localStorage.getItem('platform_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

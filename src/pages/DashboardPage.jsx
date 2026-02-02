@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../hooks/useAuth'
 import { Shield, Users, Key, Activity, ArrowLeft, LogOut, User, Globe, FileText, Layers, Clock, UserCheck } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 

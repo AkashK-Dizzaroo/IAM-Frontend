@@ -1,6 +1,6 @@
 import { useState, useMemo, memo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import userService from '@/services/user.service';
 import applicationService from '@/services/application.service';

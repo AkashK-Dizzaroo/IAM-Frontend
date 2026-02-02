@@ -3,10 +3,33 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
-// Bootstrap auth from Hub query params (token & user)
+// Bootstrap auth from Hub query params (accessToken, or token & user)
+// Runs before React mounts so AuthContext finds the token when it initializes
 function bootstrapAuthFromQuery() {
   try {
     const url = new URL(window.location.href)
+
+    // 1. Check for accessToken (cross-domain login flow from Hub)
+    const accessToken = url.searchParams.get('accessToken')
+    if (accessToken) {
+      localStorage.setItem('platform_token', accessToken)
+      const userParam = url.searchParams.get('user')
+      if (userParam) {
+        try {
+          const decodedUserJson = atob(decodeURIComponent(userParam))
+          const userObject = JSON.parse(decodedUserJson)
+          localStorage.setItem('platform_user', JSON.stringify(userObject))
+        } catch (e) {
+          // User param invalid; token alone is sufficient
+        }
+      }
+      url.searchParams.delete('accessToken')
+      url.searchParams.delete('user')
+      window.history.replaceState({}, '', url.toString())
+      return
+    }
+
+    // 2. Legacy: token + user params
     const tokenParam = url.searchParams.get('token')
     const userParam = url.searchParams.get('user')
 

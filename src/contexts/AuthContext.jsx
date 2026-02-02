@@ -1,7 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useState, useEffect } from 'react'
 import api from '../services/api'
 
-const AuthContext = createContext(null)
+export const AuthContext = createContext(null)
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
@@ -19,7 +19,6 @@ export const AuthProvider = ({ children }) => {
       try {
         const token = localStorage.getItem('platform_token')
         const isDevEnv = import.meta.env.DEV || import.meta.env.VITE_DEV_MODE === 'true'
-        
         // Clear any old dev_mode flag - we always verify with backend now
         if (localStorage.getItem('dev_mode') === 'true') {
           console.log('[Auth] Clearing old dev_mode flag')
@@ -43,7 +42,7 @@ export const AuthProvider = ({ children }) => {
 
         // Always verify the token with the backend
         try {
-          const response = await api.post('/auth/verify')
+          const response = await api.post('/auth/verify', {}, { timeout: 15000 })
           const data = response.data
 
           if (!data?.success || !data?.data?.user) {
@@ -138,12 +137,4 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export const useAuth = () => {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
-  return context
 }
