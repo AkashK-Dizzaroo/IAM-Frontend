@@ -21,6 +21,19 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        // 1. At the very start: check URL for accessToken BEFORE reading localStorage
+        const params = new URLSearchParams(window.location.search)
+        const accessTokenFromUrl = params.get('accessToken')
+        if (accessTokenFromUrl) {
+          localStorage.setItem('platform_token', accessTokenFromUrl)
+          sessionStorage.setItem(TOKEN_FROM_URL_KEY, '1')
+          const url = new URL(window.location.href)
+          url.searchParams.delete('accessToken')
+          window.history.replaceState({}, '', url.toString())
+          console.log('[Auth] Token extracted from URL and saved to localStorage')
+        }
+
+        // 2. Now read platform_token from localStorage (may have just been set above)
         const token = localStorage.getItem('platform_token')
         const isDevEnv = import.meta.env.DEV || import.meta.env.VITE_DEV_MODE === 'true'
         // Clear any old dev_mode flag - we always verify with backend now
@@ -46,7 +59,7 @@ export const AuthProvider = ({ children }) => {
 
         // Always verify the token with the backend
         try {
-          const response = await api.post('/auth/verify', {}, { timeout: 15000 })
+          const response = await api.get('/auth/verify', { timeout: 15000 })
           const data = response.data
 
           if (!data?.success || !data?.data?.user) {
