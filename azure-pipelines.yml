@@ -39,6 +39,7 @@ steps:
   env:
     VITE_API_URL: $(VITE_API_URL)
     VITE_HUB_URL: $(VITE_HUB_URL)
+    VITE_GOOGLE_CLIENT_ID: $(VITE_GOOGLE_CLIENT_ID)
 
 # 5️⃣ Copy Static Web App config to dist
 - script: |
