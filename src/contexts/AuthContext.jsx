@@ -30,7 +30,9 @@ export const AuthProvider = ({ children }) => {
   }
 
   const verifyExistingToken = async () => {
+    console.log('[IAM Auth] Calling GET /auth/verify...')
     const response = await api.get('/auth/verify', { timeout: 15000 })
+    console.log('[IAM Auth] Verify response:', response.data)
     const data = response.data
 
     if (!data?.success || !data?.data?.user) {
@@ -47,6 +49,7 @@ export const AuthProvider = ({ children }) => {
     flow: 'auth-code',
     onSuccess: async (codeResponse) => {
       try {
+        console.log('[IAM Auth] Google login successful, exchanging code...')
         setLoading(true)
         setAuthError(null)
 
@@ -57,6 +60,7 @@ export const AuthProvider = ({ children }) => {
           throw new Error('Invalid Google auth response')
         }
 
+        console.log('[IAM Auth] Backend returned platform_token')
         localStorage.setItem(PLATFORM_TOKEN_KEY, data.data.token)
 
         if (data.data.user) {
@@ -65,9 +69,11 @@ export const AuthProvider = ({ children }) => {
           setUser(backendUser)
           setIsAuthenticated(true)
           setLoading(false)
+          console.log('[IAM Auth] User authenticated:', backendUser.email)
           return
         }
 
+        console.log('[IAM Auth] No user in response, verifying token...')
         await verifyExistingToken()
         setLoading(false)
       } catch (error) {
@@ -77,7 +83,8 @@ export const AuthProvider = ({ children }) => {
         setLoading(false)
       }
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('[IAM Auth] Google login error:', error)
       clearSession()
       setAuthError('Google authentication failed. Please try again.')
       setLoading(false)
@@ -86,11 +93,14 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initializeAuth = async () => {
+      console.log('[IAM Auth] Initializing authentication...')
       const token = localStorage.getItem(PLATFORM_TOKEN_KEY)
 
       if (token) {
+        console.log('[IAM Auth] Found existing token, verifying with backend...')
         try {
           await verifyExistingToken()
+          console.log('[IAM Auth] Token verified successfully')
         } catch (error) {
           console.error('[IAM Auth] Backend verification failed:', error.message)
           clearSession()
@@ -101,17 +111,13 @@ export const AuthProvider = ({ children }) => {
         return
       }
 
-      try {
-        googleLogin()
-      } catch (error) {
-        console.error('[IAM Auth] Failed to start Google login:', error.message)
-        setAuthError('Unable to start Google sign-in.')
-        setLoading(false)
-      }
+      console.log('[IAM Auth] No token found, triggering Google login...')
+      setLoading(false)
+      setAuthError('Please sign in with Google to continue.')
     }
 
     initializeAuth()
-  }, [googleLogin])
+  }, [])
 
   const logout = async () => {
     try {
