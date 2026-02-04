@@ -17,11 +17,6 @@
     {
       "route": "/api/*",
       "allowedRoles": ["anonymous", "authenticated"]
-    },
-    {
-      "route": "/*",
-      "redirect": "https://iam.dizzaroo.com",
-      "statusCode": 301
     }
   ],
 
