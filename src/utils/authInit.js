@@ -39,8 +39,8 @@ export function initializeAuthFromUrl() {
   const userB64 = params.get("user");
 
   // Sanitize URL immediately to strip credentials from address bar / history
-  const cleanUrl = window.location.pathname + (window.location.hash || "") || "/";
-  window.history.replaceState({}, "", cleanUrl);
+  // const cleanUrl = window.location.pathname + (window.location.hash || "") || "/";
+  // window.history.replaceState({}, "", cleanUrl);
 
   let storedToken = false;
   if (isValidToken(accessToken)) {
