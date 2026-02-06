@@ -5,7 +5,7 @@
  */
 export function getValidHubUrl() {
   const raw = import.meta.env.VITE_HUB_URL
-  const fallback = 'https://witty-rock-087f8c010.6.azurestaticapps.net'
+  const fallback = 'https://hub.dizzaroo.com'
   const devFallback = 'http://localhost:5000'
 
   if (import.meta.env.DEV) {
