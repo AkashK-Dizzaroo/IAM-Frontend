@@ -3,6 +3,9 @@ if (window.location.hostname.endsWith("azurestaticapps.net")) {
   window.location.replace("https://iam.dizzaroo.com");
 }
 
+import { initializeAuthFromUrl } from "./utils/authInit";
+initializeAuthFromUrl();
+
 // -------------------------------
 // React App Bootstrap
 // -------------------------------

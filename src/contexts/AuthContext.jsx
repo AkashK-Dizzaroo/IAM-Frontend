@@ -1,11 +1,13 @@
 import { createContext, useEffect, useState } from "react";
 import api from "../services/api";
 import { getValidHubUrl } from "../utils/hubUrl";
+import {
+  getStoredToken,
+  PLATFORM_TOKEN_KEY,
+  PLATFORM_USER_KEY,
+} from "../utils/authInit";
 
 export const AuthContext = createContext(null);
-
-const PLATFORM_TOKEN_KEY = "platform_token";
-const PLATFORM_USER_KEY = "platform_user";
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -43,7 +45,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initializeAuth = async () => {
-      const token = localStorage.getItem(PLATFORM_TOKEN_KEY);
+      const token = getStoredToken();
 
       if (!token) {
         // ✅ No auto-login, no UI, no redirect
