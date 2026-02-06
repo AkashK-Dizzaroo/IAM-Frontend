@@ -18,7 +18,9 @@
   "globalHeaders": {
     "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data:",
     "x-frame-options": "SAMEORIGIN",
-    "x-content-type-options": "nosniff"
+    "x-content-type-options": "nosniff",
+    "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    "Cross-Origin-Embedder-Policy": "unsafe-none"
   },
   "mimeTypes": {
     ".json": "application/json",

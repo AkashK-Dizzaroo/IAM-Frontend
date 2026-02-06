@@ -1,41 +1,10 @@
-import axios from 'axios';
+import api from './api';
 import { generateObjectId } from '../utils/objectIdGenerator';
 
-// Use the same default backend port (4001) as the main API client
-const API_BASE_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:4001'}/api`;
-
+// Use shared api instance - it already uses localhost:4001 when IAM runs on localhost (avoids CORS to Azure)
 class AccessRequestService {
   constructor() {
-    this.api = axios.create({
-      baseURL: API_BASE_URL,
-      timeout: 10000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    // Add request interceptor for auth token
-    this.api.interceptors.request.use(
-      (config) => {
-        const token = localStorage.getItem('platform_token');
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
-
-    // Add response interceptor for error handling
-    this.api.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        console.error('API Error:', error.response?.data || error.message);
-        return Promise.reject(error);
-      }
-    );
+    this.api = api;
   }
 
 

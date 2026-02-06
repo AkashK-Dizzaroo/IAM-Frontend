@@ -30,8 +30,8 @@ export const AuthProvider = ({ children }) => {
   }
 
   const verifyExistingToken = async () => {
-    console.log('[IAM Auth] Calling GET /auth/verify...')
-    const response = await api.get('/auth/verify', { timeout: 15000 })
+    console.log('[IAM Auth] Calling POST /auth/verify...')
+    const response = await api.post('/auth/verify', {}, { timeout: 15000 })
     console.log('[IAM Auth] Verify response:', response.data)
     const data = response.data
 
@@ -94,6 +94,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       console.log('[IAM Auth] Initializing authentication...')
+
       const token = localStorage.getItem(PLATFORM_TOKEN_KEY)
 
       if (token) {
