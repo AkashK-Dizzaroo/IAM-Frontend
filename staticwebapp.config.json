@@ -1,20 +1,32 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/images/*.{png,jpg,gif}", "/css/*"]
+    "exclude": [
+      "/images/*.{png,jpg,gif}",
+      "/css/*",
+      "/.auth/*",
+      "/api/*"
+    ]
   },
+
   "routes": [
+    {
+      "route": "/.auth/*",
+      "allowedRoles": ["anonymous", "authenticated"]
+    },
     {
       "route": "/api/*",
       "allowedRoles": ["anonymous", "authenticated"]
     }
   ],
+
   "responseOverrides": {
     "404": {
       "rewrite": "/index.html",
       "statusCode": 200
     }
   },
+
   "globalHeaders": {
     "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data:",
     "x-frame-options": "SAMEORIGIN",
@@ -22,6 +34,7 @@
     "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     "Cross-Origin-Embedder-Policy": "unsafe-none"
   },
+
   "mimeTypes": {
     ".json": "application/json",
     ".js": "text/javascript",
