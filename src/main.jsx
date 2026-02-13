@@ -1,9 +1,13 @@
-// 🚨 HARD BLOCK Azure default domain (safe, no loop)
+/* @refresh reset */
+
+// Redirect Azure default domain to production IAM URL (preserve ?accessToken&user for token handoff)
 if (window.location.hostname.endsWith("azurestaticapps.net")) {
-  window.location.replace("https://iam.dizzaroo.com");
+  const target = "https://iam.dizzaroo.com";
+  window.location.replace(window.location.search ? target + window.location.search : target);
 }
 
-import { initializeAuthFromUrl } from "./utils/authInit";
+// Hub→IAM token handoff: read token from URL before React mounts
+import { initializeAuthFromUrl } from "@/features/auth/utils/authInit";
 initializeAuthFromUrl();
 
 // -------------------------------

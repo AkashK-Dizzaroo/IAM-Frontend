@@ -1,32 +1,27 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "./config/queryClient";
-import { AuthProvider } from "./contexts/AuthContext";
-import { useAuth } from "./hooks/useAuth";
-import ProtectedRoute from "./components/ProtectedRoute";
+import { queryClient } from "@/config/queryClient";
+import { AuthProvider, useAuth, ProtectedRoute } from "@/features/auth";
 import { Toaster } from "@/components/ui/toaster";
-import { getValidHubUrl } from "./utils/hubUrl";
+import { getValidHubUrl } from "@/config/env";
+import { DashboardPage } from "@/features/layout";
+import {
+  UserProfilePage,
+  ApplicationRoleAssignmentsPage,
+} from "@/features/profile";
+import {
+  UserProfileManagementPage,
+  UsersPage,
+  AccountRequestsPage,
+} from "@/features/users";
+import { RolesPage } from "@/features/roles";
+import { AccessRequestsPage } from "@/features/access-requests";
+import { AuditPage } from "@/features/audit";
+import { ApplicationAccessManagementPage } from "@/features/applications";
 
-// Pages
-import IdentityAccessManagement from "./pages/IdentityAccessManagement";
-import DashboardPage from "./pages/DashboardPage";
-import UserProfilePage from "./pages/UserProfilePage";
-import ApplicationRoleAssignmentsPage from "./pages/ApplicationRoleAssignmentsPage";
-import AccessRequestsPage from "./pages/AccessRequestsPage";
-import AccountRequestsPage from "./pages/AccountRequestsPage";
-import UsersPage from "./pages/UsersPage";
-import RolesPage from "./pages/RolesPage";
-import AuditPage from "./pages/AuditPage";
-import UserProfileManagementPage from "./pages/UserProfileManagementPage";
-import ApplicationAccessManagementPage from "./pages/ApplicationAccessManagementPage";
-
-// -------------------------------
-// App Routes (inside AuthProvider)
-// -------------------------------
 function AppRoutes() {
   const { loading, user } = useAuth();
 
-  // ⏳ Wait for auth to resolve
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -39,7 +34,6 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Root */}
       <Route
         path="/"
         element={
@@ -48,14 +42,11 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        {/* User routes */}
         <Route path="profile" element={<UserProfilePage />} />
         <Route
           path="application-role-assignments"
           element={<ApplicationRoleAssignmentsPage />}
         />
-
-        {/* Admin routes */}
         <Route
           path="user-profile-management"
           element={<UserProfileManagementPage />}
@@ -69,8 +60,6 @@ function AppRoutes() {
         <Route path="users" element={<UsersPage />} />
         <Route path="roles" element={<RolesPage />} />
         <Route path="audit" element={<AuditPage />} />
-
-        {/* Default redirect AFTER auth is ready */}
         <Route
           index
           element={
@@ -82,17 +71,6 @@ function AppRoutes() {
         />
       </Route>
 
-      {/* Legacy IAM route */}
-      <Route
-        path="/iam"
-        element={
-          <ProtectedRoute>
-            <IdentityAccessManagement />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Unauthorized */}
       <Route
         path="/unauthorized"
         element={
@@ -103,7 +81,7 @@ function AppRoutes() {
                 Access Denied
               </h1>
               <p className="text-gray-600 mb-6">
-                You don't have permission to access this application.
+                You don&apos;t have permission to access this application.
               </p>
               <button
                 onClick={() => {
@@ -118,10 +96,6 @@ function AppRoutes() {
         }
       />
 
-      {/* ❌ REMOVE redirect loop */}
-      {/* <Route path="*" element={<Navigate to="/" replace />} /> */}
-
-      {/* ✅ Safe fallback */}
       <Route
         path="*"
         element={
