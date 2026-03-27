@@ -1,284 +1,300 @@
-# IAM App (Identity & Access Management)
+# IAM Frontend
 
-**Standalone Identity and Access Management Application**
-
----
-
-## 🎯 Purpose
-
-Dedicated application for managing:
-- User accounts and permissions
-- Access requests across all platform applications
-- Roles and permission sets
-- Audit logging and security monitoring
+**Identity & Access Management (IAM)** — a standalone React single-page application for the platform hub. It provides **ABAC (Attribute-Based Access Control)** administration, **user and account workflows**, **resource registration**, **audit and policy tooling**, and **profile** management. The app is launched from the **Hub** after authentication and talks to the platform **backend API** (same origin conventions as Hub Login).
 
 ---
 
-## 🚀 Quick Start
+## Table of contents
 
-### Installation
-```bash
-cd IAM-App
-npm install
-```
-
-### Development
-```bash
-npm run dev
-# Runs on http://localhost:5001
-```
-
-### Build for Production
-```bash
-npm run build
-```
+1. [Purpose and scope](#purpose-and-scope)
+2. [Technology stack](#technology-stack)
+3. [High-level architecture](#high-level-architecture)
+4. [Repository layout](#repository-layout)
+5. [Application bootstrap and providers](#application-bootstrap-and-providers)
+6. [Routing and pages](#routing-and-pages)
+7. [Navigation, roles, and ABAC scope](#navigation-roles-and-abac-scope)
+8. [Data layer: API client and services](#data-layer-api-client-and-services)
+9. [Authentication and session](#authentication-and-session)
+10. [Configuration (environment variables)](#configuration-environment-variables)
+11. [Build, test, and quality](#build-test-and-quality)
+12. [Deployment and CI/CD](#deployment-and-cicd)
+13. [Related documentation](#related-documentation)
 
 ---
 
-## 🔧 Configuration
+## Purpose and scope
 
-### Environment Variables
+The IAM Frontend is the **administrative and self-service UI** for:
 
-Create `.env` from `env.example`:
+- **Global (hub-wide) configuration**: users, hub attribute definitions, resource classifications, global policies, application registry (ABAC “applications” list).
+- **Per-application configuration**: app attributes, per-user app attributes, app policies, policy evaluation (“policy tester”), audit trail, coverage gap analysis — all scoped to a **selected application** when in **App** scope.
+- **Cross-cutting**: resource management (registering/linking resources), account approval queues, signed-in user profile.
 
-```env
-VITE_API_URL=http://localhost:4000/api/v1
-VITE_HUB_URL=http://localhost:5000
-VITE_TOKEN_STORAGE_KEY=platform_token
-VITE_USER_STORAGE_KEY=platform_user
-```
+It is **not** the Hub Login screen itself; users typically sign in via the Hub, then open IAM with a **session handoff** (see [Authentication and session](#authentication-and-session)).
 
 ---
 
-## 📁 Project Structure
+## Technology stack
+
+| Area | Choice |
+|------|--------|
+| UI | **React 18** (`react`, `react-dom`) |
+| Build / dev server | **Vite 5** |
+| Routing | **React Router 6** (`BrowserRouter`, nested routes) |
+| Server state / caching | **TanStack Query** (`@tanstack/react-query`) |
+| HTTP | **Axios** via a shared **`apiClient`** singleton |
+| Styling | **Tailwind CSS** + **tailwindcss-animate** |
+| Components | **Radix UI** primitives + local **`src/components/ui`** (shadcn-style patterns) |
+| Forms / validation | **react-hook-form**, **zod**, **@hookform/resolvers** |
+| OAuth | **@react-oauth/google** (`GoogleOAuthProvider` in `main.jsx`) |
+| Icons | **lucide-react** |
+| Notifications | **react-hot-toast** + Radix **toast** wrapper |
+| Client state (minimal) | **zustand** (available; primary state is React Query + context) |
+
+Path alias: **`@/` → `src/`** (see `vite.config.js`).
+
+---
+
+## High-level architecture
+
+```mermaid
+flowchart LR
+  subgraph hub [Hub / Login]
+    Login[Login & handoff]
+  end
+  subgraph iam [IAM Frontend]
+    Main[main.jsx handoff + GoogleOAuth]
+    App[App.jsx routes]
+    Auth[AuthProvider]
+    Abac[AbacScopeProvider]
+    Pages[Feature pages]
+    Main --> App
+    App --> Auth
+    App --> Abac
+    Auth --> Pages
+    Abac --> Pages
+  end
+  subgraph api [Backend API]
+    REST["/api/..."]
+  end
+  Login -->|"handoffCode"| Main
+  Pages -->|Bearer + cookies| REST
+```
+
+1. **`main.jsx`** runs **before** React mount: resolves Hub **`handoffCode`** (or legacy URL tokens), may persist `platform_token` / `platform_user`, wraps the tree in **`GoogleOAuthProvider`** (requires `VITE_GOOGLE_CLIENT_ID`), and mounts **`App`** inside an error boundary.
+2. **`App.jsx`** wraps the app with **`QueryClientProvider`**, **`BrowserRouter`**, **`AuthProvider`**, and **`AbacScopeProvider`**, then defines all routes.
+3. **Feature modules** under `src/features/*` own pages, feature-specific API modules, and small hooks/components.
+4. **`lib/apiClient.js`** centralizes base URL, JSON headers, `Authorization: Bearer <platform_token>`, `withCredentials`, and **401 → redirect to Hub login** (with dev-mode nuances).
+
+---
+
+## Repository layout
 
 ```
-IAM-App/
-├── src/
-│   ├── contexts/
-│   │   └── AuthContext.jsx           # Auth from Hub
-│   ├── pages/
-│   │   ├── DashboardPage.jsx         # Main dashboard with tabs
-│   │   ├── AccessRequestsPage.jsx    # Access requests management
-│   │   ├── UsersPage.jsx             # User management
-│   │   ├── RolesPage.jsx             # Roles & permissions
-│   │   └── AuditPage.jsx             # Audit logs
-│   ├── components/
-│   │   └── ProtectedRoute.jsx        # Auth guard
-│   ├── config/
-│   │   └── queryClient.js
-│   ├── App.jsx
-│   ├── main.jsx
-│   └── index.css
+IAM-Frontend/
+├── azure-pipelines.yml      # CI: install, build, copy SWA config, deploy
+├── env.example              # Template for Vite env vars (copy to .env)
+├── index.html
 ├── package.json
-├── vite.config.js
-└── README.md
+├── staticwebapp.config.json # Azure Static Web Apps: SPA fallback, headers
+├── vite.config.js           # Alias @, dev server port/proxy, build chunks
+└── src/
+    ├── App.jsx              # Routes and providers
+    ├── main.jsx             # Handoff, Google OAuth, error boundary, mount
+    ├── index.css            # Global styles / Tailwind
+    ├── __tests__/           # Vitest setup
+    ├── components/ui/       # Shared primitives (button, card, dialog, toast, …)
+    ├── config/
+    │   ├── env.js           # VITE_* readers, Hub URL helpers
+    │   └── queryClient.js   # TanStack Query defaults
+    ├── features/
+    │   ├── abac/            # ABAC pages, abacService, AbacScopeContext
+    │   ├── audit/           # Audit page
+    │   ├── auth/            # AuthProvider, ProtectedRoute, authInit
+    │   ├── layout/          # Dashboard shell (sidebar, outlet)
+    │   ├── profile/         # My profile, profileService
+    │   ├── users/           # User management & account approvals
+    │   ├── resources/       # Resource CRUD UI + resourceService
+    │   ├── applications/    # Application service (shared with other flows)
+    │   ├── access-requests/ # Access request API (used where integrated)
+    │   └── roles/           # Legacy RBAC views/helpers if referenced
+    ├── hooks/               # e.g. use-toast
+    ├── lib/
+    │   ├── apiClient.js     # Axios instance
+    │   └── utils.js         # Shared helpers (e.g. display role)
+    └── utils/               # e.g. hubUrl (if present)
 ```
 
----
-
-## 🔐 Authentication
-
-### Authentication Flow
-
-1. **User authenticates** via Hub-Login app (port 5000)
-2. **Hub redirects** to IAM app with token in URL: 
-   ```
-   http://localhost:5001?token=xxx&user=yyy
-   ```
-3. **IAM app receives** token and stores in localStorage
-4. **IAM app validates** user has required roles (ADMIN, USER_MANAGER, etc.)
-5. **If unauthorized**, redirects back to Hub
-
-### Token Storage
-
-- Token: `localStorage.getItem('platform_token')`
-- User: `localStorage.getItem('platform_user')`
-- Shared across Hub and IAM apps
-
-### Logout
-
-- Clears localStorage
-- Redirects to Hub-Login app: `http://localhost:5000/login`
+**Note:** Some files under `features/` (for example older **Roles**, **AccessRequests** pages) exist for reuse or migration; the **active route tree** is defined entirely in **`App.jsx`**. Prefer **`App.jsx`** as the source of truth for what ships in production.
 
 ---
 
-## 🎨 Features
+## Application bootstrap and providers
 
-### ✅ Access Requests Management
-- View all access requests from users
-- Approve/reject requests
-- Filter by application, status, urgency
-- User information display
-
-### ✅ User Management
-- List all platform users
-- Create/edit/delete users
-- Assign roles and permissions
-- Manage user status
-
-### ✅ Roles & Permissions
-- Define custom roles
-- Configure permission sets
-- Assign permissions to roles
-- Role hierarchy management
-
-### ✅ Audit & Security
-- View audit logs
-- Track user activities
-- Security event monitoring
-- Compliance reporting
+| Layer | Responsibility |
+|-------|------------------|
+| **`initializeAuthFromUrl`** (`features/auth/utils/authInit.js`) | Reads **`handoffCode`** from query/hash, POSTs to **`/api/auth/handoff/exchange`**, stores token/user; or legacy `accessToken` + `user`; cleans URL with `history.replaceState`. |
+| **`GoogleOAuthProvider`** | Required at runtime; **`VITE_GOOGLE_CLIENT_ID`** must be set or the app shows a configuration error instead of mounting. |
+| **`QueryClientProvider`** | TanStack Query defaults: e.g. `staleTime` 5 minutes, `refetchOnWindowFocus: false`, `retry: 1`. |
+| **`AuthProvider`** | Loads user from storage or **`POST /api/auth/verify`**, exposes `user`, `loading`, `isAuthenticated`, `logout`, **`effectiveRoles`**, `rolesReady`. |
+| **`AbacScopeProvider`** | **`scope`**: `"global"` \| `"app"`; **`selectedAppKey`** / **`selectedAppName`** for app-scoped ABAC pages. |
+| **`DashboardPage`** | Layout: header, collapsible sidebar, scope switcher, role-filtered nav, **`<Outlet />`** for child routes. |
 
 ---
 
-## 🔗 Integration
+## Routing and pages
 
-### With Hub-Login App
+All authenticated app routes are nested under **`/`** and wrapped by **`ProtectedRoute`** + **`DashboardPage`** (see `App.jsx`).
 
-```javascript
-// Hub launches IAM app
-const token = localStorage.getItem('platform_token')
-const user = localStorage.getItem('platform_user')
-window.location.href = `http://localhost:5001?token=${token}&user=${user}`
+### Primary routes
 
-// IAM app receives auth
-const urlParams = new URLSearchParams(window.location.search)
-const token = urlParams.get('token')
-const user = urlParams.get('user')
-localStorage.setItem('platform_token', token)
-localStorage.setItem('platform_user', user)
-```
+| Path | Component | Role / scope (typical) |
+|------|-----------|-------------------------|
+| `/` (index) | Redirect | See **default redirect** below |
+| `/my-profile` | `MyProfilePage` | All authenticated users |
+| `/resources` | `ResourceManagementPage` | Hub Owner or App Owner |
+| `/users` | `AbacUsersPage` | Hub Owner, **global** scope |
+| `/applications` | `AbacApplicationsPage` | Hub Owner, **global** scope |
+| `/account-approvals` | `AccountRequestsPage` | Hub Owner or IT Support |
+| `/hub-attributes` | `HubAttributesPage` | Hub Owner, **global** scope |
+| `/resource-classifications` | `ResourceClassificationsPage` | Hub Owner, **global** scope |
+| `/global-policies` | `GlobalPoliciesPage` | Hub Owner, **global** scope |
+| `/app-attributes` | `AppAttributesPage` | Hub Owner or App Owner, **app** scope |
+| `/app-user-attributes` | `AppUserAttributesPage` | Hub Owner or App Owner, **app** scope |
+| `/app-policies` | `AppPoliciesPage` | Hub Owner or App Owner, **app** scope |
+| `/policy-tester` | `PolicyTesterPage` | Hub Owner or App Owner, **app** scope |
+| `/audit` | `AuditPage` | Hub Owner or App Owner, **app** scope |
+| `/coverage-gaps` | `CoverageGapsPage` | Hub Owner or App Owner, **app** scope |
 
-### With Backend
+### Default redirect (index route)
 
-All API calls to `Backend-Clinical-trial-Platform` on port 4000:
-- `/api/v1/users` - User management
-- `/api/v1/roles` - Role management
-- `/api/v1/permissions` - Permission management
-- `/api/v1/access-requests` - Access request management
-- `/api/v1/audit` - Audit logs
+After login, `/` redirects based on **`effectiveRoles`** (see `App.jsx`):
 
----
+- **Hub Owner** → `/users`
+- **App Owner** (when applicable) → `/app-policies`
+- **IT Support** → `/account-approvals`
+- Otherwise → `/my-profile`
 
-## 📱 Deployment
+### Compatibility redirects
 
-### Azure Static Web Apps
+Older paths redirect to the new ones, for example:
 
-```bash
-# Build
-npm run build
+- `/profile` → `/my-profile`
+- `/account-requests`, `/access-requests` → `/account-approvals`
+- `/user-profile-management` → `/users`
+- `/resource-management` → `/resources`
+- `/application-access-management` → `/applications`
 
-# Deploy
-az staticwebapp create \
-  --name iam-app \
-  --resource-group clinical-trial-platform \
-  --source ./dist \
-  --location "Central US" \
-  --branch main \
-  --app-location "/" \
-  --output-location "dist"
-```
+### Other routes
 
-### Production Environment Variables
-
-Set in Azure:
-- `VITE_API_URL` → Backend API URL
-- `VITE_HUB_URL` → Hub-Login app URL
+- **`/unauthorized`** — static “Access Denied” page with button back to Hub (`getValidHubUrl()`).
+- **`*`** — simple “Page not found”.
 
 ---
 
-## 🛠️ Development Setup
+## Navigation, roles, and ABAC scope
 
-### Complete Local Stack
+### Effective roles (`AuthProvider`)
 
-```bash
-# Terminal 1: Backend (IAM Service)
-cd Backend-Clinical-trial-Platform
-npm run dev
-# Port: 4000
+Derived from the **`user`** object (including **`hubRoles`** and **`globalRole`**). Notable flags:
 
-# Terminal 2: Hub-Login App
-cd Hub-Login-App
-npm run dev
-# Port: 5000
+- **`isHubOwner`**: `hubRoles` contains `HUB_OWNER`, or `globalRole === 'ADMIN'`.
+- **`isITSupport`**: `hubRoles` contains `IT_SUPPORT`.
+- **`isAppOwner` / `isAppManager`**: Intended to reflect application assignments (see provider implementation; backend may populate assignment-based app ownership over time).
+- **`canAccessAdmin`**: elevated access for admin-style features.
 
-# Terminal 3: IAM App
-cd IAM-App
-npm run dev
-# Port: 5001
+The **sidebar** in `DashboardPage.jsx` **filters** items by these flags and by **global vs app scope**.
 
-# Terminal 4: Neurodoc (eTMF)
-cd Neurodoc-frontend
-npm run dev
-# Port: 5173
-```
+### Global vs App scope (`AbacScopeContext`)
 
-### Access Flow
+- **Global**: configure hub-wide users, attributes, classifications, policies, applications list.
+- **App**: pick an **application** from the dropdown (data from **`abacService.getApplications`**) to manage that app’s attributes, policies, audit, etc.
 
-1. Go to http://localhost:5000 (Hub-Login)
-2. Login with credentials
-3. Click "Identity & Access Management" card
-4. Opens http://localhost:5001 with token
-5. IAM app loads with authenticated user
+Switching scope updates visible nav items; selecting an app sets **`scope === 'app'`** and navigates toward app policy views by default in some flows.
+
+### Production hostname note
+
+`main.jsx` redirects **`*.azurestaticapps.net`** to a fixed production IAM URL (preserving query string for handoff). Adjust if your production domain differs.
 
 ---
 
-## 📝 Next Steps
+## Data layer: API client and services
 
-### To Complete IAM App
+### `apiClient` (`src/lib/apiClient.js`)
 
-1. **Copy components from Neurodoc-frontend**:
-   - `src/modules/identity-access-management/components/AccessRequestTable.jsx`
-   - User management tables
-   - Role management components
+- **Base URL**: `${VITE_API_URL}/api` (see `config/env.js`).
+- **Auth**: `Authorization: Bearer <platform_token>` when token is present and valid.
+- **Cookies**: `withCredentials: true` for cookie-based session flows.
+- **401**: Clears stored user/token; in non-dev environments redirects to **`${VITE_HUB_URL}/login`** (unless dev-mode guards apply).
 
-2. **Copy services**:
-   - Access request service
-   - User service
-   - Role service
+### Service modules (by feature)
 
-3. **Add UI components from Neurodoc-frontend**:
-   - Card, Button, Input, Select, etc. from `@/components/ui`
-   - Or install shadcn/ui
+| Module | File | Purpose |
+|--------|------|---------|
+| **ABAC** | `features/abac/api/abacService.js` | Hub/app attributes, classifications, global/app policies, evaluation, audit, coverage gaps, applications list (`/v1/...` paths under API base). |
+| **Users (admin)** | `features/users/api/userService.js` | User listing, assignments, CRUD-style operations via `/users` routes. |
+| **Profile** | `features/profile/api/profileService.js` | Current user `/users/me/...` endpoints. |
+| **Resources** | `features/resources/api/resourceService.js` | `/resources` CRUD and application linkage. |
+| **Applications** | `features/applications/api/applicationService.js` | `/applications` reads for non-ABAC flows. |
+| **Access requests** | `features/access-requests/api/accessRequestService.js` | `/access-requests` when those flows are wired in the UI. |
+| **Roles / permissions** | `features/roles/api/*` | Legacy or auxiliary RBAC helpers. |
 
-4. **Configure API integration**:
-   - Update services to use correct backend endpoints
-   - Add proper error handling
-
----
-
-## 🔧 Customization
-
-### Theme
-
-Modify `src/index.css` CSS variables:
-
-```css
-:root {
-  --primary: 263.4 70% 50.4%;  /* Indigo for IAM */
-  --radius: 0.5rem;
-}
-```
-
-### Roles
-
-Allowed roles to access IAM app (in `DashboardPage.jsx`):
-- ADMIN
-- USER_MANAGER
-- AUDIT_MANAGER
+**Convention:** Many backend responses use envelopes like `{ success, data }`. Components and React Query `queryFn`s sometimes **normalize** nested `data` (see comments in `DashboardPage.jsx` for applications).
 
 ---
 
-## 🎉 Benefits of Separate Deployment
+## Authentication and session
 
-✅ **Independent Scaling** - Scale IAM app separately
-✅ **Separate CI/CD** - Deploy without affecting other apps
-✅ **Team Ownership** - Different teams can own different apps
-✅ **Security Isolation** - IAM app can have stricter security
-✅ **Performance** - Smaller bundle size per app
-✅ **Maintenance** - Easier to update and maintain
+1. **Hub handoff (preferred):** User finishes login in Hub; Hub navigates to IAM with **`?handoffCode=`**. `initializeAuthFromUrl` exchanges it for a token (and user) via **`POST /api/auth/handoff/exchange`**, stores **`platform_token`** and **`platform_user`** in `localStorage`, then strips query params.
+2. **Legacy URL tokens:** `accessToken` / `access_token` + optional base64 `user` still supported for backward compatibility.
+3. **Session validation:** If token and user exist in storage, **`AuthProvider`** may trust them; otherwise it calls **`POST /api/auth/verify`** to hydrate/validate.
+4. **Logout:** **`POST /auth/logout`** (best-effort), clear storage, redirect to **`${VITE_HUB_URL}/logout`**.
+
+Token keys are defined in **`authInit.js`** (`PLATFORM_TOKEN_KEY` = `platform_token`).
 
 ---
 
-**IAM App is ready for development!** 🚀
+## Configuration (environment variables)
 
+Vite exposes only variables prefixed with **`VITE_`**. Copy **`env.example`** to **`.env`** and adjust.
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| **`VITE_API_URL`** | Yes (for real API) | Origin of the backend **without** `/api` suffix (client appends `/api`). |
+| **`VITE_HUB_URL`** | Yes | Hub base URL for redirects and “Back to Hub”. |
+| **`VITE_GOOGLE_CLIENT_ID`** | **Yes at runtime** | Google OAuth client ID; app shows an error if missing/empty. |
+| Others in `env.example` | Optional | Feature flags, naming, dev toggles — use as needed; not all may be read in code. |
+
+**Local dev proxy:** `vite.config.js` proxies **`/api`** to `process.env.VITE_API_URL` or **`http://localhost:4001`** by default — align with your local backend port.
+
+---
+
+## Build, test, and quality
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Vite dev server on **port 5001** |
+| `npm run build` | Production build to **`dist/`** |
+| `npm run preview` / `npm start` | Preview production build on port **5001** |
+| `npm run lint` | ESLint for `js`/`jsx` |
+| `npm test` | Vitest |
+| `npm run test:watch` | Vitest watch mode |
+| `npm run test:coverage` | Coverage via **v8** |
+
+---
+
+## Deployment and CI/CD
+
+- **`azure-pipelines.yml`**: Node **20.x**, `npm ci || npm install`, `npm run build` with pipeline variables **`VITE_API_URL`**, **`VITE_HUB_URL`**, **`VITE_GOOGLE_CLIENT_ID`**, copies **`staticwebapp.config.json`** into **`dist/`**, deploys with **Azure Static Web Apps** task (`skip_app_build: true`).
+- **`staticwebapp.config.json`**: SPA **navigation fallback** to `index.html`, security-related **global headers**, 404 → index for client routing.
+
+Ensure pipeline/portal settings match the same **`VITE_*`** values your Hub and backend use.
+
+---
+
+## Related documentation
+
+- **[`startup.md`](./startup.md)** — step-by-step local setup, environment checklist, and how to run with the Hub and backend.
+- **Hub IAM Backend** (if present in the monorepo): see backend `README.md` / `startup.md` for API routes, database, and ports.
+
+For questions about **ABAC domain concepts** (policies, attributes, evaluation), refer to backend documentation and product specs; this README describes **frontend structure and integration points** only.

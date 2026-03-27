@@ -100,6 +100,15 @@ class AccessRequestService {
     }
   }
 
+  async cancelAccessRequest(id) {
+    try {
+      const response = await this.api.patch(`/access-requests/${id}/cancel`);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
   async deleteAccessRequest(id) {
     try {
       const response = await this.api.delete(`/access-requests/${id}`);

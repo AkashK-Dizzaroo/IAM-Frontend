@@ -172,9 +172,9 @@ export const ApplicationRoleAssignmentsPage = () => {
                               <div className="font-medium text-gray-900 truncate">
                                 {assignment.resource.name}
                               </div>
-                              {assignment.resource.type && (
+                              {assignment.resource.level != null && (
                                 <div className="text-xs text-gray-500 truncate">
-                                  {assignment.resource.type}
+                                  Level {assignment.resource.level}
                                 </div>
                               )}
                             </div>

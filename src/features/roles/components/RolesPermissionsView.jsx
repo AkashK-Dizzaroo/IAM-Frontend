@@ -161,7 +161,7 @@ export const RolesPermissionsView = () => {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">Roles & Permissions</h2>
-        <p className="text-gray-600">Configure roles and permission sets</p>
+        <p className="text-gray-600">View and manage application roles and their permissions</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

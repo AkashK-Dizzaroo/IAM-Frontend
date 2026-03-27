@@ -13,7 +13,6 @@ const sanitize = (value) => {
 
 const fromVite = (key) => sanitize(import.meta.env[key]);
 
-const PROD_API_URL = "https://hub-iam-api.dizzaroo.com";
 const PROD_HUB_URL = "https://hub.dizzaroo.com";
 const DEV_HUB_URL = "http://localhost:5000";
 
@@ -25,16 +24,10 @@ function isValidUrl(url) {
 }
 
 /**
- * API base URL - localhost uses local backend, otherwise env or prod fallback.
+ * Platform API base URL (same variable as Hub: VITE_API_URL). Set in .env — no prod URL fallback.
  */
 export function getApiBaseURL() {
-  if (typeof window !== "undefined") {
-    const o = window.location.origin;
-    if (o.startsWith("http://localhost") || o.startsWith("http://127.0.0.1")) {
-      return "http://localhost:4001";
-    }
-  }
-  return fromVite("VITE_API_URL") || PROD_API_URL;
+  return fromVite("VITE_API_URL") ?? "";
 }
 
 /**

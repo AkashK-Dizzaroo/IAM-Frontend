@@ -40,7 +40,7 @@ export const ApplicationAccessManagementPage = () => {
   const { data: usersData, isLoading: usersLoading } = useQuery({
     queryKey: ["adminUsers"],
     queryFn: async () => {
-      const response = await userService.getUsers({ limit: 1000 });
+      const response = await userService.getUsers({ limit: 100 });
       const users = response.data || [];
       const usersWithAssignments = await Promise.all(
         users.map(async (user) => {

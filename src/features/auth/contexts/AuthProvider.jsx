@@ -1,10 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import apiClient from "@/lib/apiClient";
 import { getValidHubUrl } from "@/config/env";
 import { AuthContext } from "./AuthContext";
 import { PLATFORM_TOKEN_KEY, isValidToken } from "@/features/auth/utils/authInit";
 
 const PLATFORM_USER_KEY = "platform_user";
+
+export const DEFAULT_EFFECTIVE_ROLES = {
+  isHubOwner: false,
+  isITSupport: false,
+  isAppOwner: false,
+  isAppManager: false,
+  appOwnerOf: [],
+  appManagerOf: [],
+  isElevated: false,
+  canAccessAdmin: false,
+};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -68,6 +79,59 @@ export function AuthProvider({ children }) {
     initializeAuth();
   }, []);
 
+  // Legacy RBAC /users/me/assignments was removed; app-owner/manager lists stay empty until ABAC surfaces them.
+  const rolesReady = true;
+
+  const effectiveRoles = useMemo(() => {
+    if (!user) return DEFAULT_EFFECTIVE_ROLES;
+
+    const hubRoles = user?.hubRoles ?? [];
+    const assignments = [];
+
+    const isHubOwner   = hubRoles.includes('HUB_OWNER') || user?.globalRole === 'ADMIN';
+    const isITSupport  = hubRoles.includes('IT_SUPPORT');
+
+    // Backend populates role as { id, name, roleCode } — never a bare ObjectId string
+    const getRoleCode = (a) => {
+      const role = a?.role;
+      if (!role || typeof role !== 'object') return null;
+      return role.roleCode ?? role.code ?? null;
+    };
+
+    const getAppId = (a) => {
+      const app = a?.application;
+      if (!app) return null;
+      if (typeof app === 'object') return String(app._id ?? app.id ?? '');
+      return String(app);
+    };
+
+    const appOwnerOf = assignments
+      .filter(a => getRoleCode(a) === 'APP_OWNER' && a.isActive !== false)
+      .map(a => getAppId(a))
+      .filter(Boolean);
+
+    const appManagerOf = assignments
+      .filter(a => getRoleCode(a) === 'APP_MANAGER' && a.isActive !== false)
+      .map(a => getAppId(a))
+      .filter(Boolean);
+
+    const isAppOwner   = appOwnerOf.length > 0;
+    const isAppManager = appManagerOf.length > 0;
+    const isElevated   = isHubOwner || isITSupport || isAppOwner || isAppManager;
+    const canAccessAdmin = isHubOwner || isITSupport || isAppOwner || isAppManager;
+
+    return {
+      isHubOwner,
+      isITSupport,
+      isAppOwner,
+      isAppManager,
+      appOwnerOf,
+      appManagerOf,
+      isElevated,
+      canAccessAdmin,
+    };
+  }, [user]);
+
   const logout = async () => {
     try {
       await apiClient.post("/auth/logout").catch(() => {});
@@ -84,6 +148,8 @@ export function AuthProvider({ children }) {
         loading,
         isAuthenticated,
         logout,
+        effectiveRoles,
+        rolesReady,
       }}
     >
       {children}

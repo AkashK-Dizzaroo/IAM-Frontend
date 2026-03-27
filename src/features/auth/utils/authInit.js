@@ -1,14 +1,14 @@
 /**
  * Auth initialization utility.
- * Extracts Hub auth (accessToken, user) from URL params and syncs to localStorage.
- * Called before React mounts to avoid race conditions.
+ * Hub→IAM handoff uses a one-time handoffCode (exchanged via POST); legacy ?accessToken= is deprecated.
  */
+
+import { getApiBaseURL } from "@/config/env";
 
 export const PLATFORM_TOKEN_KEY = "platform_token";
 export const PLATFORM_USER_KEY = "platform_user";
 
 /**
- * Validates that the token exists and is not the literal "undefined" string.
  * @param {string | null | undefined} token
  * @returns {boolean}
  */
@@ -19,7 +19,6 @@ export function isValidToken(token) {
 }
 
 /**
- * Returns the stored token only if it passes validation; otherwise null.
  * @returns {string | null}
  */
 export function getStoredToken() {
@@ -27,20 +26,70 @@ export function getStoredToken() {
   return isValidToken(token) ? token : null;
 }
 
+function readHandoffCodeFromUrl() {
+  const searchParams = new URLSearchParams(window.location.search);
+  let code = searchParams.get("handoffCode");
+  if (!code && window.location.hash) {
+    const hashPart = window.location.hash.replace(/^#/, "");
+    const qIndex = hashPart.indexOf("?");
+    if (qIndex >= 0) {
+      const hashParams = new URLSearchParams(hashPart.substring(qIndex));
+      code = hashParams.get("handoffCode");
+    }
+  }
+  if (!code) {
+    try {
+      const url = new URL(window.location.href);
+      code = url.searchParams.get("handoffCode");
+    } catch {
+      /* ignore */
+    }
+  }
+  return code;
+}
+
 /**
- * Extracts accessToken and user from URL, sanitizes URL immediately, then writes to localStorage if valid.
- * Call before ReactDOM.createRoot.
+ * Exchange Hub handoff code for session, or read legacy URL tokens. Call before ReactDOM.createRoot.
+ * @returns {Promise<void>}
  */
-export function initializeAuthFromUrl() {
+export async function initializeAuthFromUrl() {
+  const handoffCode = readHandoffCodeFromUrl();
+  if (handoffCode) {
+    const cleanUrl = window.location.pathname || "/";
+    window.history.replaceState({}, "", cleanUrl);
+    try {
+      const base = getApiBaseURL();
+      const res = await fetch(`${base}/api/auth/handoff/exchange`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ code: handoffCode }),
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      const data = json.data;
+      if (data?.token && isValidToken(data.token)) {
+        localStorage.setItem(PLATFORM_TOKEN_KEY, data.token);
+        if (data.user) {
+          localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(data.user));
+        }
+      }
+    } catch (e) {
+      console.error("[IAM] Handoff exchange failed:", e);
+    }
+    return;
+  }
+
   let accessToken = null;
   let userB64 = null;
 
-  // 1. Primary: search params (?accessToken=xxx)
   const searchParams = new URLSearchParams(window.location.search);
   accessToken = searchParams.get("accessToken") || searchParams.get("access_token");
   userB64 = searchParams.get("user");
 
-  // 2. Fallback: params in hash (e.g. /#?accessToken=xxx or /#/profile?accessToken=xxx)
   if (!accessToken && window.location.hash) {
     const hashPart = window.location.hash.replace(/^#/, "");
     const qIndex = hashPart.indexOf("?");
@@ -51,30 +100,27 @@ export function initializeAuthFromUrl() {
     }
   }
 
-  // 3. Fallback: parse full href (handles edge cases with relative/base URLs)
   if (!accessToken && window.location.href) {
     try {
       const url = new URL(window.location.href);
       accessToken = url.searchParams.get("accessToken") || url.searchParams.get("access_token");
       if (!userB64) userB64 = url.searchParams.get("user");
-    } catch (_) {
+    } catch {
       /* ignore */
     }
   }
 
-  // Store token BEFORE cleaning URL – ensures it's persisted before address bar updates
   if (isValidToken(accessToken)) {
     localStorage.setItem(PLATFORM_TOKEN_KEY, accessToken);
     if (userB64) {
       try {
         localStorage.setItem(PLATFORM_USER_KEY, atob(userB64));
-      } catch (_) {
-        // Ignore decode errors
+      } catch {
+        /* ignore */
       }
     }
   }
 
-  // Sanitize URL to strip credentials from address bar / history (security)
   const cleanUrl = window.location.pathname || "/";
   window.history.replaceState({}, "", cleanUrl);
 }

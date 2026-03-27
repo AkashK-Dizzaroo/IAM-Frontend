@@ -5,32 +5,45 @@ import { AuthProvider, useAuth, ProtectedRoute } from "@/features/auth";
 import { Toaster } from "@/components/ui/toaster";
 import { getValidHubUrl } from "@/config/env";
 import { DashboardPage } from "@/features/layout";
-import {
-  UserProfilePage,
-  ApplicationRoleAssignmentsPage,
-} from "@/features/profile";
+import { MyProfilePage } from "@/features/profile";
 import {
   UserProfileManagementPage,
-  UsersPage,
   AccountRequestsPage,
 } from "@/features/users";
-import { RolesPage } from "@/features/roles";
-import { AccessRequestsPage } from "@/features/access-requests";
+import { AbacScopeProvider } from "@/features/abac/contexts/AbacScopeContext";
+import { AbacUsersPage } from "@/features/abac/pages/AbacUsersPage";
+import { HubAttributesPage } from "@/features/abac/pages/HubAttributesPage";
+import { ResourceClassificationsPage } from "@/features/abac/pages/ResourceClassificationsPage";
+import { GlobalPoliciesPage } from "@/features/abac/pages/GlobalPoliciesPage";
+import { AppAttributesPage } from "@/features/abac/pages/AppAttributesPage";
+import { AppUserAttributesPage } from "@/features/abac/pages/AppUserAttributesPage";
+import { AppPoliciesPage } from "@/features/abac/pages/AppPoliciesPage";
+import { PolicyTesterPage } from "@/features/abac/pages/PolicyTesterPage";
+import { CoverageGapsPage } from "@/features/abac/pages/CoverageGapsPage";
 import { AuditPage } from "@/features/audit";
-import { ApplicationAccessManagementPage } from "@/features/applications";
+import { ResourceManagementPage } from "@/features/resources";
+import { AbacApplicationsPage } from "@/features/abac/pages/AbacApplicationsPage";
 
 function AppRoutes() {
-  const { loading, user } = useAuth();
+  const { loading, user, effectiveRoles } = useAuth();
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg text-gray-600">Loading...</div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">Loading...</p>
+        </div>
       </div>
     );
   }
 
-  const isUserRole = user?.globalRole === "USER";
+  const getDefaultRedirect = () => {
+    if (effectiveRoles.isHubOwner) return "/users";
+    if (effectiveRoles.isAppOwner) return "/app-policies";
+    if (effectiveRoles.isITSupport) return "/account-approvals";
+    return "/my-profile";
+  };
 
   return (
     <Routes>
@@ -42,32 +55,56 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route path="profile" element={<UserProfilePage />} />
+        {/* ── Active routes ──────────────────────────────────────────── */}
+        <Route path="my-profile" element={<MyProfilePage />} />
+        <Route path="resources" element={<ResourceManagementPage />} />
+        <Route path="users" element={<AbacUsersPage />} />
+        <Route path="applications" element={<AbacApplicationsPage />} />
+        <Route path="account-approvals" element={<AccountRequestsPage />} />
+        <Route path="audit" element={<AuditPage />} />
+
+        {/* ── Global scope ABAC pages ──────────────────────────────── */}
+        <Route path="hub-attributes" element={<HubAttributesPage />} />
+        <Route path="resource-classifications" element={<ResourceClassificationsPage />} />
+        <Route path="global-policies" element={<GlobalPoliciesPage />} />
+
+        {/* ── App scope ABAC pages ─────────────────────────────────── */}
+        <Route path="app-attributes" element={<AppAttributesPage />} />
+        <Route path="app-user-attributes" element={<AppUserAttributesPage />} />
+        <Route path="app-policies" element={<AppPoliciesPage />} />
+        <Route path="policy-tester" element={<PolicyTesterPage />} />
+        <Route path="coverage-gaps" element={<CoverageGapsPage />} />
+
+        {/* ── Backward-compatibility redirects ───────────────────────── */}
+        <Route path="profile" element={<Navigate to="/my-profile" replace />} />
         <Route
           path="application-role-assignments"
-          element={<ApplicationRoleAssignmentsPage />}
+          element={<Navigate to="/my-profile" replace />}
+        />
+        <Route
+          path="account-requests"
+          element={<Navigate to="/account-approvals" replace />}
+        />
+        <Route
+          path="access-requests"
+          element={<Navigate to="/account-approvals" replace />}
         />
         <Route
           path="user-profile-management"
-          element={<UserProfileManagementPage />}
+          element={<Navigate to="/users" replace />}
+        />
+        <Route
+          path="resource-management"
+          element={<Navigate to="/resources" replace />}
         />
         <Route
           path="application-access-management"
-          element={<ApplicationAccessManagementPage />}
+          element={<Navigate to="/applications" replace />}
         />
-        <Route path="access-requests" element={<AccessRequestsPage />} />
-        <Route path="account-requests" element={<AccountRequestsPage />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="roles" element={<RolesPage />} />
-        <Route path="audit" element={<AuditPage />} />
+
         <Route
           index
-          element={
-            <Navigate
-              to={isUserRole ? "/profile" : "/user-profile-management"}
-              replace
-            />
-          }
+          element={<Navigate to={getDefaultRedirect()} replace />}
         />
       </Route>
 
@@ -113,8 +150,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
-          <Toaster />
+          <AbacScopeProvider>
+            <AppRoutes />
+            <Toaster />
+          </AbacScopeProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

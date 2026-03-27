@@ -127,9 +127,9 @@ export const AccountRequestsPage = () => {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Account Requests</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Account Approvals</h2>
           <p className="text-gray-600">
-            Review and approve user account registration requests
+            Review and action new user registration requests
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
@@ -245,6 +245,7 @@ export const AccountRequestsPage = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
+                          type="button"
                           className="inline-flex items-center px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                           onClick={() => handleApprove(request)}
                           disabled={!!actioning[request._id]}
@@ -257,6 +258,7 @@ export const AccountRequestsPage = () => {
                           Approve
                         </button>
                         <button
+                          type="button"
                           className="inline-flex items-center px-3 py-1.5 rounded-md bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                           onClick={() => handleRejectClick(request)}
                           disabled={!!actioning[request._id]}

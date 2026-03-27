@@ -1,14 +1,10 @@
 /* @refresh reset */
 
-// Redirect Azure default domain to production IAM URL (preserve ?accessToken&user for token handoff)
+// Redirect Azure default domain to production IAM URL (preserve query e.g. ?handoffCode= for Hub handoff)
 if (window.location.hostname.endsWith("azurestaticapps.net")) {
   const target = "https://iam.dizzaroo.com";
   window.location.replace(window.location.search ? target + window.location.search : target);
 }
-
-// Hub→IAM token handoff: read token from URL before React mounts
-import { initializeAuthFromUrl } from "@/features/auth/utils/authInit";
-initializeAuthFromUrl();
 
 // -------------------------------
 // React App Bootstrap
@@ -16,6 +12,7 @@ initializeAuthFromUrl();
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { GoogleOAuthProvider } from "@react-oauth/google";
+import { initializeAuthFromUrl } from "@/features/auth/utils/authInit";
 import App from "./App.jsx";
 import "./index.css";
 
@@ -77,13 +74,17 @@ function Root() {
   );
 }
 
-// -------------------------------
-// Render App
-// -------------------------------
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <AppErrorBoundary>
-      <Root />
-    </AppErrorBoundary>
-  </React.StrictMode>
-);
+function mountApp() {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <React.StrictMode>
+      <AppErrorBoundary>
+        <Root />
+      </AppErrorBoundary>
+    </React.StrictMode>
+  );
+}
+
+initializeAuthFromUrl().then(mountApp).catch((err) => {
+  console.error("[IAM] initializeAuthFromUrl failed:", err);
+  mountApp();
+});

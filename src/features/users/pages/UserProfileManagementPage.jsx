@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { userService } from "../api/userService";
 import { applicationService } from "@/features/applications";
 import { roleService } from "@/features/roles";
-import apiClient from "@/lib/apiClient";
+import { resourceService } from "@/features/resources";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -23,7 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, RefreshCw } from "lucide-react";
+import { Plus, Search, RefreshCw, Shield, Trash2 } from "lucide-react";
+import { AssignManagerModal } from "../components/AssignManagerModal";
 
 const formatDate = (value) => {
   if (!value) return "—";
@@ -115,10 +116,13 @@ const AssignmentRow = memo(({ assignment }) => {
 AssignmentRow.displayName = "AssignmentRow";
 
 export const UserProfileManagementPage = () => {
-  const { user } = useAuth();
+  const { user, effectiveRoles } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isAdmin = user?.globalRole === "ADMIN";
+
+  const isHubOwner = effectiveRoles.isHubOwner;
+  const isAppOwner = effectiveRoles.isAppOwner && !isHubOwner;
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
@@ -131,9 +135,67 @@ export const UserProfileManagementPage = () => {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedApplicationId, setSelectedApplicationId] = useState("");
   const [selectedRoleId, setSelectedRoleId] = useState("");
-  const [selectedResourceId, setSelectedResourceId] = useState("");
+  const [selectedResourceId, setSelectedResourceId] = useState("app-wide");
   const [validFrom, setValidFrom] = useState("");
   const [validUntil, setValidUntil] = useState("");
+
+  // App Owner specific state
+  const [selectedAppId, setSelectedAppId] = useState(null);
+  const [appDetails, setAppDetails] = useState([]);
+  const [assignManagerTarget, setAssignManagerTarget] = useState(null);
+
+  // Fetch application details for App Owner's owned apps
+  useEffect(() => {
+    if (isAppOwner && effectiveRoles.appOwnerOf?.length > 0) {
+      applicationService.getApplications()
+        .then((response) => {
+          const allApps = response?.data ?? response ?? [];
+          const apps = Array.isArray(allApps) ? allApps : [];
+          const ownedIds = effectiveRoles.appOwnerOf.map(String);
+          const valid = apps.filter(
+            (a) => ownedIds.includes(String(a._id ?? a.id))
+          );
+          setAppDetails(valid);
+          if (valid.length === 1) {
+            setSelectedAppId(String(valid[0]._id ?? valid[0].id));
+          }
+        })
+        .catch(() => setAppDetails([]));
+    }
+  }, [isAppOwner, effectiveRoles.appOwnerOf?.join(',')]);
+
+  // App Owner scoped query
+  const {
+    data: appTeamData,
+    isLoading: appTeamLoading,
+    refetch: refetchAppTeam,
+  } = useQuery({
+    queryKey: ['appTeam', selectedAppId, searchTerm],
+    queryFn: () => userService.getAppTeamUsers(selectedAppId, searchTerm),
+    enabled: isAppOwner && !!selectedAppId,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const appTeamUsers = useMemo(() => {
+    const raw = appTeamData?.data ?? [];
+    return Array.isArray(raw) ? raw : [];
+  }, [appTeamData]);
+
+  const removeManagerMutation = useMutation({
+    mutationFn: ({ userId, assignmentId }) =>
+      userService.removeAppManager(userId, assignmentId),
+    onSuccess: () => {
+      toast({ title: 'App Manager assignment removed' });
+      queryClient.invalidateQueries({ queryKey: ['appTeam', selectedAppId] });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Failed to remove manager',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
 
   const { data: filterApplicationsData } = useQuery({
     queryKey: ["applications-filter"],
@@ -165,6 +227,7 @@ export const UserProfileManagementPage = () => {
         return [];
       }
     },
+    enabled: isHubOwner,
   });
 
   const filterApplications = filterApplicationsData || [];
@@ -186,6 +249,7 @@ export const UserProfileManagementPage = () => {
       statusFilter,
       sortBy,
     ],
+    enabled: isHubOwner,
     queryFn: async ({ signal }) => {
       const response = await userService.getAllAssignments({
         page: 1,
@@ -307,7 +371,7 @@ export const UserProfileManagementPage = () => {
   const { data: usersData } = useQuery({
     queryKey: ["users"],
     queryFn: async () => {
-      const response = await userService.getUsers({ limit: 1000 });
+      const response = await userService.getUsers({ limit: 100 });
       return response?.data || [];
     },
     enabled: showAssignDialog,
@@ -322,44 +386,68 @@ export const UserProfileManagementPage = () => {
     enabled: showAssignDialog,
   });
 
-  const { data: rolesData } = useQuery({
-    queryKey: ["roles", selectedApplicationId],
-    queryFn: async () => {
-      if (!selectedApplicationId) return [];
-      const response = await roleService.getRolesByApplication(
-        selectedApplicationId
-      );
-      return response?.data || [];
-    },
-    enabled: showAssignDialog && !!selectedApplicationId,
-  });
+  const users = usersData || [];
+  const applications = applicationsData || [];
 
-  const { data: resourcesData } = useQuery({
-    queryKey: ["resources", selectedApplicationId],
+  // Use appCode for API calls when available - backend accepts both _id and appCode
+  const selectedAppIdentifier = (() => {
+    if (!selectedApplicationId) return null;
+    const app = applications.find(
+      (a) => (a._id || a.id) === selectedApplicationId || a.appCode === selectedApplicationId
+    );
+    return app?.appCode || selectedApplicationId;
+  })();
+
+  const { data: rolesData } = useQuery({
+    queryKey: ["roles", selectedAppIdentifier],
     queryFn: async () => {
-      if (!selectedApplicationId) return [];
+      if (!selectedAppIdentifier) return [];
       try {
-        const response = await apiClient.get(
-          `/resources/application/${selectedApplicationId}`
+        const response = await roleService.getRolesByApplication(
+          selectedAppIdentifier
         );
-        return response?.data?.data || [];
+        return response?.data ?? [];
       } catch (error) {
-        console.warn("Failed to fetch resources:", error);
+        console.error("Failed to fetch roles for application:", error);
+        toast({
+          title: "Error loading roles",
+          description: error?.message || "Could not load roles for this application",
+          variant: "destructive",
+        });
         return [];
       }
     },
-    enabled: showAssignDialog && !!selectedApplicationId,
+    enabled: showAssignDialog && !!selectedAppIdentifier,
   });
 
-  const users = usersData || [];
-  const applications = applicationsData || [];
+  const { data: resourcesData } = useQuery({
+    queryKey: ["resources", selectedAppIdentifier],
+    queryFn: async () => {
+      if (!selectedAppIdentifier) return [];
+      try {
+        const response = await resourceService.getResourcesByApplication(
+          selectedAppIdentifier
+        );
+        return response?.data ?? [];
+      } catch (error) {
+        console.warn("Failed to fetch resources:", error);
+        toast({
+          title: "Error loading resources",
+          description: error?.message || "Could not load resources for this application",
+          variant: "destructive",
+        });
+        return [];
+      }
+    },
+    enabled: showAssignDialog && !!selectedAppIdentifier,
+  });
   const roles = rolesData || [];
   const resources = resourcesData || [];
 
   useEffect(() => {
     if (selectedApplicationId) {
       setSelectedRoleId("");
-      setSelectedResourceId("");
+      setSelectedResourceId("app-wide");
     }
   }, [selectedApplicationId]);
 
@@ -376,7 +464,7 @@ export const UserProfileManagementPage = () => {
       setSelectedUserId("");
       setSelectedApplicationId("");
       setSelectedRoleId("");
-      setSelectedResourceId("");
+      setSelectedResourceId("app-wide");
       setValidFrom("");
       setValidUntil("");
       queryClient.invalidateQueries({ queryKey: ["assignments"] });
@@ -403,7 +491,9 @@ export const UserProfileManagementPage = () => {
       applicationId: selectedApplicationId,
       roleId: selectedRoleId,
     };
-    if (selectedResourceId) assignmentData.resourceId = selectedResourceId;
+    if (selectedResourceId && selectedResourceId !== "app-wide") {
+      assignmentData.resourceId = selectedResourceId;
+    }
     if (validFrom)
       assignmentData.validFrom = new Date(validFrom).toISOString();
     if (validUntil)
@@ -417,18 +507,33 @@ export const UserProfileManagementPage = () => {
     return u.email || "Unknown User";
   };
 
+  if (!isHubOwner && !isAppOwner) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-gray-500">
+          You do not have permission to view this page.
+        </p>
+      </div>
+    );
+  }
+
+  const pageTitle = isHubOwner ? 'Users' : 'App Team';
+  const pageSubtitle = isHubOwner
+    ? 'Manage user accounts and platform assignments'
+    : 'View and manage your application team members and their roles';
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">
-            User Profile Management
+            {pageTitle}
           </h2>
           <p className="text-gray-600">
-            Assignments across applications, resources, and roles.
+            {pageSubtitle}
           </p>
         </div>
-        {isAdmin && (
+        {isAdmin && isHubOwner && (
           <Button onClick={() => setShowAssignDialog(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Add Assignment
@@ -436,6 +541,55 @@ export const UserProfileManagementPage = () => {
         )}
       </div>
 
+      {isAppOwner && appDetails.length > 1 && (
+        <div className="mb-4 flex items-center gap-3">
+          <label className="text-sm font-medium text-gray-700">
+            Application:
+          </label>
+          <select
+            value={selectedAppId ?? ''}
+            onChange={(e) => setSelectedAppId(e.target.value)}
+            className="border rounded px-3 py-1.5 text-sm"
+          >
+            <option value="">Select application...</option>
+            {appDetails.map((app) => (
+              <option
+                key={app._id ?? app.id}
+                value={app._id ?? app.id}
+              >
+                {app.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {isAppOwner && appDetails.length === 1 && (
+        <div className="mb-4">
+          <span className="text-sm text-gray-500">Application: </span>
+          <span className="text-sm font-semibold text-gray-800">
+            {appDetails[0]?.name}
+          </span>
+        </div>
+      )}
+
+      {/* ── App Owner: Search bar ── */}
+      {isAppOwner && selectedAppId && (
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Input
+              placeholder="Search team members by name or email..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Hub Owner: Filter bar ── */}
+      {isHubOwner && (
       <div className="bg-white rounded-xl shadow-sm border p-4">
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -570,13 +724,15 @@ export const UserProfileManagementPage = () => {
           </div>
         </div>
       </div>
+      )}
 
-      {assignmentsError && (
+      {isHubOwner && assignmentsError && (
         <div className="rounded-md bg-red-50 border border-red-200 text-red-700 px-4 py-3">
           {assignmentsError?.message || "Failed to load assignments"}
         </div>
       )}
 
+      {isHubOwner && (
       <div className="bg-white rounded-xl shadow-sm border">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -680,6 +836,137 @@ export const UserProfileManagementPage = () => {
           </div>
         )}
       </div>
+      )}
+
+      {/* ── App Owner: Team Users View ── */}
+      {isAppOwner && selectedAppId && (
+        <div className="bg-white rounded-xl shadow-sm border">
+          {appTeamLoading ? (
+            <div className="px-4 py-6 text-center text-gray-500">
+              Loading team members...
+            </div>
+          ) : appTeamUsers.length === 0 ? (
+            <div className="px-4 py-6 text-center text-gray-500">
+              No team members found for this application
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {appTeamUsers.map((entry) => {
+                const u = entry.user;
+                const managerAssignments = entry.assignments.filter(
+                  (a) => a.role?.roleCode === 'APP_MANAGER'
+                );
+                const nonManagerAssignments = entry.assignments.filter(
+                  (a) => a.role?.roleCode !== 'APP_MANAGER'
+                );
+                const userName = [u.firstName, u.lastName]
+                  .filter(Boolean)
+                  .join(' ') || u.email || '—';
+
+                return (
+                  <div key={u._id} className="px-4 py-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <span className="font-medium text-gray-900">{userName}</span>
+                        <span className="text-sm text-gray-500 ml-2">{u.email}</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setAssignManagerTarget(entry)}
+                      >
+                        <Shield className="w-3.5 h-3.5 mr-1.5" />
+                        Assign as Manager
+                      </Button>
+                    </div>
+
+                    {nonManagerAssignments.length > 0 && (
+                      <div className="mb-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {nonManagerAssignments.map((a) => (
+                            <Badge
+                              key={a._id}
+                              variant="outline"
+                              className="text-xs"
+                            >
+                              {a.role?.name || a.role?.roleCode || 'Role'}
+                              {a.resource ? ` — ${a.resource.name || a.resource.resourceExternalId}` : ''}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {managerAssignments.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {managerAssignments.map((a) => (
+                          <div
+                            key={a._id}
+                            className="flex items-center justify-between bg-purple-50 rounded px-3 py-1.5"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-purple-100 text-purple-800 border-purple-200 text-xs hover:bg-purple-100">
+                                App Manager
+                              </Badge>
+                              <span className="text-sm text-gray-700">
+                                {a.resource?.name || a.resource?.resourceExternalId || 'Global'}
+                                {a.resource?.level ? ` (L${a.resource.level})` : ''}
+                              </span>
+                              <span className="text-xs text-gray-400">
+                                expires {a.validUntil ? new Date(a.validUntil).toLocaleDateString() : '—'}
+                              </span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 h-7 px-2"
+                              disabled={removeManagerMutation.isPending}
+                              onClick={() => {
+                                if (window.confirm(`Remove App Manager assignment for ${a.resource?.name || 'this resource'}?`)) {
+                                  removeManagerMutation.mutate({
+                                    userId: u._id,
+                                    assignmentId: a._id,
+                                  });
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-1" />
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isAppOwner && !selectedAppId && appDetails.length > 1 && (
+        <div className="bg-white rounded-xl shadow-sm border px-4 py-8 text-center text-gray-500">
+          Select an application above to view team members
+        </div>
+      )}
+
+      {/* ── Assign Manager Modal ── */}
+      {assignManagerTarget && (
+        <AssignManagerModal
+          open={!!assignManagerTarget}
+          onOpenChange={(open) => { if (!open) setAssignManagerTarget(null); }}
+          user={assignManagerTarget.user}
+          applicationId={selectedAppId}
+          existingManagerResourceIds={
+            assignManagerTarget.assignments
+              .filter((a) => a.role?.roleCode === 'APP_MANAGER')
+              .map((a) => a.resource?._id ?? a.resource?.id)
+              .filter(Boolean)
+          }
+          onSuccess={() => setAssignManagerTarget(null)}
+        />
+      )}
 
       <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -775,7 +1062,7 @@ export const UserProfileManagementPage = () => {
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">App-wide (no resource)</SelectItem>
+                  <SelectItem value="app-wide">App-wide (no resource)</SelectItem>
                   {resources.map((res) => (
                     <SelectItem
                       key={res._id || res.id}
@@ -817,7 +1104,7 @@ export const UserProfileManagementPage = () => {
                   setSelectedUserId("");
                   setSelectedApplicationId("");
                   setSelectedRoleId("");
-                  setSelectedResourceId("");
+                  setSelectedResourceId("app-wide");
                   setValidFrom("");
                   setValidUntil("");
                 }}

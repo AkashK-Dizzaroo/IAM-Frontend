@@ -1,12 +1,46 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, XCircle, CheckCircle, Clock } from "lucide-react";
 import { accessRequestService } from "../api/accessRequestService";
+import { roleService } from "@/features/roles";
 
-const roleOptions = [
-  { value: "USER", label: "User" },
-  { value: "ADMIN", label: "Admin" },
-];
+// ── Per-request dynamic role dropdown ──────────────────────────────────────
+function ApplicationRoleDropdown({ applicationId, value, onChange, disabled }) {
+  const { data: roles, isLoading } = useQuery({
+    queryKey: ["roles", "application", applicationId],
+    queryFn: () => roleService.getRolesByApplication(applicationId),
+    enabled: !!applicationId,
+    staleTime: 5 * 60 * 1000,
+    select: (data) => {
+      const list = Array.isArray(data)
+        ? data
+        : (data?.data ?? data?.roles ?? []);
+      return list.filter((r) => r.isActive !== false);
+    },
+  });
 
+  if (isLoading) {
+    return <span className="text-sm text-gray-400">Loading roles…</span>;
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      className="border rounded-md px-2 py-1.5 text-sm w-full"
+    >
+      <option value="">Select role…</option>
+      {(roles ?? []).map((role) => (
+        <option key={role._id} value={role._id}>
+          {role.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 const formatDate = (value) => {
   if (!value) return "No expiry";
   const d = new Date(value);
@@ -16,9 +50,9 @@ const formatDate = (value) => {
 
 const getStatusBadge = (status) => {
   const styles = {
-    PENDING: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    APPROVED: "bg-green-100 text-green-800 border-green-200",
-    REJECTED: "bg-red-100 text-red-800 border-red-200",
+    PENDING:   "bg-yellow-100 text-yellow-800 border-yellow-200",
+    APPROVED:  "bg-green-100 text-green-800 border-green-200",
+    REJECTED:  "bg-red-100 text-red-800 border-red-200",
     CANCELLED: "bg-gray-100 text-gray-800 border-gray-200",
   };
   return styles[status] || "bg-gray-100 text-gray-800 border-gray-200";
@@ -26,38 +60,39 @@ const getStatusBadge = (status) => {
 
 const getStatusLabel = (status) => {
   const labels = {
-    PENDING: "Pending",
-    APPROVED: "Approved",
-    REJECTED: "Rejected",
+    PENDING:   "Pending",
+    APPROVED:  "Approved",
+    REJECTED:  "Rejected",
     CANCELLED: "Cancelled",
   };
   return labels[status] || status;
 };
 
+// ── Page ─────────────────────────────────────────────────────────────────────
 export const AccessRequestsPage = () => {
   const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState("");
+  // roleSelections holds role._id (ObjectId string) or "" (nothing selected yet)
   const [roleSelections, setRoleSelections] = useState({});
-  const [assignUntil, setAssignUntil] = useState({});
-  const [actioning, setActioning] = useState({});
+  const [assignUntil, setAssignUntil]       = useState({});
+  const [actioning, setActioning]           = useState({});
 
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      const response = await accessRequestService.getAllAccessRequests({
-        limit: 100,
-      });
+      const response = await accessRequestService.getAllAccessRequests({ limit: 100 });
       let data = [];
       if (Array.isArray(response)) data = response;
       else if (response?.data && Array.isArray(response.data)) data = response.data;
       else if (response?.success && Array.isArray(response.data)) data = response.data;
 
       setRequests(data);
-      const defaults = {};
+      // Default to empty string — user must pick a real role before approving
+      const defaults     = {};
       const defaultDates = {};
       data.forEach((req) => {
-        defaults[req._id] = "USER";
+        defaults[req._id]     = "";
         defaultDates[req._id] = "";
       });
       setRoleSelections(defaults);
@@ -66,10 +101,8 @@ export const AccessRequestsPage = () => {
     } catch (err) {
       console.error("Error fetching access requests:", err);
       setError(
-        err?.message ||
-          err?.error ||
-          err?.details?.message ||
-          "Failed to load access requests"
+        err?.message || err?.error || err?.details?.message ||
+        "Failed to load access requests"
       );
       setRequests([]);
     } finally {
@@ -82,9 +115,13 @@ export const AccessRequestsPage = () => {
   }, []);
 
   const handleApprove = async (request) => {
+    const role = roleSelections[request._id];
+    if (!role) {
+      setError("Please select a role before approving.");
+      return;
+    }
     try {
       setActioning((prev) => ({ ...prev, [request._id]: "approve" }));
-      const role = roleSelections[request._id] || "USER";
       const until = assignUntil[request._id];
 
       let assignUntilFormatted = null;
@@ -101,12 +138,13 @@ export const AccessRequestsPage = () => {
           ? request.requestedItems
           : [
               {
-                requestedRole: request.requestedRole,
+                requestedRole:     request.requestedRole,
                 requestedResource: request.requestedResource,
-                application: request.application,
+                application:       request.application,
               },
             ];
 
+      // role is now a MongoDB ObjectId string (role._id)
       const approvals = baseItems.map(() => ({
         role,
         assignUntil: assignUntilFormatted,
@@ -134,7 +172,7 @@ export const AccessRequestsPage = () => {
     }
   };
 
-  const rows = useMemo(() => requests, [requests]);
+  const rows         = useMemo(() => requests, [requests]);
   const statusCounts = useMemo(() => {
     const counts = { PENDING: 0, APPROVED: 0, REJECTED: 0, CANCELLED: 0 };
     rows.forEach((req) => {
@@ -144,15 +182,15 @@ export const AccessRequestsPage = () => {
     return counts;
   }, [rows]);
   const totalRequests = rows.length;
-  const pendingCount = statusCounts.PENDING;
+  const pendingCount  = statusCounts.PENDING;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Access Requests</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Access Approvals</h2>
           <p className="text-gray-600">
-            Review and manage access requests from users
+            Review and action application access requests
           </p>
         </div>
         <div className="text-sm text-gray-500">
@@ -182,7 +220,7 @@ export const AccessRequestsPage = () => {
                   Resource Requested
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Role
+                  Grant Role
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
                   Assign until
@@ -221,42 +259,50 @@ export const AccessRequestsPage = () => {
                         i.requestedResource?.resourceExternalId
                     )
                     .filter(Boolean);
-                  const requesterName = [req.requester?.firstName, req.requester?.lastName]
-                    .filter(Boolean)
-                    .join(" ") || req.requester?.email || "Unknown";
-                  const status = req.status || "PENDING";
+                  const requesterName =
+                    [req.requester?.firstName, req.requester?.lastName]
+                      .filter(Boolean)
+                      .join(" ") ||
+                    req.requester?.email ||
+                    "Unknown";
+                  const status    = req.status || "PENDING";
                   const isPending = status === "PENDING";
+
+                  // Resolve the applicationId for the role dropdown
+                  const applicationId =
+                    req.application?._id ??
+                    req.application ??
+                    req.requestedItems?.[0]?.application?._id ??
+                    req.requestedItems?.[0]?.application;
+
                   return (
                     <tr key={req._id}>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         {requesterName}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">
-                        {apps.length ? apps.join(", ") : req.application?.name || "—"}
+                        {apps.length
+                          ? apps.join(", ")
+                          : req.application?.name || "—"}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">
                         {resources.length
                           ? resources.join(", ")
                           : req.requestedResource?.name || "App-wide"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
+                      <td className="px-4 py-3 text-sm text-gray-700 min-w-[160px]">
                         {isPending ? (
-                          <select
-                            className="border rounded-md px-3 py-2 text-sm"
-                            value={roleSelections[req._id] || "USER"}
-                            onChange={(e) =>
+                          <ApplicationRoleDropdown
+                            applicationId={applicationId}
+                            value={roleSelections[req._id] ?? ""}
+                            onChange={(val) =>
                               setRoleSelections((prev) => ({
                                 ...prev,
-                                [req._id]: e.target.value,
+                                [req._id]: val,
                               }))
                             }
-                          >
-                            {roleOptions.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
+                            disabled={!!actioning[req._id]}
+                          />
                         ) : (
                           <span className="text-gray-600">
                             {req.requestedItems?.[0]?.requestedRole?.roleCode ||
@@ -329,7 +375,7 @@ export const AccessRequestsPage = () => {
                             <button
                               className="inline-flex items-center px-3 py-2 rounded-md bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-60"
                               onClick={() => handleApprove(req)}
-                              disabled={!!actioning[req._id]}
+                              disabled={!!actioning[req._id] || !roleSelections[req._id]}
                             >
                               {actioning[req._id] === "approve" ? (
                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

@@ -33,12 +33,8 @@ class ProfileService {
   }
 
   async getUserRolesAndResources() {
-    try {
-      const response = await apiClient.get("/users/me/assignments");
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error);
-    }
+    // Legacy RBAC endpoint removed; replaced by ABAC. Callers expect { data: [] } shape.
+    return { data: [] };
   }
 
   handleError(error) {

@@ -32,12 +32,13 @@ steps:
   displayName: 'Install Dependencies'
 
 # 4️⃣ Build the app with environment variables
+# VITE_API_URL (same as Hub-Login) so both apps hit the same backend
 - script: |
     npm run build
   workingDirectory: $(Build.SourcesDirectory)
   displayName: 'Build Application'
   env:
-    VITE_API_URL: https://hub-iam-backend-ceecf8ewejc8b0ay.canadacentral-01.azurewebsites.net
+    VITE_API_URL: $(VITE_API_URL)
     VITE_HUB_URL: $(VITE_HUB_URL)
     VITE_GOOGLE_CLIENT_ID: $(VITE_GOOGLE_CLIENT_ID)
 
