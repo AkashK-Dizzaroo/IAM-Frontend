@@ -1,2 +1,2 @@
 export { queryClient } from "./queryClient";
-export { getApiBaseURL, getValidHubUrl, env } from "./env";
+export { getApiBaseURL, getAxiosBaseURL, getValidHubUrl, env } from "./env";

@@ -10,13 +10,6 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from '@/components/ui/select';
 import { AppWindow, Pencil, X, Plus } from 'lucide-react';
 
 const STRATEGIES = [
@@ -57,7 +50,7 @@ export function AbacApplicationsPage() {
     description: '',
     baseUrl: '',
     isVisibleInHub: true,
-    status: 'active',
+    isActive: true,
     iconKey: 'shield',
     features: '',
     combiningStrategy: 'deny_overrides',
@@ -102,7 +95,7 @@ export function AbacApplicationsPage() {
       description: '',
       baseUrl: '',
       isVisibleInHub: true,
-      status: 'active',
+      isActive: true,
       iconKey: 'shield',
       features: '',
       combiningStrategy: 'deny_overrides',
@@ -117,7 +110,7 @@ export function AbacApplicationsPage() {
       description: app.description ?? '',
       baseUrl: app.baseUrl ?? '',
       isVisibleInHub: app.isVisibleInHub !== false,
-      status: app.status ?? 'active',
+      isActive: app.isActive !== false,
       iconKey: app.iconKey ?? 'shield',
       features: Array.isArray(app.features)
         ? app.features.join(', ')
@@ -187,7 +180,7 @@ export function AbacApplicationsPage() {
         description: form.description?.trim() || undefined,
         baseUrl: form.baseUrl?.trim() || '',
         isVisibleInHub: form.isVisibleInHub,
-        status: form.status,
+        isActive: form.isActive,
         iconKey: form.iconKey || null,
         features: form.features
           .split(',')
@@ -205,7 +198,7 @@ export function AbacApplicationsPage() {
           description: form.description?.trim() || undefined,
           baseUrl: form.baseUrl?.trim() || '',
           isVisibleInHub: form.isVisibleInHub,
-          status: form.status,
+          isActive: form.isActive,
           iconKey: form.iconKey || null,
           features: form.features
             .split(',')
@@ -219,24 +212,17 @@ export function AbacApplicationsPage() {
 
   const saving = createMutation.isPending || updateMutation.isPending;
 
-  const statusBadge = (status) => {
-    if (status === 'active') {
+  const renderStatusBadge = (isActive) => {
+    if (isActive) {
       return (
         <Badge className="bg-green-100 text-green-800 border-green-200">
           active
         </Badge>
       );
     }
-    if (status === 'coming-soon') {
-      return (
-        <Badge className="bg-amber-100 text-amber-800 border-amber-200">
-          coming-soon
-        </Badge>
-      );
-    }
     return (
       <Badge className="bg-gray-100 text-gray-600 border-gray-200">
-        {status || 'inactive'}
+        inactive
       </Badge>
     );
   };
@@ -338,7 +324,9 @@ export function AbacApplicationsPage() {
                       {app.appCode}
                     </div>
                   </td>
-                  <td className="px-4 py-3">{statusBadge(app.status)}</td>
+                  <td className="px-4 py-3">
+                    {renderStatusBadge(app.isActive !== false)}
+                  </td>
                   <td className="px-4 py-3">
                     {app.isVisibleInHub !== false ? (
                       <Badge
@@ -474,23 +462,19 @@ export function AbacApplicationsPage() {
                       }
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Status</Label>
-                    <Select
-                      value={form.status}
-                      onValueChange={(v) =>
-                        setForm((p) => ({ ...p, status: v }))
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Active</Label>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Inactive applications are hidden from normal use
+                      </p>
+                    </div>
+                    <Switch
+                      checked={form.isActive}
+                      onCheckedChange={(v) =>
+                        setForm((p) => ({ ...p, isActive: v }))
                       }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">active</SelectItem>
-                        <SelectItem value="coming-soon">coming-soon</SelectItem>
-                        <SelectItem value="disabled">disabled</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Icon key</Label>

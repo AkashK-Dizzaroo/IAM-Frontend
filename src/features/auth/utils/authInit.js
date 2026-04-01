@@ -1,11 +1,10 @@
 /**
  * Auth initialization utility.
- * Hub→IAM handoff uses a one-time handoffCode (exchanged via POST); legacy ?accessToken= is deprecated.
+ * Hub→IAM uses only handoffCode: POST /api/auth/handoff/exchange sets HttpOnly cookies + token.
+ * Legacy ?accessToken= URL params are not supported (they skipped refresh cookies).
  */
 
-import { getApiBaseURL } from "@/config/env";
-
-export const PLATFORM_TOKEN_KEY = "platform_token";
+export const PLATFORM_TOKEN_KEY = "access_token";
 export const PLATFORM_USER_KEY = "platform_user";
 
 /**
@@ -15,7 +14,28 @@ export const PLATFORM_USER_KEY = "platform_user";
 export function isValidToken(token) {
   if (token == null || typeof token !== "string") return false;
   const t = token.trim();
-  return t.length > 0 && t !== "undefined";
+  if (t.length === 0 || t === "undefined") return false;
+
+  try {
+    const base64Url = t.split(".")[1];
+    if (!base64Url) return false;
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const { exp } = JSON.parse(jsonPayload);
+    const currentTime = Math.floor(Date.now() / 1000);
+    if (exp && exp < currentTime + 30) {
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("Failed to parse JWT", e);
+    return false;
+  }
 }
 
 /**
@@ -49,78 +69,47 @@ function readHandoffCodeFromUrl() {
 }
 
 /**
- * Exchange Hub handoff code for session, or read legacy URL tokens. Call before ReactDOM.createRoot.
+ * Exchange Hub handoff code for session (HttpOnly cookies + Bearer in localStorage).
+ * Call before ReactDOM.createRoot. Uses axios with credentials so cookies are set cross-origin.
  * @returns {Promise<void>}
  */
 export async function initializeAuthFromUrl() {
   const handoffCode = readHandoffCodeFromUrl();
-  if (handoffCode) {
-    const cleanUrl = window.location.pathname || "/";
-    window.history.replaceState({}, "", cleanUrl);
-    try {
-      const base = getApiBaseURL();
-      const res = await fetch(`${base}/api/auth/handoff/exchange`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ code: handoffCode }),
-      });
-      if (!res.ok) return;
-      const json = await res.json();
-      const data = json.data;
-      if (data?.token && isValidToken(data.token)) {
-        localStorage.setItem(PLATFORM_TOKEN_KEY, data.token);
-        if (data.user) {
-          localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(data.user));
-        }
-      }
-    } catch (e) {
-      console.error("[IAM] Handoff exchange failed:", e);
-    }
+  if (!handoffCode) {
     return;
   }
 
-  let accessToken = null;
-  let userB64 = null;
+  window.history.replaceState({}, document.title, window.location.pathname || "/");
 
-  const searchParams = new URLSearchParams(window.location.search);
-  accessToken = searchParams.get("accessToken") || searchParams.get("access_token");
-  userB64 = searchParams.get("user");
-
-  if (!accessToken && window.location.hash) {
-    const hashPart = window.location.hash.replace(/^#/, "");
-    const qIndex = hashPart.indexOf("?");
-    if (qIndex >= 0) {
-      const hashParams = new URLSearchParams(hashPart.substring(qIndex));
-      accessToken = hashParams.get("accessToken") || hashParams.get("access_token");
-      if (!userB64) userB64 = hashParams.get("user");
+  try {
+    const { default: apiClient } = await import("@/lib/apiClient");
+    const res = await apiClient.post(
+      "/auth/handoff/exchange",
+      { code: handoffCode },
+      { withCredentials: true }
+    );
+    const json = res.data;
+    if (!json?.success) {
+      console.error("[IAM] Handoff exchange failed:", json?.error || json);
+      localStorage.removeItem(PLATFORM_TOKEN_KEY);
+      localStorage.removeItem(PLATFORM_USER_KEY);
+      return;
     }
-  }
-
-  if (!accessToken && window.location.href) {
-    try {
-      const url = new URL(window.location.href);
-      accessToken = url.searchParams.get("accessToken") || url.searchParams.get("access_token");
-      if (!userB64) userB64 = url.searchParams.get("user");
-    } catch {
-      /* ignore */
-    }
-  }
-
-  if (isValidToken(accessToken)) {
-    localStorage.setItem(PLATFORM_TOKEN_KEY, accessToken);
-    if (userB64) {
-      try {
-        localStorage.setItem(PLATFORM_USER_KEY, atob(userB64));
-      } catch {
-        /* ignore */
+    const payload = json?.data ?? json;
+    if (payload?.token && isValidToken(payload.token)) {
+      localStorage.setItem(PLATFORM_TOKEN_KEY, payload.token);
+      if (payload.user) {
+        localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(payload.user));
       }
+      apiClient.defaults.headers.common.Authorization = `Bearer ${payload.token}`;
+    } else {
+      console.error("[IAM] Handoff response missing token", json);
+      localStorage.removeItem(PLATFORM_TOKEN_KEY);
+      localStorage.removeItem(PLATFORM_USER_KEY);
     }
+  } catch (e) {
+    console.error("[IAM] Handoff exchange failed:", e);
+    localStorage.removeItem(PLATFORM_TOKEN_KEY);
+    localStorage.removeItem(PLATFORM_USER_KEY);
   }
-
-  const cleanUrl = window.location.pathname || "/";
-  window.history.replaceState({}, "", cleanUrl);
 }
