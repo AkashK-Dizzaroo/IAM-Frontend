@@ -2,6 +2,13 @@ import axios from "axios";
 import { env } from "@/config/env";
 import { PLATFORM_TOKEN_KEY, isValidToken } from "@/features/auth/utils/authInit";
 
+function persistNewAccessToken(headers) {
+  const h = headers?.["x-new-access-token"];
+  if (h && isValidToken(h)) {
+    localStorage.setItem(PLATFORM_TOKEN_KEY, h);
+  }
+}
+
 /**
  * Singleton Axios instance for all API calls.
  * - Auth: Bearer token (from Hub handoff) or HttpOnly cookies
@@ -24,8 +31,14 @@ apiClient.interceptors.request.use(
 );
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    persistNewAccessToken(response.headers);
+    return response;
+  },
   (error) => {
+    if (error.response?.headers) {
+      persistNewAccessToken(error.response.headers);
+    }
     if (error.response?.status === 401) {
       console.warn("Session expired. Redirecting to Hub login...");
       const isDevEnv =
