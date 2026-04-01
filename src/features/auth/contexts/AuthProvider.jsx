@@ -53,6 +53,24 @@ export function AuthProvider({ children }) {
       }
 
       try {
+        if (!hasToken) {
+          try {
+            const refreshRes = await apiClient.post("/auth/refresh", {}, { timeout: 15000 });
+            const t = refreshRes.data?.data?.token;
+            if (isValidToken(t)) {
+              localStorage.setItem(PLATFORM_TOKEN_KEY, t);
+            }
+          } catch {
+            /* no refresh session */
+          }
+        }
+
+        if (!isValidToken(localStorage.getItem(PLATFORM_TOKEN_KEY))) {
+          clearSession();
+          setLoading(false);
+          return;
+        }
+
         const response = await apiClient.post("/auth/verify", {}, { timeout: 15000 });
         const data = response.data;
 
@@ -137,7 +155,8 @@ export function AuthProvider({ children }) {
       await apiClient.post("/auth/logout").catch(() => {});
     } finally {
       clearSession();
-      window.location.href = `${getValidHubUrl()}/logout`;
+      const hubBase = getValidHubUrl().replace(/\/$/, "");
+      window.location.href = `${hubBase}/logout`;
     }
   };
 

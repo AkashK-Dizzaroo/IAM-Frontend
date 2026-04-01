@@ -23,6 +23,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
+/** API returns PostgreSQL `id`; legacy UIs used Mongo-style `_id`. */
+function userRowId(request) {
+  return request?.id ?? request?._id;
+}
+
 export const AccountRequestsPage = () => {
   const { toast } = useToast();
   const [requests, setRequests] = useState([]);
@@ -58,9 +63,21 @@ export const AccountRequestsPage = () => {
   }, []);
 
   const handleApprove = async (request) => {
+    const uid = userRowId(request);
+    if (!uid) {
+      toast({
+        title: "Error",
+        description: "Missing user id — cannot approve.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
-      setActioning((prev) => ({ ...prev, [request._id]: "approve" }));
-      await userService.approveUserAccount(request._id);
+      setActioning((prev) => ({ ...prev, [uid]: "approve" }));
+      const res = await userService.approveUserAccount(uid);
+      if (!res?.success) {
+        throw new Error(res?.error || "Approval failed");
+      }
       toast({
         title: "Success",
         description: `Account for ${request.firstName} ${request.lastName} has been approved.`,
@@ -73,7 +90,7 @@ export const AccountRequestsPage = () => {
         variant: "destructive",
       });
     } finally {
-      setActioning((prev) => ({ ...prev, [request._id]: null }));
+      setActioning((prev) => ({ ...prev, [uid]: null }));
     }
   };
 
@@ -85,12 +102,18 @@ export const AccountRequestsPage = () => {
 
   const handleRejectConfirm = async () => {
     if (!selectedRequest) return;
+    const uid = userRowId(selectedRequest);
+    if (!uid) {
+      toast({
+        title: "Error",
+        description: "Missing user id — cannot reject.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
-      setActioning((prev) => ({ ...prev, [selectedRequest._id]: "reject" }));
-      await userService.rejectUserAccount(
-        selectedRequest._id,
-        rejectionReason
-      );
+      setActioning((prev) => ({ ...prev, [uid]: "reject" }));
+      await userService.rejectUserAccount(uid, rejectionReason);
       toast({
         title: "Success",
         description: `Account for ${selectedRequest.firstName} ${selectedRequest.lastName} has been rejected.`,
@@ -106,7 +129,7 @@ export const AccountRequestsPage = () => {
         variant: "destructive",
       });
     } finally {
-      setActioning((prev) => ({ ...prev, [selectedRequest._id]: null }));
+      setActioning((prev) => ({ ...prev, [uid]: null }));
     }
   };
 
@@ -191,7 +214,7 @@ export const AccountRequestsPage = () => {
                 </tr>
               ) : (
                 requests.map((request) => (
-                  <tr key={request._id} className="hover:bg-gray-50">
+                  <tr key={userRowId(request) || request.email} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <div className="flex items-start gap-3">
                         <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
@@ -248,9 +271,9 @@ export const AccountRequestsPage = () => {
                           type="button"
                           className="inline-flex items-center px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                           onClick={() => handleApprove(request)}
-                          disabled={!!actioning[request._id]}
+                          disabled={!!actioning[userRowId(request)]}
                         >
-                          {actioning[request._id] === "approve" ? (
+                          {actioning[userRowId(request)] === "approve" ? (
                             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                           ) : (
                             <CheckCircle className="h-3 w-3 mr-1" />
@@ -261,9 +284,9 @@ export const AccountRequestsPage = () => {
                           type="button"
                           className="inline-flex items-center px-3 py-1.5 rounded-md bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                           onClick={() => handleRejectClick(request)}
-                          disabled={!!actioning[request._id]}
+                          disabled={!!actioning[userRowId(request)]}
                         >
-                          {actioning[request._id] === "reject" ? (
+                          {actioning[userRowId(request)] === "reject" ? (
                             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                           ) : (
                             <XCircle className="h-3 w-3 mr-1" />
@@ -314,9 +337,9 @@ export const AccountRequestsPage = () => {
             <Button
               variant="destructive"
               onClick={handleRejectConfirm}
-              disabled={!!actioning[selectedRequest?._id]}
+              disabled={!!actioning[userRowId(selectedRequest)]}
             >
-              {actioning[selectedRequest?._id] === "reject" ? (
+              {actioning[userRowId(selectedRequest)] === "reject" ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Rejecting...
