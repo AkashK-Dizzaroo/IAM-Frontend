@@ -75,41 +75,33 @@ function readHandoffCodeFromUrl() {
  */
 export async function initializeAuthFromUrl() {
   const handoffCode = readHandoffCodeFromUrl();
-  if (!handoffCode) {
+  if (handoffCode) {
+    const cleanUrl = window.location.pathname || "/";
+    window.history.replaceState({}, "", cleanUrl);
+    try {
+      const base = getApiBaseURL();
+      const res = await fetch(`${base}/api/auth/handoff/exchange`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ code: handoffCode }),
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      const data = json.data;
+      /* HttpOnly cookies hold tokens; cache user for instant UI until /verify runs */
+      if (data?.user) {
+        localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(data.user));
+      }
+    } catch (e) {
+      console.error("[IAM] Handoff exchange failed:", e);
+    }
     return;
   }
 
-  window.history.replaceState({}, document.title, window.location.pathname || "/");
-
-  try {
-    const { default: apiClient } = await import("@/lib/apiClient");
-    const res = await apiClient.post(
-      "/auth/handoff/exchange",
-      { code: handoffCode },
-      { withCredentials: true }
-    );
-    const json = res.data;
-    if (!json?.success) {
-      console.error("[IAM] Handoff exchange failed:", json?.error || json);
-      localStorage.removeItem(PLATFORM_TOKEN_KEY);
-      localStorage.removeItem(PLATFORM_USER_KEY);
-      return;
-    }
-    const payload = json?.data ?? json;
-    if (payload?.token && isValidToken(payload.token)) {
-      localStorage.setItem(PLATFORM_TOKEN_KEY, payload.token);
-      if (payload.user) {
-        localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(payload.user));
-      }
-      apiClient.defaults.headers.common.Authorization = `Bearer ${payload.token}`;
-    } else {
-      console.error("[IAM] Handoff response missing token", json);
-      localStorage.removeItem(PLATFORM_TOKEN_KEY);
-      localStorage.removeItem(PLATFORM_USER_KEY);
-    }
-  } catch (e) {
-    console.error("[IAM] Handoff exchange failed:", e);
-    localStorage.removeItem(PLATFORM_TOKEN_KEY);
-    localStorage.removeItem(PLATFORM_USER_KEY);
-  }
+  const cleanUrl = window.location.pathname || "/";
+  window.history.replaceState({}, "", cleanUrl);
 }

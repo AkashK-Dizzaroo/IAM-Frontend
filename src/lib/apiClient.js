@@ -1,55 +1,28 @@
 import axios from "axios";
 import { env } from "@/config/env";
-import { PLATFORM_TOKEN_KEY, isValidToken } from "@/features/auth/utils/authInit";
-
-function persistNewAccessToken(headers) {
-  const h = headers?.["x-new-access-token"];
-  if (h && isValidToken(h)) {
-    localStorage.setItem(PLATFORM_TOKEN_KEY, h);
-  }
-}
+import { PLATFORM_USER_KEY } from "@/features/auth/utils/authInit";
 
 /**
- * Singleton Axios instance for all API calls.
- * - Auth: Bearer token (from Hub handoff) or HttpOnly cookies
- * - On 401: redirects to Hub login
+ * HttpOnly access_token + refresh_token on API host; credentials sent cross-site to IAM API.
+ * Response shape: full Axios response (callers use response.data).
  */
 const apiClient = axios.create({
   baseURL: `${env.API_BASE_URL}/api`,
-  headers: { "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json", Accept: "application/json" },
   timeout: 15000,
   withCredentials: true,
 });
 
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem(PLATFORM_TOKEN_KEY);
-    if (token && isValidToken(token)) config.headers.Authorization = `Bearer ${token}`;
-    return config;
-  },
-  (e) => Promise.reject(e)
-);
-
 apiClient.interceptors.response.use(
-  (response) => {
-    persistNewAccessToken(response.headers);
-    return response;
-  },
+  (response) => response,
   (error) => {
-    if (error.response?.headers) {
-      persistNewAccessToken(error.response.headers);
-    }
     if (error.response?.status === 401) {
-      console.warn("Session expired. Redirecting to Hub login...");
       const isDevEnv =
         import.meta.env.DEV || import.meta.env.VITE_DEV_MODE === "true";
       const devMode = localStorage.getItem("dev_mode") === "true";
-
-      localStorage.removeItem("platform_user");
-      localStorage.removeItem(PLATFORM_TOKEN_KEY);
-
+      localStorage.removeItem(PLATFORM_USER_KEY);
       if (devMode) {
-        console.warn("[API] 401 in dev mode - backend rejected");
+        console.warn("[API] 401 — session invalid");
       } else if (!isDevEnv && !window.location.pathname.includes("/login")) {
         window.location.href = `${env.getValidHubUrl()}/login`;
       }
