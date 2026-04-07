@@ -23,6 +23,7 @@ import { CoverageGapsPage } from "@/features/abac/pages/CoverageGapsPage";
 import { AuditPage } from "@/features/audit";
 import { ResourceManagementPage } from "@/features/resources";
 import { AbacApplicationsPage } from "@/features/abac/pages/AbacApplicationsPage";
+import { AccessRequestsPage } from "@/features/access-requests/pages/AccessRequestsPage";
 
 function AppRoutes() {
   const { loading, user, effectiveRoles } = useAuth();
@@ -61,6 +62,7 @@ function AppRoutes() {
         <Route path="users" element={<AbacUsersPage />} />
         <Route path="applications" element={<AbacApplicationsPage />} />
         <Route path="account-approvals" element={<AccountRequestsPage />} />
+        <Route path="access-approvals" element={<AccessRequestsPage />} />
         <Route path="audit" element={<AuditPage />} />
 
         {/* ── Global scope ABAC pages ──────────────────────────────── */}
@@ -87,7 +89,7 @@ function AppRoutes() {
         />
         <Route
           path="access-requests"
-          element={<Navigate to="/account-approvals" replace />}
+          element={<Navigate to="/access-approvals" replace />}
         />
         <Route
           path="user-profile-management"
