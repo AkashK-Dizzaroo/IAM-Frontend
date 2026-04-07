@@ -60,6 +60,18 @@ class ResourceService {
     }
   }
 
+  async setClassification(resourceId, applicationId, classificationId) {
+    try {
+      const response = await apiClient.patch(
+        `/resources/${resourceId}/classification`,
+        { applicationId, classificationId: classificationId || null }
+      );
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
   handleError(error) {
     if (error.response) {
       const safeData = {

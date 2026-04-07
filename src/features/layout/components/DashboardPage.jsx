@@ -17,7 +17,6 @@ import {
   FileText,
   FlaskConical,
   AlertTriangle,
-  Database,
   ShieldCheck,
   Globe2,
   AppWindow,
@@ -192,14 +191,7 @@ export const DashboardPage = () => {
       path: "/hub-attributes",
       show: effectiveRoles.isHubOwner,
     },
-    {
-      id: "resource-classifications",
-      label: "Resource Classifications",
-      icon: Database,
-      path: "/resource-classifications",
-      show: effectiveRoles.isHubOwner,
-    },
-    {
+{
       id: "global-policies",
       label: "Global Policies",
       icon: Globe2,

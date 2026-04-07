@@ -1,6 +1,22 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { resourceService } from "../api/resourceService";
+import { APP_LEVEL_TYPES } from "../config/resourceTypeConfig";
+
+/**
+ * Check whether an application supports Level 2 resources.
+ * Prefers the resourceTypeConfig topology; falls back to the DB flag.
+ */
+function appSupportsL2(app) {
+  const code = (app?.appCode ?? "").toUpperCase();
+  const config = APP_LEVEL_TYPES[code];
+  if (config) {
+    // config[2] is null when L2 is not supported
+    return Array.isArray(config[2]) && config[2].length > 0;
+  }
+  // Fallback to DB flag for apps not yet in the config map
+  return app?.supportsLevel2 === true;
+}
 
 /**
  * State machine hook for the single-page Resource Creation form.
@@ -17,7 +33,7 @@ export function useResourceForm() {
   const isL2Locked = useMemo(
     () =>
       selectedL1Apps.length > 0 &&
-      selectedL1Apps.every((app) => app.supportsLevel2 === false),
+      selectedL1Apps.every((app) => !appSupportsL2(app)),
     [selectedL1Apps]
   );
 

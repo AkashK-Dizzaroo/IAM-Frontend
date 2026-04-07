@@ -13,7 +13,7 @@ import {
 import { AbacScopeProvider } from "@/features/abac/contexts/AbacScopeContext";
 import { AbacUsersPage } from "@/features/abac/pages/AbacUsersPage";
 import { HubAttributesPage } from "@/features/abac/pages/HubAttributesPage";
-import { ResourceClassificationsPage } from "@/features/abac/pages/ResourceClassificationsPage";
+
 import { GlobalPoliciesPage } from "@/features/abac/pages/GlobalPoliciesPage";
 import { AppAttributesPage } from "@/features/abac/pages/AppAttributesPage";
 import { AppUserAttributesPage } from "@/features/abac/pages/AppUserAttributesPage";
@@ -65,8 +65,7 @@ function AppRoutes() {
 
         {/* ── Global scope ABAC pages ──────────────────────────────── */}
         <Route path="hub-attributes" element={<HubAttributesPage />} />
-        <Route path="resource-classifications" element={<ResourceClassificationsPage />} />
-        <Route path="global-policies" element={<GlobalPoliciesPage />} />
+<Route path="global-policies" element={<GlobalPoliciesPage />} />
 
         {/* ── App scope ABAC pages ─────────────────────────────────── */}
         <Route path="app-attributes" element={<AppAttributesPage />} />

@@ -9,6 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { APP_LEVEL_TYPES } from "../config/resourceTypeConfig";
+
+function appSupportsL2(app) {
+  const code = (app?.appCode ?? "").toUpperCase();
+  const config = APP_LEVEL_TYPES[code];
+  if (config) return Array.isArray(config[2]) && config[2].length > 0;
+  return app?.supportsLevel2 === true;
+}
 
 /**
  * Multi-select combobox for selecting applications.
@@ -102,7 +110,7 @@ export function ApplicationMultiSelect({
                     onCheckedChange={(c) => handleToggle(app, !!c)}
                     onClick={(e) => e.stopPropagation()}
                   />
-                  {app.supportsLevel2 === false && (
+                  {!appSupportsL2(app) && (
                     <span
                       className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                       title="L2 not supported — Level 3 will use Unassigned Level 2"

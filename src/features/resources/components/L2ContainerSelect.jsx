@@ -8,11 +8,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { APP_LEVEL_TYPES } from "../config/resourceTypeConfig";
+
+function appSupportsL2(app) {
+  const code = (app?.appCode ?? "").toUpperCase();
+  const config = APP_LEVEL_TYPES[code];
+  if (config) return Array.isArray(config[2]) && config[2].length > 0;
+  return app?.supportsLevel2 === true;
+}
 
 /**
  * Searchable single-select for Level 2 resources.
  * Filters to L2s whose assignedApplications overlap with selectedL1Apps
- * where app.supportsLevel2 === true. Excludes Unassigned nodes.
+ * where app supports Level 2. Excludes Unassigned nodes.
  */
 export function L2ContainerSelect({
   l2Resources = [],
@@ -32,7 +40,7 @@ export function L2ContainerSelect({
       const l2AppIds = (r.assignedApplications ?? []).map((a) =>
         String(a?._id ?? a)
       );
-      const l1AppsWithL2 = selectedL1Apps.filter((app) => app.supportsLevel2 === true);
+      const l1AppsWithL2 = selectedL1Apps.filter((app) => appSupportsL2(app));
       const l1Ids = l1AppsWithL2.map((a) => String(a._id ?? a.id));
       return l1Ids.some((id) => l2AppIds.includes(id));
     });
