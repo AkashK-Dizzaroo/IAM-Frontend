@@ -7,7 +7,7 @@ import { PLATFORM_USER_KEY } from "@/features/auth/utils/authInit";
  * Response shape: full Axios response (callers use response.data).
  */
 const apiClient = axios.create({
-  baseURL: `${env.API_BASE_URL}/api`,
+  baseURL: env.AXIOS_BASE_URL,
   headers: { "Content-Type": "application/json", Accept: "application/json" },
   timeout: 15000,
   withCredentials: true,

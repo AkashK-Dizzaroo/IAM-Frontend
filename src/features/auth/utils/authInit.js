@@ -4,6 +4,7 @@
  * Legacy ?accessToken= URL params are not supported (they skipped refresh cookies).
  */
 
+import { getAxiosBaseURL } from "@/config/env";
 export const PLATFORM_TOKEN_KEY = "access_token";
 export const PLATFORM_USER_KEY = "platform_user";
 
@@ -79,8 +80,8 @@ export async function initializeAuthFromUrl() {
     const cleanUrl = window.location.pathname || "/";
     window.history.replaceState({}, "", cleanUrl);
     try {
-      const base = getApiBaseURL();
-      const res = await fetch(`${base}/api/auth/handoff/exchange`, {
+      const base = getAxiosBaseURL();
+      const res = await fetch(`${base}/auth/handoff/exchange`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

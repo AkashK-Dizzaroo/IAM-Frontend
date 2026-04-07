@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
 import { useAbacScope } from '../contexts/AbacScopeContext';
+import { Lock, Globe2, ChevronDown, ChevronRight, Info, Tag, Settings } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Badge helpers
@@ -1168,6 +1169,173 @@ function PolicyCreatePanel({ onClose, onCreated, appKey, createTitle = 'New Glob
 }
 
 // ---------------------------------------------------------------------------
+// HubGlobalConfigTab — always read-only view of hub-level settings
+// ---------------------------------------------------------------------------
+
+function HubGlobalConfigTab({ appName }) {
+  const [expandedId, setExpandedId] = useState(null);
+
+  const { data: globalPoliciesData, isLoading: policiesLoading } = useQuery({
+    queryKey: ['abac', 'globalPolicies', 'active'],
+    queryFn: () => abacService.listGlobalPolicies({ status: 'active' }),
+    staleTime: 60_000,
+  });
+  const globalPolicies = globalPoliciesData?.data?.data ?? globalPoliciesData?.data ?? [];
+
+  const { data: hubAttrsData, isLoading: attrsLoading } = useQuery({
+    queryKey: ['abac', 'hubAttributes'],
+    queryFn: () => abacService.listHubAttrDefs(),
+    staleTime: 60_000,
+  });
+  const hubAttributes = hubAttrsData?.data?.data ?? hubAttrsData?.data ?? [];
+
+  const isLoading = policiesLoading || attrsLoading;
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+
+      {/* Info banner */}
+      <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 mb-6">
+        <Lock size={15} className="text-amber-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-amber-800">
+            Hub / Global Configuration — Read Only
+          </p>
+          <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+            These settings are managed at the Hub/IAM level and{' '}
+            <strong>override</strong> any local {appName} policies.
+            To make changes, use <strong>Hub Management → Global Policies</strong> in the sidebar.
+          </p>
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-14 rounded-xl bg-gray-200 animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && (
+        <div className="space-y-8">
+
+          {/* ── Global Policies ─────────────────────────────────────── */}
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Globe2 size={14} className="text-gray-500" />
+              <h3 className="text-xs font-bold text-gray-600 uppercase tracking-widest">
+                Global Policies
+              </h3>
+              <span className="ml-auto text-[10px] text-gray-400">
+                {globalPolicies.length} active
+              </span>
+            </div>
+
+            {globalPolicies.length === 0 ? (
+              <div className="px-4 py-8 rounded-xl border border-dashed border-gray-200 text-center">
+                <p className="text-sm text-gray-400">No active global policies</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {globalPolicies.map(policy => (
+                  <div key={policy.id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(v => v === policy.id ? null : policy.id)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <span className={`
+                        flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full
+                        text-[10px] font-bold uppercase tracking-wide
+                        ${policy.effect === 'PERMIT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}
+                      `}>
+                        {policy.effect}
+                      </span>
+                      <span className="flex-1 text-sm font-medium text-gray-800 truncate">
+                        {policy.name}
+                      </span>
+                      <span className="flex-shrink-0 text-[10px] text-gray-400 mr-1">
+                        Priority {policy.priority}
+                      </span>
+                      <span className={`
+                        flex-shrink-0 inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium
+                        ${policy.status === 'active' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}
+                      `}>
+                        {policy.status}
+                      </span>
+                      <Lock size={11} className="text-amber-400 flex-shrink-0" />
+                      {expandedId === policy.id
+                        ? <ChevronDown size={13} className="text-gray-400 flex-shrink-0" />
+                        : <ChevronRight size={13} className="text-gray-400 flex-shrink-0" />
+                      }
+                    </button>
+                    {expandedId === policy.id && (
+                      <div className="px-4 pb-3 pt-1 border-t border-gray-100 bg-gray-50/60">
+                        {policy.description && (
+                          <p className="text-xs text-gray-500 mb-2">{policy.description}</p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Info size={10} className="text-gray-400" />
+                          <span className="text-[11px] text-gray-400">
+                            {policy.conditions?.conditions?.length ?? 0} condition(s) ·{' '}
+                            {policy.conditions?.operator ?? 'AND'} logic
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* ── Hub Attribute Definitions ──────────────────────────── */}
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Tag size={14} className="text-gray-500" />
+              <h3 className="text-xs font-bold text-gray-600 uppercase tracking-widest">
+                Hub Attribute Definitions
+              </h3>
+              <span className="ml-auto text-[10px] text-gray-400">
+                {hubAttributes.length} defined
+              </span>
+            </div>
+
+            {hubAttributes.length === 0 ? (
+              <div className="px-4 py-8 rounded-xl border border-dashed border-gray-200 text-center">
+                <p className="text-sm text-gray-400">No hub attributes defined</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                {hubAttributes.map(attr => (
+                  <div
+                    key={attr.id ?? attr.key}
+                    title={attr.description ?? ''}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-gray-200 bg-white select-none"
+                  >
+                    <Lock size={10} className="text-amber-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-gray-700 truncate">
+                        {attr.name ?? attr.key}
+                      </p>
+                      <p className="text-[10px] text-gray-400">
+                        {attr.dataType ?? attr.type ?? 'string'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // AppPoliciesPage
 // ---------------------------------------------------------------------------
 
@@ -1195,6 +1363,7 @@ export function AppPoliciesPage() {
 }
 
 function AppPoliciesContent({ appKey, appName }) {
+  const [activeTab, setActiveTab] = useState('app'); // 'hub' | 'app'
   const [selectedPolicyId, setSelectedPolicyId] = useState(null);
   const [listFilter, setListFilter] = useState('all');
   const [listSearch, setListSearch] = useState('');
@@ -1234,58 +1403,105 @@ function AppPoliciesContent({ appKey, appName }) {
   const versions = versionsData?.data?.data ?? versionsData?.data ?? [];
 
   return (
-    <div className="flex h-full gap-0 -m-6">
-      <PolicyListPanel
-        policies={filteredPolicies}
-        loading={listLoading}
-        selectedPolicyId={showCreatePanel ? null : selectedPolicyId}
-        onSelect={(id) => {
-          setSelectedPolicyId(id);
-          setShowCreatePanel(false);
-        }}
-        listFilter={listFilter}
-        setListFilter={setListFilter}
-        listSearch={listSearch}
-        setListSearch={setListSearch}
-        onNewPolicy={() => {
-          setShowCreatePanel(true);
-          setSelectedPolicyId(null);
-        }}
-        panelTitle={`${appName} Policies`}
-        createFirstHint="Create your first app policy"
-      />
+    <div className="flex flex-col h-full -m-6">
 
-      {showCreatePanel && (
-        <PolicyCreatePanel
-          appKey={appKey}
-          createTitle="New App Policy"
-          onClose={() => setShowCreatePanel(false)}
-          onCreated={(id) => {
-            setSelectedPolicyId(id);
-            setShowCreatePanel(false);
-          }}
-        />
+      {/* ── Tab bar ───────────────────────────────────────────────────── */}
+      <div className="flex-shrink-0 flex items-end gap-0 bg-white border-b border-gray-200 px-6 pt-4">
+        <button
+          type="button"
+          onClick={() => setActiveTab('hub')}
+          className={`
+            flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2
+            transition-colors
+            ${activeTab === 'hub'
+              ? 'border-amber-500 text-amber-700 bg-amber-50/60'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }
+          `}
+        >
+          <Globe2 size={14} />
+          Hub / Global Config
+          <Lock size={11} className="text-amber-400" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('app')}
+          className={`
+            flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2
+            transition-colors
+            ${activeTab === 'app'
+              ? 'border-primary text-primary bg-primary/5'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }
+          `}
+        >
+          <Settings size={14} />
+          {appName} — App Policies
+        </button>
+      </div>
+
+      {/* ── Tab: Hub / Global Config (always read-only) ────────────── */}
+      {activeTab === 'hub' && (
+        <HubGlobalConfigTab appName={appName} />
       )}
 
-      {!showCreatePanel && selectedPolicyId && selectedPolicy && (
-        <PolicyEditorPanel
-          appKey={appKey}
-          policy={selectedPolicy}
-          versions={versions}
-          onRefetch={() => {
-            refetchSelected();
-            refetchList();
-          }}
-          onDelete={() => {
-            setSelectedPolicyId(null);
-          }}
-        />
-      )}
+      {/* ── Tab: App-Level Policies (editable) ─────────────────────── */}
+      {activeTab === 'app' && (
+        <div className="flex flex-1 min-h-0">
+          <PolicyListPanel
+            policies={filteredPolicies}
+            loading={listLoading}
+            selectedPolicyId={showCreatePanel ? null : selectedPolicyId}
+            onSelect={(id) => {
+              setSelectedPolicyId(id);
+              setShowCreatePanel(false);
+            }}
+            listFilter={listFilter}
+            setListFilter={setListFilter}
+            listSearch={listSearch}
+            setListSearch={setListSearch}
+            onNewPolicy={() => {
+              setShowCreatePanel(true);
+              setSelectedPolicyId(null);
+            }}
+            panelTitle={`${appName} Policies`}
+            createFirstHint="Create your first app policy"
+          />
 
-      {!showCreatePanel && !selectedPolicyId && (
-        <EmptyEditorState
-          onNewPolicy={() => setShowCreatePanel(true)}
-        />
+          {showCreatePanel && (
+            <PolicyCreatePanel
+              appKey={appKey}
+              createTitle="New App Policy"
+              onClose={() => setShowCreatePanel(false)}
+              onCreated={(id) => {
+                setSelectedPolicyId(id);
+                setShowCreatePanel(false);
+              }}
+            />
+          )}
+
+          {!showCreatePanel && selectedPolicyId && selectedPolicy && (
+            <PolicyEditorPanel
+              appKey={appKey}
+              policy={selectedPolicy}
+              versions={versions}
+              onRefetch={() => {
+                refetchSelected();
+                refetchList();
+              }}
+              onDelete={() => {
+                setSelectedPolicyId(null);
+              }}
+            />
+          )}
+
+          {!showCreatePanel && !selectedPolicyId && (
+            <EmptyEditorState
+              onNewPolicy={() => setShowCreatePanel(true)}
+            />
+          )}
+        </div>
       )}
     </div>
   );

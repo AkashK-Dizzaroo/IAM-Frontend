@@ -183,35 +183,35 @@ export const DashboardPage = () => {
       label: "Users",
       icon: Users,
       path: "/users",
-      show: effectiveRoles.isHubOwner && isGlobalScope,
+      show: effectiveRoles.isHubOwner,
     },
     {
       id: "hub-attributes",
       label: "Hub Attributes",
       icon: Tag,
       path: "/hub-attributes",
-      show: effectiveRoles.isHubOwner && isGlobalScope,
+      show: effectiveRoles.isHubOwner,
     },
     {
       id: "resource-classifications",
       label: "Resource Classifications",
       icon: Database,
       path: "/resource-classifications",
-      show: effectiveRoles.isHubOwner && isGlobalScope,
+      show: effectiveRoles.isHubOwner,
     },
     {
       id: "global-policies",
       label: "Global Policies",
       icon: Globe2,
       path: "/global-policies",
-      show: effectiveRoles.isHubOwner && isGlobalScope,
+      show: effectiveRoles.isHubOwner,
     },
     {
       id: "applications",
       label: "Applications",
       icon: AppWindow,
       path: "/applications",
-      show: effectiveRoles.isHubOwner && isGlobalScope,
+      show: effectiveRoles.isHubOwner,
     },
   ];
 
@@ -289,6 +289,7 @@ export const DashboardPage = () => {
   const showAdmin = effectiveRoles.isHubOwner || effectiveRoles.isITSupport;
   const showGlobal = effectiveRoles.isHubOwner && isGlobalScope;
   const showApp = (effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && isAppScope;
+  const showAppSelector = effectiveRoles.isHubOwner || effectiveRoles.isAppOwner;
   const showResources = effectiveRoles.isHubOwner || effectiveRoles.isAppOwner;
 
   const handleBackToHub = () => {
@@ -354,102 +355,14 @@ export const DashboardPage = () => {
           `}
         >
 
-          {/* Section 1: Scope selector */}
-          {sidebarCollapsed ? (
-            <div className="px-3 py-3 border-b border-gray-100 flex justify-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setSidebarCollapsed(false);
-                  try {
-                    localStorage.setItem("iam_sidebar_collapsed", "false");
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
-                title="Expand sidebar"
-              >
-                <Globe2 size={16} />
-              </button>
-            </div>
-          ) : (
-            <div className="px-3 py-3 border-b border-gray-100">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2 px-1 select-none">
-                Scope
-              </p>
-
-              {/* Global button */}
-              <button
-                type="button"
-                onClick={() => {
-                  selectGlobal();
-                  navigate("/users");
-                }}
-                className={`
-                  w-full flex items-center gap-2.5 px-3 py-2 rounded-lg
-                  text-sm font-medium transition-colors text-left mb-1
-                  ${scope === "global"
-                    ? "bg-primary/10 text-primary"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                  }
-                `}
-              >
-                <svg
-                  width="15" height="15" fill="none"
-                  stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
-                  className="flex-shrink-0"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="2" y1="12" x2="22" y2="12" />
-                  <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
-                </svg>
-                Global
-                {scope === "global" && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                )}
-              </button>
-
-              {/* App scope selector — only for Hub Owners and App Owners */}
-              {(effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && (
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mt-3 mb-1.5 px-1 select-none">
-                    Application
-                  </p>
-                  <select
-                    value={selectedAppKey ?? ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (!val) return;
-                      const app = apps.find((a) => a.key === val);
-                      selectApp(val, app?.name ?? val);
-                      navigate("/app-policies");
-                    }}
-                    className="w-full px-3 py-2 rounded-lg text-sm border border-gray-200 bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  >
-                    <option value="">Select app…</option>
-                    {apps.map((app) => (
-                      <option key={app.key} value={app.key}>
-                        {app.name ?? app.key}
-                      </option>
-                    ))}
-                  </select>
-                  {scope === "app" && selectedAppName && (
-                    <p className="text-[11px] text-primary font-medium px-1 mt-1.5 truncate">
-                      Viewing: {selectedAppName}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Section 2: Nav items (scrollable) */}
+          {/* Section: Nav items (scrollable) */}
           <nav className="flex-1 overflow-y-auto px-2 py-2 min-h-0">
 
+            {/* 1. Personal */}
             {!sidebarCollapsed && <NavSection label="Personal" />}
             {renderGroup(navPersonal)}
 
+            {/* 2. Administration */}
             {showAdmin && (
               <>
                 {!sidebarCollapsed && <NavSection label="Administration" />}
@@ -457,22 +370,85 @@ export const DashboardPage = () => {
               </>
             )}
 
+            {/* 3. Application selector — inline in nav */}
+            {showAppSelector && (
+              <>
+                {!sidebarCollapsed && <NavSection label="Application" />}
+                {sidebarCollapsed ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSidebarCollapsed(false);
+                      try { localStorage.setItem("iam_sidebar_collapsed", "false"); } catch { /* ignore */ }
+                    }}
+                    title={
+                      isGlobalScope
+                        ? "Hub Management"
+                        : selectedAppName
+                        ? `App: ${selectedAppName}`
+                        : "Select application"
+                    }
+                    className="w-10 h-10 mx-auto rounded-lg flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors mb-0.5"
+                  >
+                    {isGlobalScope ? <Globe2 size={15} /> : <AppWindow size={15} />}
+                  </button>
+                ) : (
+                  <div className="px-1 mb-1">
+                    <select
+                      value={isGlobalScope && effectiveRoles.isHubOwner ? "__hub__" : (selectedAppKey ?? "")}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) return;
+                        if (val === "__hub__") {
+                          selectGlobal();
+                          navigate("/users");
+                        } else {
+                          const app = apps.find((a) => a.key === val);
+                          selectApp(val, app?.name ?? val);
+                          navigate("/app-policies");
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-lg text-sm border border-gray-200 bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    >
+                      <option value="">Select application…</option>
+                      {effectiveRoles.isHubOwner && (
+                        <option value="__hub__">⚙ Hub Management</option>
+                      )}
+                      {apps.map((app) => (
+                        <option key={app.key} value={app.key}>
+                          {app.name ?? app.key}
+                        </option>
+                      ))}
+                    </select>
+                    {isAppScope && selectedAppName && (
+                      <p className="text-[11px] text-primary font-medium px-1 mt-1 truncate">
+                        Viewing: {selectedAppName}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* 4. Hub Management nav — shown when Hub Management is selected */}
             {showGlobal && (
               <>
-                {!sidebarCollapsed && <NavSection label="Global Config" />}
+                {!sidebarCollapsed && <NavSection label="Hub Config" />}
                 {renderGroup(navGlobal)}
               </>
             )}
 
+            {/* 5. App-level nav — shown when an individual app is selected */}
             {showApp && (
               <>
                 {!sidebarCollapsed && (
-                  <NavSection label={`App: ${selectedAppName ?? "…"}`} />
+                  <NavSection label={`${selectedAppName ?? "App"} Settings`} />
                 )}
                 {renderGroup(navApp)}
               </>
             )}
 
+            {/* 6. Resources */}
             {showResources && (
               <>
                 {!sidebarCollapsed && <NavSection label="Resources" />}

@@ -25,7 +25,7 @@ export default defineConfig({
     proxy: {
       // Same-origin /api in dev so HttpOnly cookies attach to localhost:5001 (IAM), not cross-port to :4001
       '/api': {
-        target: process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:4001',
+        target: process.env.VITE_DEV_PROXY_TARGET || 'http://127.0.0.1:4001',
         changeOrigin: true,
         secure: false,
       },
