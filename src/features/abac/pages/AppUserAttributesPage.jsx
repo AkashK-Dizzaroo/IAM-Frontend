@@ -226,7 +226,9 @@ export function AppUserAttributesPage() {
                     userAttributes.map((attr) => (
                       <tr key={attr.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-mono text-xs text-gray-900">
-                          {attr.attributeDef?.key ?? 'Unknown'}
+                          {attr.attributeDef?.key ??
+                            attr.attribute_name ??
+                            'Unknown'}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-gray-500">
                           {typeof attr.value === 'object'

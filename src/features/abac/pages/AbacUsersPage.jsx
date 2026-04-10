@@ -61,13 +61,6 @@ function parseHubAttrValue(def, raw) {
   return trimmed;
 }
 
-/** Radix Select stringifies values; coerce numeric string IDs for APIs that expect numbers. UUIDs stay strings (Number(uuid) is NaN). */
-function coerceAttributeDefId(raw) {
-  if (raw === '' || raw == null) return raw;
-  const n = Number(raw);
-  return Number.isNaN(n) ? raw : n;
-}
-
 function apiErrorDescription(err) {
   const d = err?.response?.data;
   const raw = d?.message ?? d?.error ?? err?.message;
@@ -207,7 +200,8 @@ export function AbacUsersPage() {
   });
 
   const deleteAttrMutation = useMutation({
-    mutationFn: ({ userId, attrDefId }) => abacService.deleteHubUserAttr(userId, attrDefId),
+    mutationFn: ({ userId, attributeKey }) =>
+      abacService.deleteHubUserAttr(userId, attributeKey),
     onSuccess: () => {
       toast({ title: 'Attribute removed' });
       refetchUserAttrs();
@@ -264,7 +258,7 @@ export function AbacUsersPage() {
     setAttrMutation.mutate({
       userId: editUserId,
       data: {
-        attributeDefId: coerceAttributeDefId(newAttr.attributeDefId),
+        attribute_key: def.key,
         value,
       },
     });
@@ -302,7 +296,7 @@ export function AbacUsersPage() {
       [];
     return attrs.map((a) => {
       const key =
-        a.attributeDef?.key || a.key || a.attributeDefId || '?';
+        a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key || '?';
       return { key, value: formatHubAttrValue(a.value) };
     });
   };
@@ -542,17 +536,14 @@ export function AbacUsersPage() {
                       <div className="space-y-2 mb-4">
                         {userAttrs.map((attr) => {
                           const key =
+                            attr.attributeKey ||
+                            attr.attribute_key ||
                             attr.attributeDef?.key ||
                             attr.key ||
-                            attr.attributeDefId ||
                             '?';
-                          const attrDefId =
-                            attr.attributeDefId ||
-                            attr.attributeDef?.id ||
-                            attr.attributeDef?._id;
                           return (
                             <div
-                              key={attrDefId}
+                              key={attr.id || key}
                               className="flex items-center justify-between bg-gray-50 rounded-md px-3 py-2"
                             >
                               <div className="flex items-center gap-2 min-w-0">
@@ -573,7 +564,7 @@ export function AbacUsersPage() {
                                 onClick={() =>
                                   deleteAttrMutation.mutate({
                                     userId: editUserId,
-                                    attrDefId,
+                                    attributeKey: key,
                                   })
                                 }
                               >
