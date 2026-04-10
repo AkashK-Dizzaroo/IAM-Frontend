@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
+import { logger } from '@/lib/logger';
 
 // ---------------------------------------------------------------------------
 // Badge helpers
@@ -76,6 +77,45 @@ const OPERATORS = [
   'starts_with', 'ends_with', 'matches',
   'exists', 'not_exists'
 ];
+
+const NO_VALUE_OPS = new Set(['exists', 'not_exists']);
+
+// Recursively collect all leaf condition nodes from the tree
+function collectLeaves(node) {
+  if (!node) return [];
+  if ('op' in node) return [node];
+  if (Array.isArray(node.conditions)) {
+    return node.conditions.flatMap(collectLeaves);
+  }
+  return [];
+}
+
+// Returns an array of error strings; empty array = valid
+function validatePolicyForm(form) {
+  const errors = [];
+
+  if (!form.name?.trim()) {
+    errors.push('Policy name is required.');
+  }
+
+  const leaves = collectLeaves(form.conditions);
+  leaves.forEach((leaf, i) => {
+    const num = i + 1;
+    if (!leaf.key?.trim()) {
+      errors.push(`Condition ${num}: attribute key is required.`);
+    }
+    if (!NO_VALUE_OPS.has(leaf.op)) {
+      const v = leaf.value;
+      const isEmpty = v === '' || v === null || v === undefined ||
+        (Array.isArray(v) && v.length === 0);
+      if (isEmpty) {
+        errors.push(`Condition ${num}: value is required for operator "${leaf.op}".`);
+      }
+    }
+  });
+
+  return errors;
+}
 
 // ---------------------------------------------------------------------------
 // ConditionRow
@@ -656,7 +696,7 @@ function PolicyListPanel({
 // PolicyEditorPanel
 // ---------------------------------------------------------------------------
 
-function PolicyEditorPanel({ policy, versions, onRefetch, onDelete }) {
+function PolicyEditorPanel({ policy, versions, onDelete }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -682,7 +722,9 @@ function PolicyEditorPanel({ policy, versions, onRefetch, onDelete }) {
     form.description !== (policy.description ?? '') ||
     form.priority !== policy.priority ||
     form.effect !== policy.effect ||
-    JSON.stringify(form.conditions) !== JSON.stringify(policy.conditions)
+    JSON.stringify(form.conditions) !== JSON.stringify(policy.conditions) ||
+    JSON.stringify(form.target) !== JSON.stringify(policy.target ?? {}) ||
+    form.obligations !== JSON.stringify(policy.obligations ?? [], null, 2)
   );
 
   const updateMutation = useMutation({
@@ -747,6 +789,26 @@ function PolicyEditorPanel({ policy, versions, onRefetch, onDelete }) {
   });
 
   const handleSave = () => {
+    logger.info('Submit Policy clicked', {
+      action: 'SUBMIT_POLICY',
+      scope: 'GLOBAL',
+      mode: 'edit',
+      policyId: policy.id,
+      name: form?.name,
+      effect: form?.effect,
+      priority: form?.priority,
+    });
+
+    const errors = validatePolicyForm(form);
+    if (errors.length > 0) {
+      toast({
+        title: 'Validation error',
+        description: errors[0],
+        variant: 'destructive',
+      });
+      return;
+    }
+
     let parsedObligations = [];
     try {
       parsedObligations = JSON.parse(form.obligations || '[]');
@@ -1018,6 +1080,9 @@ function PolicyCreatePanel({ onClose, onCreated }) {
 
   const createMutation = useMutation({
     mutationFn: () => {
+      const errors = validatePolicyForm(form);
+      if (errors.length > 0) throw new Error(errors[0]);
+
       let parsedObligations = [];
       try {
         parsedObligations = JSON.parse(form.obligations || '[]');
@@ -1064,7 +1129,17 @@ function PolicyCreatePanel({ onClose, onCreated }) {
           </Button>
           <Button
             size="sm"
-            onClick={() => createMutation.mutate()}
+            onClick={() => {
+              logger.info('Submit Policy clicked', {
+                action: 'SUBMIT_POLICY',
+                scope: 'GLOBAL',
+                mode: 'create',
+                name: form.name,
+                effect: form.effect,
+                priority: form.priority,
+              });
+              createMutation.mutate();
+            }}
             disabled={createMutation.isPending || !form.name.trim()}
           >
             {createMutation.isPending ? 'Creating...' : 'Create as Draft'}
@@ -1169,15 +1244,12 @@ function PolicyCreatePanel({ onClose, onCreated }) {
 // ---------------------------------------------------------------------------
 
 export function GlobalPoliciesPage() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
   const [selectedPolicyId, setSelectedPolicyId] = useState(null);
   const [listFilter, setListFilter] = useState('all');
   const [listSearch, setListSearch] = useState('');
   const [showCreatePanel, setShowCreatePanel] = useState(false);
 
-  const { data: policiesData, isLoading: listLoading, refetch: refetchList } = useQuery({
+  const { data: policiesData, isLoading: listLoading } = useQuery({
     queryKey: ['abac', 'globalPolicies', listFilter],
     queryFn: () => abacService.listGlobalPolicies(
       listFilter !== 'all' ? { status: listFilter } : {}
@@ -1192,7 +1264,7 @@ export function GlobalPoliciesPage() {
     p.description?.toLowerCase().includes(listSearch.toLowerCase())
   );
 
-  const { data: selectedData, refetch: refetchSelected } = useQuery({
+  const { data: selectedData } = useQuery({
     queryKey: ['abac', 'globalPolicy', selectedPolicyId],
     queryFn: () => abacService.getGlobalPolicy(selectedPolicyId),
     enabled: !!selectedPolicyId,
@@ -1243,10 +1315,6 @@ export function GlobalPoliciesPage() {
         <PolicyEditorPanel
           policy={selectedPolicy}
           versions={versions}
-          onRefetch={() => {
-            refetchSelected();
-            refetchList();
-          }}
           onDelete={() => {
             setSelectedPolicyId(null);
           }}

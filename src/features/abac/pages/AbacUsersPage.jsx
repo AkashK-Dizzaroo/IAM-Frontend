@@ -24,6 +24,7 @@ function normalizeDataType(def) {
 /** Backend may return dataType in mixed case; normalize before branching. */
 function parseHubAttrValue(def, raw) {
   const dt = normalizeDataType(def);
+  if (Array.isArray(raw)) return raw;
   const trimmed = typeof raw === 'string' ? raw.trim() : String(raw);
 
   if (dt === 'number') {
@@ -83,6 +84,7 @@ function hubAttrRowReadyToAdd(state, def) {
   if (dt === 'boolean') {
     return state.value === 'true' || state.value === 'false';
   }
+  if (Array.isArray(state.value)) return state.value.length > 0;
   return String(state.value).trim() !== '';
 }
 
@@ -592,9 +594,17 @@ export function AbacUsersPage() {
                       </Label>
                       <Select
                         value={newAttr.attributeDefId}
-                        onValueChange={(val) =>
-                          setNewAttr({ attributeDefId: val, value: '' })
-                        }
+                        onValueChange={(val) => {
+                          const def = attrDefs.find(
+                            (d) => String(d.id || d._id) === String(val)
+                          );
+                          const dt = normalizeDataType(def);
+                          const emptyValue =
+                            dt === 'list' && def?.constraints?.allowedValues?.length
+                              ? []
+                              : '';
+                          setNewAttr({ attributeDefId: val, value: emptyValue });
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select attribute..." />
@@ -626,6 +636,56 @@ export function AbacUsersPage() {
                               <SelectItem value="false">false</SelectItem>
                             </SelectContent>
                           </Select>
+                        ) : selectedAttrDataType === 'enum' &&
+                          selectedAttrDef?.constraints?.allowedValues?.length ? (
+                          <Select
+                            value={newAttr.value || undefined}
+                            onValueChange={(val) =>
+                              setNewAttr((p) => ({ ...p, value: val }))
+                            }
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Choose a value" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {selectedAttrDef.constraints.allowedValues.map((v) => (
+                                <SelectItem key={v} value={v}>
+                                  {v}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : selectedAttrDataType === 'list' &&
+                          selectedAttrDef?.constraints?.allowedValues?.length ? (
+                          <div className="flex-1 flex flex-wrap gap-1.5">
+                            {selectedAttrDef.constraints.allowedValues.map((v) => {
+                              const selected = Array.isArray(newAttr.value) && newAttr.value.includes(v);
+                              return (
+                                <button
+                                  key={v}
+                                  type="button"
+                                  onClick={() =>
+                                    setNewAttr((p) => {
+                                      const cur = Array.isArray(p.value) ? p.value : [];
+                                      return {
+                                        ...p,
+                                        value: selected
+                                          ? cur.filter((x) => x !== v)
+                                          : [...cur, v],
+                                      };
+                                    })
+                                  }
+                                  className={`px-2 py-1 rounded text-xs font-mono border transition-colors ${
+                                    selected
+                                      ? 'bg-gray-900 text-white border-gray-900'
+                                      : 'bg-white text-gray-600 border-gray-300 hover:border-gray-500'
+                                  }`}
+                                >
+                                  {v}
+                                </button>
+                              );
+                            })}
+                          </div>
                         ) : (
                           <Input
                             type={getAttrInputType()}
@@ -655,7 +715,9 @@ export function AbacUsersPage() {
                             (selectedAttrDataType === 'boolean'
                               ? newAttr.value !== 'true' &&
                                 newAttr.value !== 'false'
-                              : String(newAttr.value).trim() === '') ||
+                              : Array.isArray(newAttr.value)
+                                ? newAttr.value.length === 0
+                                : String(newAttr.value).trim() === '') ||
                             setAttrMutation.isPending
                           }
                         >
