@@ -46,12 +46,9 @@ class AccessRequestService {
       const params = new URLSearchParams();
       if (options.status) params.append("status", options.status);
       if (options.application) params.append("application", options.application);
-      if (options.urgency) params.append("urgency", options.urgency);
       if (options.requesterId) params.append("requesterId", options.requesterId);
       if (options.limit) params.append("limit", options.limit);
       if (options.page) params.append("page", options.page);
-      if (options.sortBy) params.append("sortBy", options.sortBy);
-      if (options.sortOrder) params.append("sortOrder", options.sortOrder);
       const response = await this.api.get(`/access-requests?${params}`);
       return response.data;
     } catch (error) {
@@ -77,11 +74,10 @@ class AccessRequestService {
     }
   }
 
-  async approveAccessRequest(id, { reviewerComments = "", approvals = [] } = {}) {
+  async approveAccessRequest(id, reviewerComments = "") {
     try {
       const response = await this.api.patch(`/access-requests/${id}/approve`, {
         reviewerComments,
-        approvals,
       });
       return response.data;
     } catch (error) {

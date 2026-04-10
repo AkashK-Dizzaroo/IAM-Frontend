@@ -41,8 +41,10 @@ export const abacService = {
     apiClient.get(v1(`/users/${userId}/hub-attributes`)),
   setHubUserAttr: (userId, data) =>
     apiClient.post(v1(`/users/${userId}/hub-attributes`), data),
-  deleteHubUserAttr: (userId, attrDefId) =>
-    apiClient.delete(v1(`/users/${userId}/hub-attributes/${attrDefId}`)),
+  deleteHubUserAttr: (userId, attributeKey) =>
+    apiClient.delete(
+      v1(`/users/${userId}/hub-attributes/${encodeURIComponent(attributeKey)}`)
+    ),
 
   // Global Policies
   listGlobalPolicies: (params) =>

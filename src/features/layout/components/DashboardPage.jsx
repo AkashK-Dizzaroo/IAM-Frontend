@@ -23,6 +23,7 @@ import {
   BarChart2,
   Tag,
   UserCog,
+  ClipboardList,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -173,6 +174,13 @@ export const DashboardPage = () => {
       icon: ShieldCheck,
       path: "/account-approvals",
       show: effectiveRoles.isHubOwner || effectiveRoles.isITSupport,
+    },
+    {
+      id: "access-approvals",
+      label: "Access Approvals",
+      icon: ClipboardList,
+      path: "/access-approvals",
+      show: effectiveRoles.isHubOwner || effectiveRoles.isITSupport || effectiveRoles.isAppOwner,
     },
   ];
 

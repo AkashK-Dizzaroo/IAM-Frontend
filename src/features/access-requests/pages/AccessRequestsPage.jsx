@@ -1,404 +1,315 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, XCircle, CheckCircle, Clock } from "lucide-react";
-import { accessRequestService } from "../api/accessRequestService";
-import { roleService } from "@/features/roles";
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Loader2, CheckCircle, XCircle, Clock, Ban, RefreshCw, Inbox,
+} from 'lucide-react';
+import { accessRequestService } from '../api/accessRequestService';
+import { useToast } from '@/hooks/use-toast';
 
-// ── Per-request dynamic role dropdown ──────────────────────────────────────
-function ApplicationRoleDropdown({ applicationId, value, onChange, disabled }) {
-  const { data: roles, isLoading } = useQuery({
-    queryKey: ["roles", "application", applicationId],
-    queryFn: () => roleService.getRolesByApplication(applicationId),
-    enabled: !!applicationId,
-    staleTime: 5 * 60 * 1000,
-    select: (data) => {
-      const list = Array.isArray(data)
-        ? data
-        : (data?.data ?? data?.roles ?? []);
-      return list.filter((r) => r.isActive !== false);
-    },
-  });
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-  if (isLoading) {
-    return <span className="text-sm text-gray-400">Loading roles…</span>;
-  }
+const STATUS_BADGE = {
+  pending:   'bg-yellow-100 text-yellow-800 border-yellow-200',
+  approved:  'bg-green-100  text-green-800  border-green-200',
+  rejected:  'bg-red-100    text-red-800    border-red-200',
+  cancelled: 'bg-gray-100   text-gray-600   border-gray-200',
+};
+
+const STATUS_ICON = {
+  pending:   <Clock    className="w-3 h-3 mr-1" />,
+  approved:  <CheckCircle className="w-3 h-3 mr-1" />,
+  rejected:  <XCircle  className="w-3 h-3 mr-1" />,
+  cancelled: <Ban      className="w-3 h-3 mr-1" />,
+};
+
+const fmt = (v) => {
+  if (!v) return '—';
+  const d = new Date(v);
+  return isNaN(d) ? '—' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const STATUS_FILTERS = ['all', 'pending', 'approved', 'rejected', 'cancelled'];
+
+// ── Review modal ──────────────────────────────────────────────────────────────
+
+function ReviewModal({ request, action, onConfirm, onCancel, loading }) {
+  const [notes, setNotes] = useState('');
+  const isApprove = action === 'approve';
 
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      className="border rounded-md px-2 py-1.5 text-sm w-full"
-    >
-      <option value="">Select role…</option>
-      {(roles ?? []).map((role) => (
-        <option key={role._id} value={role._id}>
-          {role.name}
-        </option>
-      ))}
-    </select>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-4">
+        <h3 className={`text-lg font-semibold ${isApprove ? 'text-green-700' : 'text-red-700'}`}>
+          {isApprove ? 'Approve Access Request' : 'Reject Access Request'}
+        </h3>
+
+        <div className="text-sm text-gray-600 space-y-1">
+          <p><span className="font-medium">Requester:</span> {[request.requester?.firstName, request.requester?.lastName].filter(Boolean).join(' ') || request.requester?.email || '—'}</p>
+          <p><span className="font-medium">Application:</span> {request.application?.name || request.application?.appCode || '—'}</p>
+          <p><span className="font-medium">Requested Role:</span> <span className="font-mono">{request.requestedAttributes?.role || '—'}</span></p>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
+          <textarea
+            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            rows={3}
+            placeholder={isApprove ? 'Any notes for the requester…' : 'Reason for rejection…'}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            className={`px-4 py-2 text-sm rounded-lg text-white font-medium flex items-center gap-2 disabled:opacity-60
+              ${isApprove ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
+            onClick={() => onConfirm(notes)}
+            disabled={loading}
+          >
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isApprove ? 'Approve' : 'Reject'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-const formatDate = (value) => {
-  if (!value) return "No expiry";
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return "Invalid date";
-  return d.toLocaleDateString();
-};
+// ── Page ──────────────────────────────────────────────────────────────────────
 
-const getStatusBadge = (status) => {
-  const styles = {
-    PENDING:   "bg-yellow-100 text-yellow-800 border-yellow-200",
-    APPROVED:  "bg-green-100 text-green-800 border-green-200",
-    REJECTED:  "bg-red-100 text-red-800 border-red-200",
-    CANCELLED: "bg-gray-100 text-gray-800 border-gray-200",
-  };
-  return styles[status] || "bg-gray-100 text-gray-800 border-gray-200";
-};
-
-const getStatusLabel = (status) => {
-  const labels = {
-    PENDING:   "Pending",
-    APPROVED:  "Approved",
-    REJECTED:  "Rejected",
-    CANCELLED: "Cancelled",
-  };
-  return labels[status] || status;
-};
-
-// ── Page ─────────────────────────────────────────────────────────────────────
 export const AccessRequestsPage = () => {
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState("");
-  // roleSelections holds role._id (ObjectId string) or "" (nothing selected yet)
-  const [roleSelections, setRoleSelections] = useState({});
-  const [assignUntil, setAssignUntil]       = useState({});
-  const [actioning, setActioning]           = useState({});
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [modal, setModal] = useState(null); // { request, action }
 
-  const fetchRequests = async () => {
-    try {
-      setLoading(true);
-      const response = await accessRequestService.getAllAccessRequests({ limit: 100 });
-      let data = [];
-      if (Array.isArray(response)) data = response;
-      else if (response?.data && Array.isArray(response.data)) data = response.data;
-      else if (response?.success && Array.isArray(response.data)) data = response.data;
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['access-requests', 'all', statusFilter],
+    queryFn: () => accessRequestService.getAllAccessRequests({
+      ...(statusFilter !== 'all' && { status: statusFilter }),
+      limit: 200,
+    }),
+    select: (res) => {
+      const rows = res?.data ?? res?.data?.data ?? [];
+      return Array.isArray(rows) ? rows : [];
+    },
+  });
 
-      setRequests(data);
-      // Default to empty string — user must pick a real role before approving
-      const defaults     = {};
-      const defaultDates = {};
-      data.forEach((req) => {
-        defaults[req._id]     = "";
-        defaultDates[req._id] = "";
-      });
-      setRoleSelections(defaults);
-      setAssignUntil(defaultDates);
-      setError("");
-    } catch (err) {
-      console.error("Error fetching access requests:", err);
-      setError(
-        err?.message || err?.error || err?.details?.message ||
-        "Failed to load access requests"
-      );
-      setRequests([]);
-    } finally {
-      setLoading(false);
+  const rows = data ?? [];
+
+  const counts = rows.reduce((acc, r) => {
+    acc[r.status] = (acc[r.status] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const approveMutation = useMutation({
+    mutationFn: ({ id, notes }) => accessRequestService.approveAccessRequest(id, notes),
+    onSuccess: () => {
+      toast({ title: 'Request approved' });
+      queryClient.invalidateQueries({ queryKey: ['access-requests'] });
+      setModal(null);
+    },
+    onError: (err) => toast({ title: 'Approve failed', description: err?.message, variant: 'destructive' }),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: ({ id, notes }) => accessRequestService.rejectAccessRequest(id, notes),
+    onSuccess: () => {
+      toast({ title: 'Request rejected' });
+      queryClient.invalidateQueries({ queryKey: ['access-requests'] });
+      setModal(null);
+    },
+    onError: (err) => toast({ title: 'Reject failed', description: err?.message, variant: 'destructive' }),
+  });
+
+  const actionLoading = approveMutation.isPending || rejectMutation.isPending;
+
+  const handleConfirm = (notes) => {
+    if (!modal) return;
+    const { request, action } = modal;
+    if (action === 'approve') {
+      approveMutation.mutate({ id: request.id, notes });
+    } else {
+      rejectMutation.mutate({ id: request.id, notes });
     }
   };
-
-  useEffect(() => {
-    fetchRequests();
-  }, []);
-
-  const handleApprove = async (request) => {
-    const role = roleSelections[request._id];
-    if (!role) {
-      setError("Please select a role before approving.");
-      return;
-    }
-    try {
-      setActioning((prev) => ({ ...prev, [request._id]: "approve" }));
-      const until = assignUntil[request._id];
-
-      let assignUntilFormatted = null;
-      if (until && until.trim() !== "") {
-        const date = new Date(until);
-        if (!isNaN(date.getTime())) {
-          date.setUTCHours(23, 59, 59, 999);
-          assignUntilFormatted = date.toISOString();
-        }
-      }
-
-      const baseItems =
-        request.requestedItems && request.requestedItems.length > 0
-          ? request.requestedItems
-          : [
-              {
-                requestedRole:     request.requestedRole,
-                requestedResource: request.requestedResource,
-                application:       request.application,
-              },
-            ];
-
-      // role is now a MongoDB ObjectId string (role._id)
-      const approvals = baseItems.map(() => ({
-        role,
-        assignUntil: assignUntilFormatted,
-      }));
-
-      const payload = { reviewerComments: "", approvals };
-      await accessRequestService.approveAccessRequest(request._id, payload);
-      await fetchRequests();
-    } catch (err) {
-      setError(err?.message || "Failed to approve request");
-    } finally {
-      setActioning((prev) => ({ ...prev, [request._id]: null }));
-    }
-  };
-
-  const handleReject = async (request) => {
-    try {
-      setActioning((prev) => ({ ...prev, [request._id]: "reject" }));
-      await accessRequestService.rejectAccessRequest(request._id, "");
-      await fetchRequests();
-    } catch (err) {
-      setError(err?.message || "Failed to reject request");
-    } finally {
-      setActioning((prev) => ({ ...prev, [request._id]: null }));
-    }
-  };
-
-  const rows         = useMemo(() => requests, [requests]);
-  const statusCounts = useMemo(() => {
-    const counts = { PENDING: 0, APPROVED: 0, REJECTED: 0, CANCELLED: 0 };
-    rows.forEach((req) => {
-      const status = req.status || "PENDING";
-      if (counts[status] !== undefined) counts[status]++;
-    });
-    return counts;
-  }, [rows]);
-  const totalRequests = rows.length;
-  const pendingCount  = statusCounts.PENDING;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Access Approvals</h2>
-          <p className="text-gray-600">
-            Review and action application access requests
-          </p>
+          <p className="text-sm text-gray-500 mt-1">Review and action application access requests</p>
         </div>
-        <div className="text-sm text-gray-500">
-          {totalRequests} total ({pendingCount} pending, {statusCounts.APPROVED}{" "}
-          approved, {statusCounts.REJECTED} rejected)
-        </div>
+        <button
+          onClick={() => refetch()}
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 border rounded-lg px-3 py-2 hover:bg-gray-50"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Refresh
+        </button>
       </div>
 
-      {error && (
-        <div className="rounded-md bg-red-50 border border-red-200 text-red-700 px-4 py-3">
-          {error}
-        </div>
-      )}
+      {/* Status filter tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {STATUS_FILTERS.map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors
+              ${statusFilter === s
+                ? 'bg-indigo-600 text-white border-indigo-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
+          >
+            {s.charAt(0).toUpperCase() + s.slice(1)}
+            {s !== 'all' && counts[s] != null && (
+              <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5
+                ${statusFilter === s ? 'bg-white/30 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                {counts[s]}
+              </span>
+            )}
+            {s === 'all' && (
+              <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5
+                ${statusFilter === s ? 'bg-white/30 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                {rows.length > 0 ? rows.length : data?.length ?? 0}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-      <div className="bg-white rounded-xl shadow-sm border">
+      {/* Table */}
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Requester name
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Application Requested
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Resource Requested
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Grant Role
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Assign until
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Actions
-                </th>
+                <th className="px-4 py-3 text-left font-semibold">Requester</th>
+                <th className="px-4 py-3 text-left font-semibold">Application</th>
+                <th className="px-4 py-3 text-left font-semibold">Resource</th>
+                <th className="px-4 py-3 text-left font-semibold">Requested Role</th>
+                <th className="px-4 py-3 text-left font-semibold">Justification</th>
+                <th className="px-4 py-3 text-left font-semibold">Status</th>
+                <th className="px-4 py-3 text-left font-semibold">Submitted</th>
+                <th className="px-4 py-3 text-left font-semibold">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
-              {loading ? (
+            <tbody className="divide-y divide-gray-100">
+              {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
-                    <Loader2 className="inline h-5 w-5 animate-spin mr-2" />
-                    Loading requests...
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
+                    <Loader2 className="inline w-5 h-5 animate-spin mr-2" />Loading…
+                  </td>
+                </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-red-500">
+                    Failed to load requests. <button className="underline" onClick={() => refetch()}>Retry</button>
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
-                    No requests found
+                  <td colSpan={8} className="px-4 py-14 text-center">
+                    <Inbox className="inline w-8 h-8 text-gray-300 mb-2 block mx-auto" />
+                    <p className="text-gray-400 font-medium">No {statusFilter !== 'all' ? statusFilter : ''} requests found</p>
                   </td>
                 </tr>
               ) : (
                 rows.map((req) => {
-                  const apps = (req.requestedItems || [])
-                    .map((i) => i.application?.name || i.application?.appCode)
-                    .filter(Boolean);
-                  const resources = (req.requestedItems || [])
-                    .map(
-                      (i) =>
-                        i.requestedResource?.name ||
-                        i.requestedResource?.resourceExternalId
-                    )
-                    .filter(Boolean);
-                  const requesterName =
-                    [req.requester?.firstName, req.requester?.lastName]
-                      .filter(Boolean)
-                      .join(" ") ||
-                    req.requester?.email ||
-                    "Unknown";
-                  const status    = req.status || "PENDING";
-                  const isPending = status === "PENDING";
-
-                  // Resolve the applicationId for the role dropdown
-                  const applicationId =
-                    req.application?._id ??
-                    req.application ??
-                    req.requestedItems?.[0]?.application?._id ??
-                    req.requestedItems?.[0]?.application;
+                  const requesterName = [req.requester?.firstName, req.requester?.lastName].filter(Boolean).join(' ')
+                    || req.requester?.email || '—';
+                  const status = (req.status || 'pending').toLowerCase();
+                  const isPending = status === 'pending';
+                  const attrs = req.requestedAttributes ?? {};
 
                   return (
-                    <tr key={req._id}>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {requesterName}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {apps.length
-                          ? apps.join(", ")
-                          : req.application?.name || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {resources.length
-                          ? resources.join(", ")
-                          : req.requestedResource?.name || "App-wide"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 min-w-[160px]">
-                        {isPending ? (
-                          <ApplicationRoleDropdown
-                            applicationId={applicationId}
-                            value={roleSelections[req._id] ?? ""}
-                            onChange={(val) =>
-                              setRoleSelections((prev) => ({
-                                ...prev,
-                                [req._id]: val,
-                              }))
-                            }
-                            disabled={!!actioning[req._id]}
-                          />
-                        ) : (
-                          <span className="text-gray-600">
-                            {req.requestedItems?.[0]?.requestedRole?.roleCode ||
-                              req.requestedRole?.roleCode ||
-                              "—"}
-                          </span>
+                    <tr key={req.id} className="hover:bg-gray-50">
+                      {/* Requester */}
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-gray-900">{requesterName}</p>
+                        {req.requester?.email && (
+                          <p className="text-xs text-gray-400">{req.requester.email}</p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {isPending ? (
-                          <>
-                            <input
-                              type="date"
-                              className="border rounded-md px-3 py-2 text-sm"
-                              value={assignUntil[req._id] || ""}
-                              onChange={(e) =>
-                                setAssignUntil((prev) => ({
-                                  ...prev,
-                                  [req._id]: e.target.value,
-                                }))
-                              }
-                            />
-                            <div className="text-xs text-gray-500 mt-1">
-                              {assignUntil[req._id]
-                                ? formatDate(assignUntil[req._id])
-                                : "No expiry date"}
-                            </div>
-                          </>
-                        ) : (() => {
-                          let expiryDate = null;
-                          if (
-                            status === "APPROVED" &&
-                            req.approvedItems &&
-                            req.approvedItems.length > 0
-                          ) {
-                            expiryDate = req.approvedItems[0]?.validUntil;
-                          } else if (req.expiresAt) {
-                            expiryDate = req.expiresAt;
-                          }
-                          return expiryDate ? (
-                            <span className="text-gray-700">
-                              {formatDate(expiryDate)}
-                            </span>
-                          ) : (
-                            <span className="text-gray-500">No expiry date</span>
-                          );
-                        })()}
+
+                      {/* Application */}
+                      <td className="px-4 py-3 text-gray-700">
+                        {req.application?.name || req.application?.appCode || '—'}
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(
-                            status
-                          )}`}
-                        >
-                          {status === "PENDING" && (
-                            <Clock className="w-3 h-3 mr-1" />
-                          )}
-                          {status === "APPROVED" && (
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                          )}
-                          {status === "REJECTED" && (
-                            <XCircle className="w-3 h-3 mr-1" />
-                          )}
-                          {getStatusLabel(status)}
+
+                      {/* Resource */}
+                      <td className="px-4 py-3 text-gray-600 text-xs">
+                        {req.requestedResource
+                          ? req.requestedResource.name || req.requestedResource.resourceExternalId
+                          : <span className="text-gray-400 italic">All</span>}
+                      </td>
+
+                      {/* Requested Role */}
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs bg-gray-100 rounded px-2 py-1">
+                          {attrs.role || '—'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm">
+
+                      {/* Justification */}
+                      <td className="px-4 py-3 text-gray-600 max-w-[200px]">
+                        <span className="line-clamp-2 text-xs" title={attrs.justification}>
+                          {attrs.justification || <span className="text-gray-400 italic">—</span>}
+                        </span>
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_BADGE[status] ?? STATUS_BADGE.pending}`}>
+                          {STATUS_ICON[status]}
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </span>
+                        {req.reviewNotes && (
+                          <p className="text-xs text-gray-400 mt-1 max-w-[160px] truncate" title={req.reviewNotes}>
+                            Note: {req.reviewNotes}
+                          </p>
+                        )}
+                      </td>
+
+                      {/* Date */}
+                      <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                        {fmt(req.createdAt)}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3">
                         {isPending ? (
                           <div className="flex items-center gap-2">
                             <button
-                              className="inline-flex items-center px-3 py-2 rounded-md bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-60"
-                              onClick={() => handleApprove(req)}
-                              disabled={!!actioning[req._id] || !roleSelections[req._id]}
+                              onClick={() => setModal({ request: req, action: 'approve' })}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-green-600 text-white text-xs hover:bg-green-700"
                             >
-                              {actioning[req._id] === "approve" ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <CheckCircle className="h-4 w-4 mr-2" />
-                              )}
+                              <CheckCircle className="w-3.5 h-3.5" />
                               Approve
                             </button>
                             <button
-                              className="inline-flex items-center px-3 py-2 rounded-md bg-red-600 text-white text-sm hover:bg-red-700 disabled:opacity-60"
-                              onClick={() => handleReject(req)}
-                              disabled={!!actioning[req._id]}
+                              onClick={() => setModal({ request: req, action: 'reject' })}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-red-600 text-white text-xs hover:bg-red-700"
                             >
-                              {actioning[req._id] === "reject" ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <XCircle className="h-4 w-4 mr-2" />
-                              )}
+                              <XCircle className="w-3.5 h-3.5" />
                               Reject
                             </button>
                           </div>
                         ) : (
-                          <span className="text-gray-500">—</span>
+                          <span className="text-gray-400 text-xs">
+                            {req.reviewedBy
+                              ? `By ${[req.reviewedBy.firstName, req.reviewedBy.lastName].filter(Boolean).join(' ') || req.reviewedBy.email}`
+                              : '—'}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -409,6 +320,17 @@ export const AccessRequestsPage = () => {
           </table>
         </div>
       </div>
+
+      {/* Review modal */}
+      {modal && (
+        <ReviewModal
+          request={modal.request}
+          action={modal.action}
+          onConfirm={handleConfirm}
+          onCancel={() => setModal(null)}
+          loading={actionLoading}
+        />
+      )}
     </div>
   );
 };

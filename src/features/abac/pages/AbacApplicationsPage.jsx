@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { AppWindow, Pencil, X, Plus } from 'lucide-react';
+import { IconPickerField } from '@/components/ui/IconPickerField';
 
 const STRATEGIES = [
   {
@@ -476,20 +477,11 @@ export function AbacApplicationsPage() {
                       }
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Icon key</Label>
-                    <Input
-                      value={form.iconKey}
-                      onChange={(e) =>
-                        setForm((p) => ({ ...p, iconKey: e.target.value }))
-                      }
-                      className="font-mono"
-                      placeholder="shield"
-                    />
-                    <p className="text-xs text-gray-500">
-                      Icon key (e.g. shield, flask, brain)
-                    </p>
-                  </div>
+                  <IconPickerField
+                    label="Icon"
+                    value={form.iconKey}
+                    onChange={(key) => setForm((p) => ({ ...p, iconKey: key }))}
+                  />
                   <div className="space-y-1.5">
                     <Label>Features</Label>
                     <Input
