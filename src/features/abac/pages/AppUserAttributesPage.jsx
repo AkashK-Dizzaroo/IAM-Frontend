@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -16,6 +18,153 @@ import { useAbacScope } from '../contexts/AbacScopeContext';
 
 function normalizeList(res) {
   return res?.data?.data ?? res?.data ?? [];
+}
+
+// Renders the appropriate value input based on the attribute definition
+function ValueInput({ def, value, onChange }) {
+  if (!def) {
+    return (
+      <Input
+        placeholder="Select an attribute first…"
+        value={value}
+        disabled
+      />
+    );
+  }
+
+  const { dataType, isMultiValued, constraints } = def;
+  const allowedValues = constraints?.allowedValues ?? [];
+
+  // Multi-valued: checkbox list of allowed values
+  if (isMultiValued && allowedValues.length > 0) {
+    const selected = Array.isArray(value) ? value : [];
+    const toggle = (v) => {
+      const next = selected.includes(v)
+        ? selected.filter((x) => x !== v)
+        : [...selected, v];
+      onChange(next);
+    };
+    return (
+      <div className="space-y-1.5 rounded-md border border-gray-200 p-3 bg-white">
+        {allowedValues.map((v) => (
+          <div key={v} className="flex items-center gap-2">
+            <Checkbox
+              id={`mv-${v}`}
+              checked={selected.includes(v)}
+              onCheckedChange={() => toggle(v)}
+            />
+            <Label htmlFor={`mv-${v}`} className="font-mono text-sm cursor-pointer">
+              {v}
+            </Label>
+          </div>
+        ))}
+        {selected.length > 0 && (
+          <p className="text-xs text-gray-400 pt-1">{selected.length} selected</p>
+        )}
+      </div>
+    );
+  }
+
+  // Multi-valued but no allowed values (free-form list): comma-separated input
+  if (isMultiValued) {
+    const display = Array.isArray(value) ? value.join(', ') : value;
+    return (
+      <>
+        <Input
+          placeholder="e.g. val1, val2, val3"
+          value={display}
+          onChange={(e) => onChange(e.target.value.split(',').map((v) => v.trim()).filter(Boolean))}
+        />
+        <p className="text-[10px] text-gray-500">Comma-separated values.</p>
+      </>
+    );
+  }
+
+  // Single-value enum: dropdown
+  if (dataType === 'enum' && allowedValues.length > 0) {
+    return (
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select a value…" />
+        </SelectTrigger>
+        <SelectContent>
+          {allowedValues.map((v) => (
+            <SelectItem key={v} value={v}>{v}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  // Boolean: dropdown
+  if (dataType === 'boolean') {
+    return (
+      <Select value={String(value)} onValueChange={(v) => onChange(v === 'true')}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select…" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="true">true</SelectItem>
+          <SelectItem value="false">false</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  // Number: number input
+  if (dataType === 'number') {
+    const min = constraints?.min;
+    const max = constraints?.max;
+    return (
+      <>
+        <Input
+          type="number"
+          placeholder={min != null && max != null ? `${min} – ${max}` : 'Enter number…'}
+          value={value}
+          min={min}
+          max={max}
+          onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+        />
+        {(min != null || max != null) && (
+          <p className="text-[10px] text-gray-500">
+            Range: {min ?? '—'} to {max ?? '—'}
+          </p>
+        )}
+      </>
+    );
+  }
+
+  // Default: free text
+  return (
+    <Input
+      placeholder="Enter value…"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+// Renders a value cell in the table nicely
+function ValueCell({ value, def }) {
+  const isMultiValued = def?.isMultiValued;
+  const arr = Array.isArray(value) ? value : null;
+
+  if (arr || isMultiValued) {
+    const items = arr ?? (typeof value === 'string' ? value.split(',').map((v) => v.trim()) : [String(value)]);
+    return (
+      <div className="flex flex-wrap gap-1">
+        {items.map((v, i) => (
+          <Badge key={i} variant="secondary" className="font-mono text-xs">{String(v)}</Badge>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <span className="font-mono text-xs text-gray-500">
+      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+    </span>
+  );
 }
 
 export function AppUserAttributesPage() {
@@ -66,11 +215,7 @@ export function AppUserAttributesPage() {
 
   const removeMutation = useMutation({
     mutationFn: (attributeDefId) =>
-      abacService.deleteAppUserAttr(
-        selectedAppKey,
-        selectedUserId,
-        attributeDefId
-      ),
+      abacService.deleteAppUserAttr(selectedAppKey, selectedUserId, attributeDefId),
     onSuccess: () => {
       toast({ title: 'Attribute removed' });
       queryClient.invalidateQueries({
@@ -96,32 +241,35 @@ export function AppUserAttributesPage() {
     );
   }
 
+  const selectedDef = attributeDefs.find((d) => d.id === form.attributeDefId) ?? null;
+
+  const handleAttrDefChange = (defId) => {
+    // Reset value appropriately when switching attribute
+    const def = attributeDefs.find((d) => d.id === defId);
+    const emptyValue = def?.isMultiValued ? [] : '';
+    setForm({ attributeDefId: defId, value: emptyValue });
+  };
+
+  const isValueEmpty = () => {
+    if (Array.isArray(form.value)) return form.value.length === 0;
+    return form.value === '' || form.value === null || form.value === undefined;
+  };
+
   const handleAssign = () => {
-    let parsedValue = form.value;
-    const def = attributeDefs.find((d) => d.id === form.attributeDefId);
-    if (
-      def &&
-      (def.dataType === 'number' ||
-        def.dataType === 'boolean' ||
-        def.dataType === 'list')
-    ) {
-      try {
-        parsedValue = JSON.parse(form.value);
-      } catch {
-        /* backend validates */
-      }
-    }
     assignMutation.mutate({
       attributeDefId: form.attributeDefId,
-      value: parsedValue,
+      value: form.value,
     });
   };
+
+  // Build a def lookup map for the table
+  const defById = Object.fromEntries(attributeDefs.map((d) => [d.id, d]));
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">
-          {selectedAppName || selectedAppKey} User Attributes
+          {selectedAppName || selectedAppKey} — User Attributes
         </h1>
         <p className="text-sm text-gray-500 mt-1">
           Assign app-specific attributes to users to be evaluated in app policies.
@@ -148,13 +296,16 @@ export function AppUserAttributesPage() {
 
       {selectedUserId && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start border-t border-gray-100 pt-8">
+
+          {/* Assign panel */}
           <div className="md:col-span-1 p-5 bg-gray-50 border border-gray-200 rounded-lg space-y-4">
-            <h3 className="font-medium text-gray-900">Assign New Attribute</h3>
+            <h3 className="font-medium text-gray-900">Assign Attribute</h3>
+
             <div className="space-y-1.5">
               <Label>Attribute</Label>
               <Select
                 value={form.attributeDefId}
-                onValueChange={(v) => setForm({ ...form, attributeDefId: v })}
+                onValueChange={handleAttrDefChange}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select attribute…" />
@@ -167,38 +318,54 @@ export function AppUserAttributesPage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* Show type + multi-valued hint */}
+              {selectedDef && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <Badge variant="outline" className="text-xs capitalize">
+                    {selectedDef.dataType}
+                  </Badge>
+                  {selectedDef.isMultiValued && (
+                    <Badge variant="outline" className="text-xs text-purple-700 border-purple-300">
+                      multi-valued
+                    </Badge>
+                  )}
+                  {selectedDef.isRequired && (
+                    <Badge variant="outline" className="text-xs text-red-700 border-red-300">
+                      required
+                    </Badge>
+                  )}
+                </div>
+              )}
             </div>
+
             <div className="space-y-1.5">
               <Label>Value</Label>
-              <Input
-                placeholder="Enter value…"
+              <ValueInput
+                def={selectedDef}
                 value={form.value}
-                onChange={(e) => setForm({ ...form, value: e.target.value })}
+                onChange={(v) => setForm((f) => ({ ...f, value: v }))}
               />
-              <p className="text-[10px] text-gray-500">
-                For lists/booleans, use valid JSON.
-              </p>
             </div>
+
             <Button
               className="w-full"
               onClick={handleAssign}
-              disabled={
-                !form.attributeDefId ||
-                form.value === '' ||
-                assignMutation.isPending
-              }
+              disabled={!form.attributeDefId || isValueEmpty() || assignMutation.isPending}
             >
               {assignMutation.isPending ? 'Assigning…' : 'Assign Attribute'}
             </Button>
           </div>
 
+          {/* Current attributes table */}
           <div className="md:col-span-2">
             <h3 className="font-medium text-gray-900 mb-4">Current Attributes</h3>
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Attribute Key</th>
+                    <th className="px-4 py-3 font-medium">Attribute</th>
+                    <th className="px-4 py-3 font-medium">Type</th>
                     <th className="px-4 py-3 font-medium">Value</th>
                     <th className="px-4 py-3 font-medium text-right">Actions</th>
                   </tr>
@@ -206,49 +373,62 @@ export function AppUserAttributesPage() {
                 <tbody className="divide-y divide-gray-100">
                   {loadingUserAttrs ? (
                     <tr>
-                      <td
-                        colSpan={3}
-                        className="px-4 py-8 text-center text-gray-500"
-                      >
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
                         Loading…
                       </td>
                     </tr>
                   ) : userAttributes.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={3}
-                        className="px-4 py-8 text-center text-gray-500"
-                      >
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
                         No app attributes assigned.
                       </td>
                     </tr>
                   ) : (
-                    userAttributes.map((attr) => (
-                      <tr key={attr.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-mono text-xs text-gray-900">
-                          {attr.attributeDef?.key ??
-                            attr.attribute_name ??
-                            'Unknown'}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                          {typeof attr.value === 'object'
-                            ? JSON.stringify(attr.value)
-                            : String(attr.value)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            onClick={() =>
-                              removeMutation.mutate(attr.attributeDefId)
-                            }
-                          >
-                            Remove
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
+                    userAttributes.map((attr) => {
+                      const def = defById[attr.attributeDefId];
+                      const key = attr.attributeDef?.key ?? attr.attribute_name ?? def?.key ?? 'Unknown';
+                      const displayName = attr.attributeDef?.displayName ?? def?.displayName;
+                      return (
+                        <tr key={attr.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            {displayName && (
+                              <p className="text-sm font-medium text-gray-900">{displayName}</p>
+                            )}
+                            <p className="font-mono text-xs text-gray-400">{key}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            {def ? (
+                              <div className="flex flex-col gap-1">
+                                <Badge variant="outline" className="text-xs capitalize w-fit">
+                                  {def.dataType}
+                                </Badge>
+                                {def.isMultiValued && (
+                                  <Badge variant="outline" className="text-xs text-purple-700 border-purple-300 w-fit">
+                                    multi
+                                  </Badge>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-gray-300 text-xs">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <ValueCell value={attr.value} def={def} />
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => removeMutation.mutate(attr.attributeDefId)}
+                              disabled={removeMutation.isPending}
+                            >
+                              Remove
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

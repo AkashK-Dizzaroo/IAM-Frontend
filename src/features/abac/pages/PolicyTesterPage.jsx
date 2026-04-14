@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
 import { useAbacScope } from '../contexts/AbacScopeContext';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 
 // Helper to flatten policies for the UI
 function flattenMatchedPolicies(matched) {
@@ -34,33 +35,90 @@ function getUserDisplayProps(user, index) {
   return { name, initials, bg: colors[index % colors.length] };
 }
 
+function ResolvedAttributesPanel({ attrs }) {
+  const [open, setOpen] = useState(false);
+  if (!attrs) return null;
+
+  const namespaces = [
+    { label: 'Subject', key: 'subject', color: 'text-blue-700' },
+    { label: 'Resource', key: 'resource', color: 'text-purple-700' },
+    { label: 'Action', key: 'action', color: 'text-teal-700' },
+    { label: 'Environment', key: 'environment', color: 'text-gray-700' },
+  ];
+
+  return (
+    <div className="border border-gray-200 rounded bg-white overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 transition-colors"
+      >
+        <span>Resolved Attributes</span>
+        <svg
+          className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+          strokeLinecap="round" strokeLinejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div className="border-t border-gray-100 divide-y divide-gray-100">
+          {namespaces.map(({ label, key, color }) => {
+            const val = attrs[key];
+            if (val === undefined || val === null) return null;
+            return (
+              <div key={key} className="px-3 py-2.5">
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${color}`}>
+                  {label}
+                </span>
+                <pre className="mt-1.5 text-xs font-mono text-gray-700 bg-gray-50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
+                  {typeof val === 'object'
+                    ? JSON.stringify(val, null, 2)
+                    : String(val)}
+                </pre>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PolicyTesterPage() {
   const { selectedAppKey, selectedAppName } = useAbacScope();
+  const { user: currentUser } = useAuth();
   const { toast } = useToast();
 
   const [form, setForm] = useState({
     subjectId: '',
-    action: 'view',
+    actionMode: 'simple',        // 'simple' | 'advanced'
+    action: 'view',              // used when actionMode === 'simple'
+    actionAttrs: [{ key: 'type', value: '' }], // used when actionMode === 'advanced'
     resourceAttrs: [{ key: '', value: '' }],
     environmentAttrs: [{ key: '', value: '' }],
   });
 
   const [result, setResult] = useState(null);
 
-  // Fetch real users from backend for the quick-select badges
+  // Fetch user list for quick-select badges — HUB_OWNER only endpoint.
+  // retry:false so a 403 for non-owners doesn't spam the network.
   const { data: usersData } = useQuery({
     queryKey: ['abac', 'users'],
     queryFn: () => abacService.listUsers(),
+    retry: false,
   });
-  
+
   // Safely extract the users array regardless of backend pagination/wrapper format
   const rawData = usersData?.data;
   const usersArray = Array.isArray(rawData)
     ? rawData
     : (Array.isArray(rawData?.data) ? rawData.data : []);
 
-  // Take up to 5 users to keep the UI clean
-  const quickUsers = usersArray.slice(0, 5);
+  // Take up to 4 users (leaving room for the always-visible "Me" badge)
+  const quickUsers = usersArray
+    .filter((u) => u.id !== currentUser?.id)
+    .slice(0, 4);
 
   const evaluateMutation = useMutation({
     mutationFn: (payload) => abacService.evaluate(selectedAppKey, payload),
@@ -110,19 +168,23 @@ export function PolicyTesterPage() {
     }, {});
   };
 
-  const handleTest = () => {
+  const handleTest = (dryRun = false) => {
     try {
       const resObj = arrayToObject(form.resourceAttrs);
       const envObj = arrayToObject(form.environmentAttrs);
 
+      const actionValue = form.actionMode === 'advanced'
+        ? arrayToObject(form.actionAttrs)
+        : form.action.trim();
+
       const payload = {
         subject_id: form.subjectId.trim(),
         subjectId: form.subjectId.trim(),
-        action: form.action.trim(),
+        action: actionValue,
         ...(Object.keys(resObj).length > 0 && { resource: resObj }),
         ...(Object.keys(envObj).length > 0 && { environment: envObj }),
       };
-      evaluateMutation.mutate(payload);
+      evaluateMutation.mutate({ ...payload, dryRun });
     } catch {
       toast({
         title: 'Evaluation Error',
@@ -175,26 +237,40 @@ export function PolicyTesterPage() {
               value={form.subjectId}
               onChange={(e) => setForm({ ...form, subjectId: e.target.value })}
             />
-            {quickUsers?.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {quickUsers.map((u, i) => {
-                  const { name, initials, bg } = getUserDisplayProps(u, i);
-                  return (
-                    <button
-                      key={u.id}
-                      onClick={() => setForm({ ...form, subjectId: u.id })}
-                      title={`Use ID: ${u.id}`}
-                      className="flex items-center gap-2 px-2 py-1 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors"
-                    >
-                      <span className={`flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold ${bg}`}>
-                        {initials}
-                      </span>
-                      <span className="text-xs text-gray-700 font-medium">{name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              {/* Always show current user — works for any role */}
+              {currentUser?.id && (
+                <button
+                  onClick={() => setForm({ ...form, subjectId: currentUser.id })}
+                  title={`Use my ID: ${currentUser.id}`}
+                  className="flex items-center gap-2 px-2 py-1 bg-primary/5 border border-primary/20 rounded-md hover:bg-primary/10 transition-colors"
+                >
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold bg-primary/15 text-primary">
+                    Me
+                  </span>
+                  <span className="text-xs text-primary font-medium">
+                    {currentUser.displayName || currentUser.username || currentUser.email || 'Me'}
+                  </span>
+                </button>
+              )}
+              {/* Additional users — only visible to HUB_OWNER */}
+              {quickUsers.map((u, i) => {
+                const { name, initials, bg } = getUserDisplayProps(u, i);
+                return (
+                  <button
+                    key={u.id}
+                    onClick={() => setForm({ ...form, subjectId: u.id })}
+                    title={`Use ID: ${u.id}`}
+                    className="flex items-center gap-2 px-2 py-1 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors"
+                  >
+                    <span className={`flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold ${bg}`}>
+                      {initials}
+                    </span>
+                    <span className="text-xs text-gray-700 font-medium">{name}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Resource Section */}
@@ -216,12 +292,53 @@ export function PolicyTesterPage() {
 
           {/* Action Section */}
           <div className="space-y-3 pt-4 border-t border-gray-100">
-            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</Label>
-            <Input
-              placeholder="e.g. view, edit, delete"
-              value={form.action}
-              onChange={(e) => setForm({ ...form, action: e.target.value })}
-            />
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</Label>
+              <div className="flex items-center bg-gray-100 rounded p-0.5 gap-0.5">
+                <button
+                  onClick={() => setForm({ ...form, actionMode: 'simple' })}
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded transition-colors ${
+                    form.actionMode === 'simple'
+                      ? 'bg-white text-gray-800 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Simple
+                </button>
+                <button
+                  onClick={() => setForm({ ...form, actionMode: 'advanced' })}
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded transition-colors ${
+                    form.actionMode === 'advanced'
+                      ? 'bg-white text-gray-800 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Object
+                </button>
+              </div>
+            </div>
+            {form.actionMode === 'simple' ? (
+              <Input
+                placeholder="e.g. view, edit, delete"
+                value={form.action}
+                onChange={(e) => setForm({ ...form, action: e.target.value })}
+              />
+            ) : (
+              <>
+                {form.actionAttrs.map((attr, i) => (
+                  <div key={`act-${i}`} className="flex items-center gap-2">
+                    <Input placeholder="key" value={attr.key} onChange={e => updateAttrRow('actionAttrs', i, 'key', e.target.value)} className="flex-1 font-mono text-sm" />
+                    <Input placeholder="value" value={attr.value} onChange={e => updateAttrRow('actionAttrs', i, 'value', e.target.value)} className="flex-1 font-mono text-sm" />
+                    <Button variant="ghost" size="icon" onClick={() => removeAttrRow('actionAttrs', i)} className="text-gray-400 hover:text-red-500 flex-shrink-0">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                    </Button>
+                  </div>
+                ))}
+                <button onClick={() => addAttrRow('actionAttrs')} className="text-xs font-medium text-primary hover:text-primary/80 flex items-center gap-1">
+                  + Add
+                </button>
+              </>
+            )}
           </div>
 
           {/* Environment Section */}
@@ -242,13 +359,22 @@ export function PolicyTesterPage() {
           </div>
 
         </div>
-        <div className="p-4 border-t border-gray-100 bg-gray-50">
+        <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-2">
           <Button
-            className="w-full"
-            onClick={handleTest}
+            className="flex-1"
+            onClick={() => handleTest(false)}
             disabled={evaluateMutation.isPending || !form.subjectId.trim()}
           >
             {evaluateMutation.isPending ? 'Evaluating…' : 'Evaluate'}
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+            onClick={() => handleTest(true)}
+            disabled={evaluateMutation.isPending || !form.subjectId.trim()}
+            title="Includes draft policies in the result without writing to audit logs"
+          >
+            {evaluateMutation.isPending ? 'Evaluating…' : 'Dry-run'}
           </Button>
         </div>
       </div>
@@ -273,15 +399,22 @@ export function PolicyTesterPage() {
                 }`}
               >
                 <div>
-                  <h3
-                    className={`text-2xl font-bold ${
-                      result.effect === 'PERMIT'
-                        ? 'text-green-700'
-                        : 'text-red-700'
-                    }`}
-                  >
-                    {result.effect}
-                  </h3>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3
+                      className={`text-2xl font-bold ${
+                        result.effect === 'PERMIT'
+                          ? 'text-green-700'
+                          : 'text-red-700'
+                      }`}
+                    >
+                      {result.effect}
+                    </h3>
+                    {result.dryRun && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 border border-amber-300 px-2 py-0.5 rounded-full">
+                        Simulation
+                      </span>
+                    )}
+                  </div>
                   <p
                     className={`text-sm mt-1 ${
                       result.effect === 'PERMIT'
@@ -302,6 +435,8 @@ export function PolicyTesterPage() {
                 </div>
               </div>
 
+              <ResolvedAttributesPanel attrs={result.resolvedAttributes} />
+
               <div>
                 <Label className="text-gray-500 uppercase text-xs tracking-wider mb-3 block">
                   Matched Policies
@@ -321,6 +456,11 @@ export function PolicyTesterPage() {
                           {p.policyName ?? p.name ?? 'Policy'}
                         </span>
                         <div className="flex items-center gap-2">
+                          {p.isDraft && (
+                            <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded uppercase">
+                              draft
+                            </span>
+                          )}
                           <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded uppercase">
                             {p.scope}
                           </span>
@@ -340,6 +480,45 @@ export function PolicyTesterPage() {
                 )}
               </div>
 
+              {result.conditionFailedPolicies && result.conditionFailedPolicies.length > 0 && (
+                <div>
+                  <Label className="text-gray-500 uppercase text-xs tracking-wider mb-3 block">
+                    Condition Failed
+                  </Label>
+                  <div className="space-y-2">
+                    {result.conditionFailedPolicies.map((p, i) => (
+                      <div
+                        key={`cf-${p.policyId ?? i}`}
+                        className="bg-white border border-gray-200 p-3 rounded text-sm flex justify-between items-center shadow-sm opacity-60"
+                      >
+                        <span className="font-medium text-gray-700">
+                          {p.policyName ?? 'Policy'}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {p.isDraft && (
+                            <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded uppercase">
+                              draft
+                            </span>
+                          )}
+                          <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded uppercase">
+                            {p.scope}
+                          </span>
+                          <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-2 py-0.5 rounded uppercase">
+                            cond. failed
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {result.targetExcludedCount > 0 && (
+                <p className="text-xs text-gray-400 italic">
+                  {result.targetExcludedCount} {result.targetExcludedCount === 1 ? 'policy was' : 'policies were'} excluded by target filter (wrong resource type, action, or subject type).
+                </p>
+              )}
+
               {result.obligations && result.obligations.length > 0 && (
                 <div>
                   <Label className="text-gray-500 uppercase text-xs tracking-wider mb-3 block">
@@ -348,6 +527,27 @@ export function PolicyTesterPage() {
                   <pre className="bg-gray-800 text-green-400 p-4 rounded text-xs font-mono overflow-x-auto shadow-inner">
                     {JSON.stringify(result.obligations, null, 2)}
                   </pre>
+                </div>
+              )}
+
+              {result.skippedDraftPolicies && result.skippedDraftPolicies.length > 0 && (
+                <div>
+                  <Label className="text-gray-500 uppercase text-xs tracking-wider mb-3 block">
+                    Draft Policies Not Evaluated
+                  </Label>
+                  <div className="bg-amber-50 border border-amber-200 rounded p-3 space-y-2">
+                    <p className="text-xs text-amber-700 font-medium">
+                      The following policies are in <span className="font-bold">draft</span> status and were skipped. Activate them to include them in evaluation.
+                    </p>
+                    <ul className="text-sm text-amber-800 space-y-1">
+                      {result.skippedDraftPolicies.map((p) => (
+                        <li key={p.policyId} className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                          {p.policyName}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               )}
 
