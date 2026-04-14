@@ -121,8 +121,11 @@ function validatePolicyForm(form) {
 // ConditionRow
 // ---------------------------------------------------------------------------
 
+const ARRAY_OPS = new Set(['in', 'not_in']);
+
 function ConditionRow({ condition, onChange, onRemove, canRemove, disabled }) {
   const noValue = ['exists', 'not_exists'].includes(condition.op);
+  const isArrayOp = ARRAY_OPS.has(condition.op);
 
   return (
     <div className="
@@ -163,7 +166,19 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled }) {
       <select
         disabled={disabled}
         value={condition.op}
-        onChange={e => onChange('op', e.target.value)}
+        onChange={e => {
+          const newOp = e.target.value;
+          const switchingToArray = ARRAY_OPS.has(newOp) && !isArrayOp;
+          const switchingFromArray = !ARRAY_OPS.has(newOp) && isArrayOp;
+          if (switchingToArray) {
+            const cur = condition.value;
+            const arr = cur ? [cur] : [];
+            onChange('value', arr);
+          } else if (switchingFromArray) {
+            onChange('value', Array.isArray(condition.value) ? condition.value.join(', ') : '');
+          }
+          onChange('op', newOp);
+        }}
         className="
           text-xs border border-gray-200 rounded px-2 py-1.5
           bg-white text-gray-700 focus:outline-none
@@ -179,9 +194,26 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled }) {
         <input
           disabled={disabled}
           type="text"
-          placeholder="value"
-          value={condition.value ?? ''}
-          onChange={e => onChange('value', e.target.value)}
+          placeholder={isArrayOp ? 'val1, val2, … or @namespace.attr' : 'value or @namespace.attr'}
+          title={isArrayOp
+            ? 'Comma-separated list of values, or @namespace.attr to reference another attribute'
+            : 'Use @namespace.attr (e.g. @subject.study_access) to compare against another attribute'
+          }
+          value={
+            isArrayOp && Array.isArray(condition.value)
+              ? condition.value.join(', ')
+              : condition.value ?? ''
+          }
+          onChange={e => {
+            const raw = e.target.value;
+            if (isArrayOp) {
+              // Store as array; keep a trailing comma as-is while typing
+              const arr = raw.split(',').map(s => s.trim()).filter(Boolean);
+              onChange('value', raw.trimEnd().endsWith(',') ? [...arr, ''] : arr);
+            } else {
+              onChange('value', raw);
+            }
+          }}
           className="
             flex-1 min-w-0 text-xs border border-gray-200
             rounded px-2 py-1.5 font-mono

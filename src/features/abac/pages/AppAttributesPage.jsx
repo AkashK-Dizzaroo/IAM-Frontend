@@ -39,6 +39,8 @@ const EMPTY_FORM = {
   attribute_type:     'string',
   allowed_values:     '',   // comma-separated string in UI
   default_value:      '',
+  min_value:          '',
+  max_value:          '',
   is_required:        false,
   is_multi_valued:    false,
 };
@@ -52,6 +54,8 @@ function formFromAttr(attr) {
     attribute_type:  attr.dataType     ?? 'string',
     allowed_values:  (c.allowedValues ?? []).join(', '),
     default_value:   c.defaultValue != null ? String(c.defaultValue) : '',
+    min_value:       c.min != null ? String(c.min) : '',
+    max_value:       c.max != null ? String(c.max) : '',
     is_required:     attr.isRequired   ?? false,
     is_multi_valued: attr.isMultiValued ?? false,
   };
@@ -64,6 +68,10 @@ function buildPayload(form) {
       .split(',')
       .map((v) => v.trim())
       .filter(Boolean);
+  }
+  if (form.attribute_type === 'number') {
+    if (form.min_value.trim() !== '') constraints.min = Number(form.min_value);
+    if (form.max_value.trim() !== '') constraints.max = Number(form.max_value);
   }
   if (form.default_value.trim() !== '') {
     constraints.defaultValue = form.default_value.trim();
@@ -146,7 +154,7 @@ function AttributeForm({ form, setForm, mode }) {
           value={form.attribute_type}
           disabled={isEdit}
           onValueChange={(v) =>
-            setForm({ ...form, attribute_type: v, allowed_values: '', default_value: '' })
+            setForm({ ...form, attribute_type: v, allowed_values: '', default_value: '', min_value: '', max_value: '' })
           }
         >
           <SelectTrigger>
@@ -164,35 +172,58 @@ function AttributeForm({ form, setForm, mode }) {
       </div>
 
       {/* allowed_values — only for enum */}
-      <div className="space-y-1.5">
-        <Label htmlFor="f-allowed">
-          Allowed Values
-          {form.attribute_type === 'enum' && !isEdit && (
-            <span className="text-red-500"> *</span>
+      {form.attribute_type === 'enum' && (
+        <div className="space-y-1.5">
+          <Label htmlFor="f-allowed">
+            Allowed Values
+            {!isEdit && <span className="text-red-500"> *</span>}
+          </Label>
+          <Input
+            id="f-allowed"
+            placeholder='e.g. read_only, reviewer, submitter'
+            value={form.allowed_values}
+            onChange={(e) => setForm({ ...form, allowed_values: e.target.value })}
+          />
+          <p className="text-xs text-gray-400">Comma-separated list of allowed values.</p>
+          {form.allowed_values.trim() && (
+            <div className="flex flex-wrap gap-1 pt-1">
+              {form.allowed_values
+                .split(',')
+                .map((v) => v.trim())
+                .filter(Boolean)
+                .map((v) => (
+                  <Badge key={v} variant="secondary" className="text-xs font-mono">{v}</Badge>
+                ))}
+            </div>
           )}
-          {form.attribute_type !== 'enum' && (
-            <span className="text-gray-400 font-normal text-xs ml-1">(only for Enum type)</span>
-          )}
-        </Label>
-        <Input
-          id="f-allowed"
-          placeholder='e.g. read_only, reviewer, submitter'
-          value={form.allowed_values}
-          disabled={form.attribute_type !== 'enum'}
-          onChange={(e) => setForm({ ...form, allowed_values: e.target.value })}
-        />
-        {form.attribute_type === 'enum' && form.allowed_values.trim() && (
-          <div className="flex flex-wrap gap-1 pt-1">
-            {form.allowed_values
-              .split(',')
-              .map((v) => v.trim())
-              .filter(Boolean)
-              .map((v) => (
-                <Badge key={v} variant="secondary" className="text-xs font-mono">{v}</Badge>
-              ))}
+        </div>
+      )}
+
+      {/* min/max — only for number */}
+      {form.attribute_type === 'number' && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="f-min">Min Value</Label>
+            <Input
+              id="f-min"
+              type="number"
+              placeholder="e.g. 0"
+              value={form.min_value}
+              onChange={(e) => setForm({ ...form, min_value: e.target.value })}
+            />
           </div>
-        )}
-      </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="f-max">Max Value</Label>
+            <Input
+              id="f-max"
+              type="number"
+              placeholder="e.g. 100"
+              value={form.max_value}
+              onChange={(e) => setForm({ ...form, max_value: e.target.value })}
+            />
+          </div>
+        </div>
+      )}
 
       {/* default_value */}
       <div className="space-y-1.5">
@@ -279,26 +310,17 @@ export function AppAttributesPage() {
   const [createForm, setCreateForm]     = useState({ ...EMPTY_FORM });
   const [editForm, setEditForm]         = useState({ ...EMPTY_FORM });
 
-  if (!selectedApp) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 text-center h-full">
-        <p className="font-medium text-gray-900 mb-1">No Application Selected</p>
-        <p className="text-sm text-gray-500">Select an application to manage its attributes.</p>
-      </div>
-    );
-  }
-
   const { data, isLoading } = useQuery({
-    queryKey: ['abac', 'appAttributes', selectedApp.key],
+    queryKey: ['abac', 'appAttributes', selectedApp?.key],
     queryFn: () => abacService.listAppAttrDefs(selectedApp.key),
-    enabled: !!selectedApp.key,
+    enabled: !!selectedApp?.key,
   });
 
   const rawData = data?.data?.data ?? data?.data ?? [];
   const attributes = Array.isArray(rawData) ? rawData : [];
 
   const createMutation = useMutation({
-    mutationFn: (payload) => abacService.createAppAttrDef(selectedApp.key, payload),
+    mutationFn: (payload) => abacService.createAppAttrDef(selectedApp?.key, payload),
     onSuccess: () => {
       toast({ title: 'Attribute created' });
       queryClient.invalidateQueries({ queryKey: ['abac', 'appAttributes', selectedApp.key] });
@@ -314,7 +336,7 @@ export function AppAttributesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }) => abacService.updateAppAttrDef(selectedApp.key, id, payload),
+    mutationFn: ({ id, payload }) => abacService.updateAppAttrDef(selectedApp?.key, id, payload),
     onSuccess: () => {
       toast({ title: 'Attribute updated' });
       queryClient.invalidateQueries({ queryKey: ['abac', 'appAttributes', selectedApp.key] });
@@ -329,7 +351,7 @@ export function AppAttributesPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id) => abacService.deleteAppAttrDef(selectedApp.key, id),
+    mutationFn: (id) => abacService.deleteAppAttrDef(selectedApp?.key, id),
     onSuccess: () => {
       toast({ title: 'Attribute deleted' });
       queryClient.invalidateQueries({ queryKey: ['abac', 'appAttributes', selectedApp.key] });
@@ -343,6 +365,15 @@ export function AppAttributesPage() {
       }),
   });
 
+  if (!selectedApp) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center h-full">
+        <p className="font-medium text-gray-900 mb-1">No Application Selected</p>
+        <p className="text-sm text-gray-500">Select an application to manage its attributes.</p>
+      </div>
+    );
+  }
+
   const handleCreate = () => {
     if (!createForm.attribute_name.trim() || !createForm.display_name.trim()) return;
     createMutation.mutate(buildPayload(createForm));
@@ -353,6 +384,10 @@ export function AppAttributesPage() {
     const c = {};
     if (editForm.attribute_type === 'enum' && editForm.allowed_values.trim()) {
       c.allowedValues = editForm.allowed_values.split(',').map((v) => v.trim()).filter(Boolean);
+    }
+    if (editForm.attribute_type === 'number') {
+      if (editForm.min_value.trim() !== '') c.min = Number(editForm.min_value);
+      if (editForm.max_value.trim() !== '') c.max = Number(editForm.max_value);
     }
     if (editForm.default_value.trim()) {
       c.defaultValue = editForm.default_value.trim();

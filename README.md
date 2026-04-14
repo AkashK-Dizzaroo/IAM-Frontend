@@ -20,6 +20,7 @@
 12. [Deployment and CI/CD](#deployment-and-cicd)
 13. [Related documentation](#related-documentation)
 
+
 ---
 
 ## Purpose and scope
@@ -78,13 +79,13 @@ flowchart LR
     REST["/api/..."]
   end
   Login -->|"handoffCode"| Main
-  Pages -->|Bearer + cookies| REST
+  Pages -->|HttpOnly cookies| REST
 ```
 
-1. **`main.jsx`** runs **before** React mount: resolves Hub **`handoffCode`** (or legacy URL tokens), may persist `platform_token` / `platform_user`, wraps the tree in **`GoogleOAuthProvider`** (requires `VITE_GOOGLE_CLIENT_ID`), and mounts **`App`** inside an error boundary.
+1. **`main.jsx`** runs **before** React mount: resolves Hub **`handoffCode`** from the URL, exchanges it via a native `fetch` call to **`/api/auth/handoff/exchange`** (sets HttpOnly cookies + caches user in `localStorage`), wraps the tree in **`GoogleOAuthProvider`** (requires `VITE_GOOGLE_CLIENT_ID`), and mounts **`App`** inside an `AppErrorBoundary`. Legacy `accessToken` URL params are no longer supported.
 2. **`App.jsx`** wraps the app with **`QueryClientProvider`**, **`BrowserRouter`**, **`AuthProvider`**, and **`AbacScopeProvider`**, then defines all routes.
 3. **Feature modules** under `src/features/*` own pages, feature-specific API modules, and small hooks/components.
-4. **`lib/apiClient.js`** centralizes base URL, JSON headers, `Authorization: Bearer <platform_token>`, `withCredentials`, and **401 → redirect to Hub login** (with dev-mode nuances).
+4. **`lib/apiClient.js`** — an Axios instance with request/response interceptors for structured logging, `X-Request-Id` correlation headers, `withCredentials: true` (cookie-based auth), and **401 → redirect to Hub login** (bypassed in dev mode).
 
 ---
 
@@ -100,32 +101,51 @@ IAM-Frontend/
 ├── vite.config.js           # Alias @, dev server port/proxy, build chunks
 └── src/
     ├── App.jsx              # Routes and providers
-    ├── main.jsx             # Handoff, Google OAuth, error boundary, mount
+    ├── main.jsx             # Handoff exchange, Google OAuth, error boundary, mount
     ├── index.css            # Global styles / Tailwind
     ├── __tests__/           # Vitest setup
     ├── components/ui/       # Shared primitives (button, card, dialog, toast, …)
     ├── config/
-    │   ├── env.js           # VITE_* readers, Hub URL helpers
+    │   ├── env.js           # VITE_* readers, Hub/API URL helpers (getAxiosBaseURL, getValidHubUrl)
     │   └── queryClient.js   # TanStack Query defaults
     ├── features/
-    │   ├── abac/            # ABAC pages, abacService, AbacScopeContext
-    │   ├── audit/           # Audit page
-    │   ├── auth/            # AuthProvider, ProtectedRoute, authInit
-    │   ├── layout/          # Dashboard shell (sidebar, outlet)
-    │   ├── profile/         # My profile, profileService
-    │   ├── users/           # User management & account approvals
-    │   ├── resources/       # Resource CRUD UI + resourceService
-    │   ├── applications/    # Application service (shared with other flows)
-    │   ├── access-requests/ # Access request API (used where integrated)
-    │   └── roles/           # Legacy RBAC views/helpers if referenced
-    ├── hooks/               # e.g. use-toast
+    │   ├── abac/
+    │   │   ├── api/abacService.js           # All /v1/... ABAC API calls
+    │   │   ├── contexts/AbacScopeContext.jsx # scope state + localStorage persistence
+    │   │   └── pages/                       # HubAttributesPage, GlobalPoliciesPage, AppAttributesPage,
+    │   │                                    # AppUserAttributesPage, AppPoliciesPage, PolicyTesterPage,
+    │   │                                    # CoverageGapsPage, AbacUsersPage, AbacApplicationsPage,
+    │   │                                    # ResourceClassificationsPage
+    │   ├── access-requests/
+    │   │   ├── api/accessRequestService.js  # /access-requests CRUD (class-based)
+    │   │   └── pages/
+    │   │       ├── AccessRequestsPage.jsx   # Hub Owner / IT Support review queue
+    │   │       └── MyRequestsPage.jsx       # End-user's own request history
+    │   ├── audit/                           # AuditPage
+    │   ├── auth/
+    │   │   ├── contexts/
+    │   │   │   ├── AuthContext.js
+    │   │   │   └── AuthProvider.jsx         # verify-on-mount, effectiveRoles derivation
+    │   │   ├── components/ProtectedRoute.jsx
+    │   │   ├── hooks/useAuth.jsx
+    │   │   └── utils/authInit.js            # handoffCode exchange, token helpers
+    │   ├── layout/
+    │   │   └── components/DashboardPage.jsx # Collapsible sidebar, scope switcher, nav
+    │   ├── profile/                         # MyProfilePage, profileService
+    │   ├── users/                           # AccountRequestsPage, user.repository
+    │   ├── resources/                       # ResourceManagementPage, resourceService
+    │   ├── applications/                    # applicationService (shared)
+    │   └── roles/                           # Legacy / auxiliary RBAC helpers
+    ├── hooks/                               # e.g. use-toast
     ├── lib/
-    │   ├── apiClient.js     # Axios instance
-    │   └── utils.js         # Shared helpers (e.g. display role)
-    └── utils/               # e.g. hubUrl (if present)
+    │   ├── apiClient.js     # Axios instance — request-id, structured logging, cookie auth, 401 handler
+    │   ├── logger.js        # Browser-side structured logger with sanitization
+    │   ├── utils.js         # cn(), getDisplayRole(), generateObjectId()
+    │   └── index.js
+    └── utils/               # authInit.js re-exports, hubUrl helper
 ```
 
-**Note:** Some files under `features/` (for example older **Roles**, **AccessRequests** pages) exist for reuse or migration; the **active route tree** is defined entirely in **`App.jsx`**. Prefer **`App.jsx`** as the source of truth for what ships in production.
+**Note:** The **active route tree** is defined entirely in **`App.jsx`**. Prefer it as the source of truth for what ships in production; some older files under `features/` exist for reuse only.
 
 ---
 
@@ -133,12 +153,12 @@ IAM-Frontend/
 
 | Layer | Responsibility |
 |-------|------------------|
-| **`initializeAuthFromUrl`** (`features/auth/utils/authInit.js`) | Reads **`handoffCode`** from query/hash, POSTs to **`/api/auth/handoff/exchange`**, stores token/user; or legacy `accessToken` + `user`; cleans URL with `history.replaceState`. |
-| **`GoogleOAuthProvider`** | Required at runtime; **`VITE_GOOGLE_CLIENT_ID`** must be set or the app shows a configuration error instead of mounting. |
+| **`initializeAuthFromUrl`** (`features/auth/utils/authInit.js`) | Reads **`handoffCode`** from the URL query string (or hash fallback), POSTs to **`/api/auth/handoff/exchange`** via a native `fetch` with `credentials: "include"` (sets HttpOnly cookies), caches `platform_user` in `localStorage`, then strips the `handoffCode` from the URL via `history.replaceState`. Exports `PLATFORM_TOKEN_KEY` (`"access_token"`) and `PLATFORM_USER_KEY` (`"platform_user"`) for consistent key names. |
+| **`GoogleOAuthProvider`** | Required at runtime; **`VITE_GOOGLE_CLIENT_ID`** must be set or the `Root` component renders a configuration error page instead of mounting the app. |
 | **`QueryClientProvider`** | TanStack Query defaults: e.g. `staleTime` 5 minutes, `refetchOnWindowFocus: false`, `retry: 1`. |
-| **`AuthProvider`** | Loads user from storage or **`POST /api/auth/verify`**, exposes `user`, `loading`, `isAuthenticated`, `logout`, **`effectiveRoles`**, `rolesReady`. |
-| **`AbacScopeProvider`** | **`scope`**: `"global"` \| `"app"`; **`selectedAppKey`** / **`selectedAppName`** for app-scoped ABAC pages. |
-| **`DashboardPage`** | Layout: header, collapsible sidebar, scope switcher, role-filtered nav, **`<Outlet />`** for child routes. |
+| **`AuthProvider`** | On mount: calls **`POST /api/auth/refresh`** (best-effort to renew cookies), then **`POST /api/auth/verify`** to hydrate the user object; redirects to Hub login on failure in non-dev environments. Exposes `user`, `loading`, `isAuthenticated`, `logout`, **`effectiveRoles`** (memoized), `rolesReady`. |
+| **`AbacScopeProvider`** | **`scope`**: `"global"` \| `"app"`; **`selectedAppKey`** / **`selectedAppName`** for app-scoped ABAC pages. Selection is persisted to `localStorage` under the key `abac.scope` and restored on next load. Exports `selectApp(key, name)` and `selectGlobal()` actions, and the `useAbacScope()` hook. |
+| **`DashboardPage`** | Layout: top header (Back to Hub + Logout), collapsible sidebar (persisted to `localStorage` as `iam_sidebar_collapsed`), inline application scope selector, role-filtered nav groups, **`<Outlet />`** for child routes. |
 
 ---
 
@@ -156,8 +176,8 @@ All authenticated app routes are nested under **`/`** and wrapped by **`Protecte
 | `/users` | `AbacUsersPage` | Hub Owner, **global** scope |
 | `/applications` | `AbacApplicationsPage` | Hub Owner, **global** scope |
 | `/account-approvals` | `AccountRequestsPage` | Hub Owner or IT Support |
+| `/access-approvals` | `AccessRequestsPage` | Hub Owner, IT Support, or App Owner |
 | `/hub-attributes` | `HubAttributesPage` | Hub Owner, **global** scope |
-| `/resource-classifications` | `ResourceClassificationsPage` | Hub Owner, **global** scope |
 | `/global-policies` | `GlobalPoliciesPage` | Hub Owner, **global** scope |
 | `/app-attributes` | `AppAttributesPage` | Hub Owner or App Owner, **app** scope |
 | `/app-user-attributes` | `AppUserAttributesPage` | Hub Owner or App Owner, **app** scope |
@@ -166,28 +186,34 @@ All authenticated app routes are nested under **`/`** and wrapped by **`Protecte
 | `/audit` | `AuditPage` | Hub Owner or App Owner, **app** scope |
 | `/coverage-gaps` | `CoverageGapsPage` | Hub Owner or App Owner, **app** scope |
 
+> **Note:** `/resource-classifications` is no longer a standalone route in `App.jsx`. `ResourceClassificationsPage` exists under `features/abac/pages/` but is integrated within the hub admin flow rather than as an independent route.
+
 ### Default redirect (index route)
 
 After login, `/` redirects based on **`effectiveRoles`** (see `App.jsx`):
 
 - **Hub Owner** → `/users`
-- **App Owner** (when applicable) → `/app-policies`
+- **App Owner** → `/app-policies`
 - **IT Support** → `/account-approvals`
 - Otherwise → `/my-profile`
 
 ### Compatibility redirects
 
-Older paths redirect to the new ones, for example:
+Older paths redirect to the current ones:
 
-- `/profile` → `/my-profile`
-- `/account-requests`, `/access-requests` → `/account-approvals`
-- `/user-profile-management` → `/users`
-- `/resource-management` → `/resources`
-- `/application-access-management` → `/applications`
+| Old path | Redirects to |
+|----------|-------------|
+| `/profile` | `/my-profile` |
+| `/account-requests` | `/account-approvals` |
+| `/access-requests` | `/access-approvals` |
+| `/application-role-assignments` | `/my-profile` |
+| `/user-profile-management` | `/users` |
+| `/resource-management` | `/resources` |
+| `/application-access-management` | `/applications` |
 
 ### Other routes
 
-- **`/unauthorized`** — static “Access Denied” page with button back to Hub (`getValidHubUrl()`).
+- **`/unauthorized`** — “Access Denied” page with button back to Hub (`getValidHubUrl()`).
 - **`*`** — simple “Page not found”.
 
 ---
@@ -196,25 +222,46 @@ Older paths redirect to the new ones, for example:
 
 ### Effective roles (`AuthProvider`)
 
-Derived from the **`user`** object (including **`hubRoles`** and **`globalRole`**). Notable flags:
+Derived from the **`user`** object (including **`hubRoles`** and **`globalRole`**). Computed via `useMemo` so identity is stable across renders:
 
-- **`isHubOwner`**: `hubRoles` contains `HUB_OWNER`, or `globalRole === 'ADMIN'`.
-- **`isITSupport`**: `hubRoles` contains `IT_SUPPORT`.
-- **`isAppOwner` / `isAppManager`**: Intended to reflect application assignments (see provider implementation; backend may populate assignment-based app ownership over time).
-- **`canAccessAdmin`**: elevated access for admin-style features.
+| Flag | Condition |
+|------|-----------|
+| `isHubOwner` | `hubRoles` contains `HUB_OWNER`, or `globalRole === ‘ADMIN’` |
+| `isITSupport` | `hubRoles` contains `IT_SUPPORT` |
+| `isAppOwner` | Has active `APP_OWNER` role in any application assignment |
+| `isAppManager` | Has active `APP_MANAGER` role in any application assignment |
+| `isElevated` | Any of the above |
+| `canAccessAdmin` | Any of the above |
+| `appOwnerOf` | Array of application IDs the user owns |
+| `appManagerOf` | Array of application IDs the user manages |
 
-The **sidebar** in `DashboardPage.jsx` **filters** items by these flags and by **global vs app scope**.
+`getDisplayRole(effectiveRoles)` (from `lib/utils.js`) maps these flags to a human-readable label for display in the sidebar footer.
+
+### Sidebar nav groups (`DashboardPage`)
+
+The sidebar is **collapsible** (state persisted to `localStorage` as `iam_sidebar_collapsed`). Nav items are grouped and conditionally rendered:
+
+| Group | Shown when |
+|-------|-----------|
+| **Personal** | Always (`My Profile`) |
+| **Administration** | `isHubOwner` or `isITSupport` — shows Account Approvals + Access Approvals |
+| **Application selector** | `isHubOwner` or `isAppOwner` — inline `<select>` listing ABAC apps + "Hub Management" option |
+| **Hub Config** | `isHubOwner` and `scope === ‘global’` — Users, Hub Attributes, Global Policies, Applications |
+| **`{AppName}` Settings** | `(isHubOwner || isAppOwner)` and `scope === ‘app’` and an app is selected — App Attributes, App User Attributes, App Policies, Policy Tester, Audit Trail, Coverage Gaps |
+| **Resources** | `isHubOwner` or `isAppOwner` |
+
+If the user is an App Owner (but not Hub Owner) and owns exactly one app, **`DashboardPage`** auto-selects that app via `selectApp()` on first load.
 
 ### Global vs App scope (`AbacScopeContext`)
 
-- **Global**: configure hub-wide users, attributes, classifications, policies, applications list.
-- **App**: pick an **application** from the dropdown (data from **`abacService.getApplications`**) to manage that app’s attributes, policies, audit, etc.
+- **Global** (`scope === ‘global’`): configure hub-wide users, hub attribute definitions, resource classifications, global policies, and the applications list.
+- **App** (`scope === ‘app’`): pick an **application** from the inline dropdown (populated from **`abacService.getApplications`** → `GET /api/v1/abac/applications`) to manage that app’s attributes, policies, audit, and coverage gaps.
 
-Switching scope updates visible nav items; selecting an app sets **`scope === 'app'`** and navigates toward app policy views by default in some flows.
+Scope selection is persisted to `localStorage` under key `abac.scope` and restored on page load.
 
 ### Production hostname note
 
-`main.jsx` redirects **`*.azurestaticapps.net`** to a fixed production IAM URL (preserving query string for handoff). Adjust if your production domain differs.
+`main.jsx` redirects **`*.azurestaticapps.net`** hostnames to `https://iam.dizzaroo.com` (preserving query string so `handoffCode` is not lost). Update this if your production domain changes.
 
 ---
 
@@ -222,35 +269,53 @@ Switching scope updates visible nav items; selecting an app sets **`scope === 'a
 
 ### `apiClient` (`src/lib/apiClient.js`)
 
-- **Base URL**: `${VITE_API_URL}/api` (see `config/env.js`).
-- **Auth**: `Authorization: Bearer <platform_token>` when token is present and valid.
-- **Cookies**: `withCredentials: true` for cookie-based session flows.
-- **401**: Clears stored user/token; in non-dev environments redirects to **`${VITE_HUB_URL}/login`** (unless dev-mode guards apply).
+- **Base URL**: determined by `getAxiosBaseURL()` in `config/env.js` — `/api` (same-origin proxy) in dev, `${VITE_API_URL}/api` in production.
+- **Auth**: session is entirely **cookie-based** (`withCredentials: true`). There is no `Authorization` header injected; the HttpOnly `access_token` cookie is sent automatically on every request to the API origin.
+- **Request interceptor**: generates a `X-Request-Id` UUID, attaches it as a header, records `startedAt` via `performance.now()`, and calls `logger.info` (redacting sensitive fields).
+- **Response interceptor**: logs `statusCode` and `durationMs`; on **401** clears `platform_user` from `localStorage` and redirects to Hub login in non-dev environments.
+- **Error logging**: uses `lib/logger.js` — a browser-side structured logger that emits `[UI_LOG]` console entries with `{ timestamp, userId, route, level, message, metadata }`. Sensitive fields (`password`, `token`, `secret`, `authorization`, `cookie`) are redacted up to depth 4.
 
 ### Service modules (by feature)
 
 | Module | File | Purpose |
 |--------|------|---------|
-| **ABAC** | `features/abac/api/abacService.js` | Hub/app attributes, classifications, global/app policies, evaluation, audit, coverage gaps, applications list (`/v1/...` paths under API base). |
-| **Users (admin)** | `features/users/api/userService.js` | User listing, assignments, CRUD-style operations via `/users` routes. |
+| **ABAC** | `features/abac/api/abacService.js` | Hub/app attribute definitions, user attributes, resource classifications, global/app policies (including status, versions, rollback), evaluation (`/v1/evaluate/:appKey`), audit logs + stats, coverage gaps, applications list. All calls use `/v1/...` paths. |
+| **Access requests** | `features/access-requests/api/accessRequestService.js` | Full `/access-requests` CRUD — create, list (all or by user), get, update, approve, reject, cancel, delete, stats. Class-based service; reads current user from `localStorage`. |
+| **Users (admin)** | `features/users/api/userService.js` | User listing, assignments, CRUD via `/users` routes. |
 | **Profile** | `features/profile/api/profileService.js` | Current user `/users/me/...` endpoints. |
 | **Resources** | `features/resources/api/resourceService.js` | `/resources` CRUD and application linkage. |
 | **Applications** | `features/applications/api/applicationService.js` | `/applications` reads for non-ABAC flows. |
-| **Access requests** | `features/access-requests/api/accessRequestService.js` | `/access-requests` when those flows are wired in the UI. |
 | **Roles / permissions** | `features/roles/api/*` | Legacy or auxiliary RBAC helpers. |
 
-**Convention:** Many backend responses use envelopes like `{ success, data }`. Components and React Query `queryFn`s sometimes **normalize** nested `data` (see comments in `DashboardPage.jsx` for applications).
+**Convention:** Backend responses use envelopes like `{ success, data }`. Components and React Query `queryFn`s normalize nested `data` where needed (e.g. `normalizeApplicationsList` in `DashboardPage.jsx`).
+
+### Key `abacService` methods
+
+| Method | Endpoint |
+|--------|---------|
+| `getApplications()` | `GET /v1/abac/applications` |
+| `listGlobalPolicies(params)` | `GET /v1/global-policies` |
+| `setGlobalPolicyStatus(id, status)` | `PATCH /v1/global-policies/:id/status` |
+| `getGlobalPolicyVersions(id)` | `GET /v1/global-policies/:id/versions` |
+| `rollbackGlobalPolicy(id, version)` | `POST /v1/global-policies/:id/rollback/:version` |
+| `rollbackAppPolicy(appKey, id, version)` | `POST /v1/apps/:appKey/policies/:id/rollback/:version` |
+| `evaluate(appKey, data)` | `POST /v1/evaluate/:appKey` |
+| `listAuditLogs(appKey, params)` | `GET /v1/apps/:appKey/audit` |
+| `getAuditStats(appKey, params)` | `GET /v1/apps/:appKey/audit/stats` |
+| `getCoverageGaps(appKey)` | `GET /v1/apps/:appKey/coverage-gaps` |
 
 ---
 
 ## Authentication and session
 
-1. **Hub handoff (preferred):** User finishes login in Hub; Hub navigates to IAM with **`?handoffCode=`**. `initializeAuthFromUrl` exchanges it for a token (and user) via **`POST /api/auth/handoff/exchange`**, stores **`platform_token`** and **`platform_user`** in `localStorage`, then strips query params.
-2. **Legacy URL tokens:** `accessToken` / `access_token` + optional base64 `user` still supported for backward compatibility.
-3. **Session validation:** If token and user exist in storage, **`AuthProvider`** may trust them; otherwise it calls **`POST /api/auth/verify`** to hydrate/validate.
-4. **Logout:** **`POST /auth/logout`** (best-effort), clear storage, redirect to **`${VITE_HUB_URL}/logout`**.
+1. **Hub handoff:** User finishes login in Hub; Hub navigates to IAM with **`?handoffCode=`** in the URL. Before React mounts, `initializeAuthFromUrl` (`features/auth/utils/authInit.js`) reads the code (query string or hash fallback), POSTs it to **`/api/auth/handoff/exchange`** using a native `fetch` with `credentials: "include"` so the server can set **HttpOnly cookies** (`access_token`, `refresh_token`). The user object from the response is cached in `localStorage` under `platform_user` for instant UI render. The `handoffCode` param is then stripped via `history.replaceState`.
+2. **No legacy token support:** URL `accessToken` / `access_token` params are no longer accepted. All session state flows through HttpOnly cookies.
+3. **Session validation on mount:** `AuthProvider` first calls **`POST /api/auth/refresh`** (best-effort, renews cookies silently), then **`POST /api/auth/verify`** to get the canonical user object. On failure it clears `localStorage` and redirects to `${VITE_HUB_URL}/login` (skipped in dev mode / `dev_mode` flag).
+4. **Logout:** Best-effort **`POST /auth/logout`**, clears `platform_user` from `localStorage`, redirects to `${VITE_HUB_URL}/logout`.
 
-Token keys are defined in **`authInit.js`** (`PLATFORM_TOKEN_KEY` = `platform_token`).
+Storage key constants (from `authInit.js`):
+- `PLATFORM_TOKEN_KEY` = `"access_token"` (kept for reading cookies; not injected into headers)
+- `PLATFORM_USER_KEY` = `"platform_user"` (cached user object for UI only)
 
 ---
 
@@ -260,12 +325,21 @@ Vite exposes only variables prefixed with **`VITE_`**. Copy **`env.example`** to
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| **`VITE_API_URL`** | Yes (for real API) | Origin of the backend **without** `/api` suffix (client appends `/api`). |
-| **`VITE_HUB_URL`** | Yes | Hub base URL for redirects and “Back to Hub”. |
-| **`VITE_GOOGLE_CLIENT_ID`** | **Yes at runtime** | Google OAuth client ID; app shows an error if missing/empty. |
-| Others in `env.example` | Optional | Feature flags, naming, dev toggles — use as needed; not all may be read in code. |
+| **`VITE_API_URL`** | Yes (production) | Backend origin **without** trailing slash or `/api` (e.g. `https://api.example.com`). In dev, `apiClient` uses `/api` (same-origin Vite proxy) so cookies work; `VITE_API_URL` is still used by `getApiBaseURL()` for absolute URL construction. |
+| **`VITE_HUB_URL`** | Yes | Hub base URL for redirects and “Back to Hub”. Falls back to `https://hub.dizzaroo.com` in production if unset or invalid; dev falls back to `http://localhost:5000`. |
+| **`VITE_GOOGLE_CLIENT_ID`** | **Yes at runtime** | Google OAuth Web client ID. Missing or empty causes the app to render a configuration error page instead of the UI. |
+| `VITE_DEV_MODE` | Optional | Set to `”true”` to suppress Hub login redirects on 401 (same as `localStorage.getItem(“dev_mode”) === “true”`). |
+| Others in `env.example` | Optional | Feature flags, naming toggles — effective only if read in source (search `import.meta.env.VITE_`). |
 
-**Local dev proxy:** `vite.config.js` proxies **`/api`** to `process.env.VITE_API_URL` or **`http://localhost:4001`** by default — align with your local backend port.
+**`config/env.js` URL helpers:**
+
+| Function | Returns |
+|----------|---------|
+| `getApiBaseURL()` | Absolute API origin (no `/api`) — uses `VITE_API_URL`, falls back to `http://localhost:4001` in dev |
+| `getAxiosBaseURL()` | Axios `baseURL` — `/api` (same-origin) in dev, `${VITE_API_URL}/api` in production |
+| `getValidHubUrl()` | Hub URL validated against `http(s)://` prefix; guards against unexpanded pipeline variable strings |
+
+**Local dev proxy:** `vite.config.js` proxies **`/api`** to `VITE_API_URL` or **`http://localhost:4001`** — this is what makes HttpOnly cookies work cross-origin in dev (cookies are set on the same `:5001` origin the browser sees).
 
 ---
 
