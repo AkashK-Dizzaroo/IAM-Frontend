@@ -30,6 +30,7 @@ const DATA_TYPE_COLORS = {
 const EMPTY_FORM = {
   key: '',
   displayName: '',
+  namespace: 'subject',
   dataType: 'string',
   constraints: {},
   isRequired: false,
@@ -63,6 +64,7 @@ export function HubAttributesPage() {
     setFormData({
       key: def.key || '',
       displayName: def.displayName || '',
+      namespace: def.namespace || 'subject',
       dataType: def.dataType || 'string',
       constraints: def.constraints || {},
       isRequired: def.isRequired || false,
@@ -397,6 +399,25 @@ export function HubAttributesPage() {
                   disabled={isEditing}
                   placeholder="e.g. department"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Namespace</Label>
+                <Input
+                  value={formData.namespace}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      namespace: e.target.value.toLowerCase().replace(/\s/g, ''),
+                    }))
+                  }
+                  className="font-mono"
+                  disabled={isEditing}
+                  placeholder="e.g. subject"
+                />
+                {isEditing && (
+                  <p className="text-xs text-gray-400">Cannot be changed after creation.</p>
+                )}
               </div>
 
               <div className="space-y-1.5">

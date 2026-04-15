@@ -20,12 +20,12 @@ function EffectBadge({ effect }) {
     <span className={`
       inline-flex items-center px-2 py-0.5 rounded-full
       text-[10px] font-semibold uppercase tracking-wide
-      ${effect === 'PERMIT'
+      ${(effect === 'PERMIT' || effect === 'ALLOW')
         ? 'bg-green-100 text-green-700'
         : 'bg-red-100 text-red-700'
       }
     `}>
-      {effect}
+      {effect === 'PERMIT' || effect === 'ALLOW' ? 'ALLOW' : 'DENY'}
     </span>
   );
 }
@@ -120,8 +120,13 @@ function validatePolicyForm(form) {
 // ConditionRow
 // ---------------------------------------------------------------------------
 
-function ConditionRow({ condition, onChange, onRemove, canRemove, disabled }) {
+const ARRAY_OPS = new Set(['in', 'not_in']);
+
+function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attributeDefs = [] }) {
   const noValue = ['exists', 'not_exists'].includes(condition.op);
+  const isArrayOp = ARRAY_OPS.has(condition.op);
+
+  const filteredAttrs = attributeDefs.filter(attr => attr.namespace === condition.namespace);
 
   return (
     <div className="
@@ -144,25 +149,148 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled }) {
         ))}
       </select>
 
-      <input
-        disabled={disabled}
-        type="text"
-        placeholder="attribute.key"
-        value={condition.key}
-        onChange={e => onChange('key', e.target.value)}
-        className="
-          flex-1 min-w-0 text-xs border border-gray-200
-          rounded px-2 py-1.5 font-mono
-          bg-white text-gray-900 placeholder-gray-400
-          focus:outline-none focus:ring-1
-          focus:ring-primary/30 focus:border-primary
-        "
-      />
+      {filteredAttrs.length > 0 ? (
+        <select
+          disabled={disabled}
+          value={condition.key}
+          onChange={e => onChange('key', e.target.value)}
+          className="
+            flex-1 min-w-0 text-xs border border-gray-200
+            rounded px-2 py-1.5 font-mono
+            bg-white text-gray-900
+            focus:outline-none focus:ring-1
+            focus:ring-primary/30 focus:border-primary
+          "
+        >
+          <option value="">Select attribute...</option>
+          {filteredAttrs.map(attr => (
+            <option key={attr.key} value={attr.key}>
+              {attr.displayName || attr.key}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          disabled={disabled}
+          type="text"
+          placeholder="attribute.key"
+          value={condition.key}
+          onChange={e => onChange('key', e.target.value)}
+          className="
+            flex-1 min-w-0 text-xs border border-gray-200
+            rounded px-2 py-1.5 font-mono
+            bg-white text-gray-900 placeholder-gray-400
+            focus:outline-none focus:ring-1
+            focus:ring-primary/30 focus:border-primary
+          "
+        />
+      )}
+
+      {!noValue && (() => {
+        const attr = filteredAttrs.find(a => a.key === condition.key);
+        let constraints = attr?.constraints || {};
+        if (typeof constraints === 'string') {
+          try { constraints = JSON.parse(constraints); } catch (e) { constraints = {}; }
+        }
+        
+        const allowedValues = constraints.allowedValues;
+        const dataType = attr?.dataType;
+
+        if (allowedValues && Array.isArray(allowedValues) && !isArrayOp) {
+          return (
+            <select
+              disabled={disabled}
+              value={condition.value ?? ''}
+              onChange={e => onChange('value', e.target.value)}
+              className="
+                flex-1 min-w-0 text-xs border border-gray-200
+                rounded px-2 py-1.5
+                bg-white text-gray-900
+                focus:outline-none focus:ring-1
+                focus:ring-primary/30 focus:border-primary
+              "
+            >
+              <option value="">Select value...</option>
+              {allowedValues.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          );
+        }
+
+        if (dataType === 'boolean' && !isArrayOp) {
+          return (
+            <select
+              disabled={disabled}
+              value={String(condition.value ?? '')}
+              onChange={e => onChange('value', e.target.value === 'true')}
+              className="
+                flex-1 min-w-0 text-xs border border-gray-200
+                rounded px-2 py-1.5
+                bg-white text-gray-900
+                focus:outline-none focus:ring-1
+                focus:ring-primary/30 focus:border-primary
+              "
+            >
+              <option value="">Select...</option>
+              <option value="true">True</option>
+              <option value="false">False</option>
+            </select>
+          );
+        }
+
+        return (
+          <input
+            disabled={disabled}
+            type={dataType === 'number' ? 'number' : 'text'}
+            maxLength={constraints.maxLength}
+            pattern={constraints.pattern}
+            placeholder={isArrayOp ? 'val1, val2, … or @namespace.attr' : 'value or @namespace.attr'}
+            title={isArrayOp
+              ? 'Comma-separated list of values, or @namespace.attr to reference another attribute'
+              : constraints.pattern ? `Pattern: ${constraints.pattern}` : 'Use @namespace.attr (e.g. @subject.study_access) to compare against another attribute'
+            }
+            value={
+              isArrayOp && Array.isArray(condition.value)
+                ? condition.value.join(', ')
+                : condition.value ?? ''
+            }
+            onChange={e => {
+              const raw = e.target.value;
+              if (isArrayOp) {
+                const arr = raw.split(',').map(s => s.trim()).filter(Boolean);
+                onChange('value', raw.trimEnd().endsWith(',') ? [...arr, ''] : arr);
+              } else {
+                onChange('value', raw);
+              }
+            }}
+            className="
+              flex-1 min-w-0 text-xs border border-gray-200
+              rounded px-2 py-1.5 font-mono
+              bg-white text-gray-900 placeholder-gray-400
+              focus:outline-none focus:ring-1
+              focus:ring-primary/30 focus:border-primary
+            "
+          />
+        );
+      })()}
 
       <select
         disabled={disabled}
         value={condition.op}
-        onChange={e => onChange('op', e.target.value)}
+        onChange={e => {
+          const newOp = e.target.value;
+          const switchingToArray = ARRAY_OPS.has(newOp) && !isArrayOp;
+          const switchingFromArray = !ARRAY_OPS.has(newOp) && isArrayOp;
+          if (switchingToArray) {
+            const cur = condition.value;
+            const arr = cur ? [cur] : [];
+            onChange('value', arr);
+          } else if (switchingFromArray) {
+            onChange('value', Array.isArray(condition.value) ? condition.value.join(', ') : '');
+          }
+          onChange('op', newOp);
+        }}
         className="
           text-xs border border-gray-200 rounded px-2 py-1.5
           bg-white text-gray-700 focus:outline-none
@@ -174,33 +302,14 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled }) {
         ))}
       </select>
 
-      {!noValue && (
-        <input
-          disabled={disabled}
-          type="text"
-          placeholder="value"
-          value={condition.value ?? ''}
-          onChange={e => onChange('value', e.target.value)}
-          className="
-            flex-1 min-w-0 text-xs border border-gray-200
-            rounded px-2 py-1.5 font-mono
-            bg-white text-gray-900 placeholder-gray-400
-            focus:outline-none focus:ring-1
-            focus:ring-primary/30 focus:border-primary
-          "
-        />
-      )}
-
       <button
         type="button"
         onClick={onRemove}
         disabled={disabled || !canRemove}
         className="
           w-6 h-6 flex items-center justify-center
-          rounded text-gray-400
-          hover:text-red-500 hover:bg-red-50
-          disabled:opacity-30 disabled:cursor-not-allowed
-          transition-colors flex-shrink-0
+          rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50
+          transition-colors disabled:opacity-0
         "
       >
         ×
@@ -250,7 +359,7 @@ function ConditionJsonPreview({ tree }) {
 // ConditionTreeBuilder
 // ---------------------------------------------------------------------------
 
-function ConditionTreeBuilder({ value, onChange, disabled }) {
+function ConditionTreeBuilder({ value, onChange, disabled, attributeDefs }) {
   const tree = normalizeConditions(value);
 
   const updateOperator = (operator) => {
@@ -326,6 +435,7 @@ function ConditionTreeBuilder({ value, onChange, disabled }) {
             key={index}
             condition={cond}
             disabled={disabled}
+            attributeDefs={attributeDefs}
             onChange={(field, val) => updateCondition(index, field, val)}
             onRemove={() => removeCondition(index)}
             canRemove={tree.conditions.length > 1}
@@ -352,123 +462,9 @@ function ConditionTreeBuilder({ value, onChange, disabled }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// TargetSection
-// ---------------------------------------------------------------------------
+// TargetSection and ObligationsSection removed as per requirements
 
-function TargetSection({ value, onChange, disabled }) {
-  const [open, setOpen] = useState(false);
-  const target = value ?? {};
 
-  const updateField = (field, val) => {
-    if (disabled) return;
-    const arr = val.split(',').map(s => s.trim()).filter(Boolean);
-    onChange({ ...target, [field]: arr.length ? arr : undefined });
-  };
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="
-          flex items-center gap-2 text-xs font-medium
-          text-gray-500 uppercase tracking-wider
-          hover:text-gray-700 transition-colors
-        "
-      >
-        <span className={`transition-transform duration-150
-          ${open ? 'rotate-90' : ''}`}>▶</span>
-        Target (optional)
-      </button>
-      {open && (
-        <div className="mt-3 space-y-3 pl-4 border-l-2 border-gray-100">
-          <p className="text-xs text-gray-500">
-            Restrict which requests this policy evaluates.
-            Leave empty to apply to all requests.
-          </p>
-          {[
-            { field: 'subjectTypes',  label: 'Subject Types' },
-            { field: 'resourceTypes', label: 'Resource Types' },
-            { field: 'actions',       label: 'Actions' },
-          ].map(({ field, label }) => (
-            <div key={field} className="space-y-1">
-              <Label className="text-xs text-gray-500">
-                {label}
-              </Label>
-              <Input
-                disabled={disabled}
-                placeholder="Comma-separated values..."
-                value={(target[field] ?? []).join(', ')}
-                onChange={e => updateField(field, e.target.value)}
-                className="text-sm font-mono disabled:bg-gray-50 disabled:cursor-not-allowed"
-              />
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ObligationsSection
-// ---------------------------------------------------------------------------
-
-function ObligationsSection({ value, onChange, disabled }) {
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleChange = (text) => {
-    if (disabled) return;
-    onChange(text);
-    try {
-      JSON.parse(text || '[]');
-      setError('');
-    } catch {
-      setError('Invalid JSON');
-    }
-  };
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="
-          flex items-center gap-2 text-xs font-medium
-          text-gray-500 uppercase tracking-wider
-          hover:text-gray-700 transition-colors
-        "
-      >
-        <span className={`transition-transform duration-150
-          ${open ? 'rotate-90' : ''}`}>▶</span>
-        Obligations (optional)
-      </button>
-      {open && (
-        <div className="mt-3 pl-4 border-l-2 border-gray-100">
-          <p className="text-xs text-gray-500 mb-2">
-            Actions to execute when this policy permits.
-            Must be a valid JSON array.
-          </p>
-          <Textarea
-            disabled={disabled}
-            value={value}
-            onChange={e => handleChange(e.target.value)}
-            className={`text-xs font-mono resize-none disabled:bg-gray-50 disabled:cursor-not-allowed ${
-              error ? 'border-red-300' : ''
-            }`}
-            rows={4}
-            placeholder='[]'
-          />
-          {error && (
-            <p className="text-xs text-red-500 mt-1">{error}</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // VersionHistory
@@ -697,7 +693,7 @@ function PolicyListPanel({
 // PolicyEditorPanel
 // ---------------------------------------------------------------------------
 
-function PolicyEditorPanel({ policy, versions, onDelete, appKey }) {
+function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -710,10 +706,8 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey }) {
         name:        policy.name,
         description: policy.description ?? '',
         priority:    policy.priority,
-        effect:      policy.effect,
+        effect:      policy.effect === 'PERMIT' ? 'ALLOW' : policy.effect,
         conditions:  policy.conditions,
-        target:      policy.target ?? {},
-        obligations: JSON.stringify(policy.obligations ?? [], null, 2),
       });
     }
   }, [policy?.id]);
@@ -722,10 +716,8 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey }) {
     form.name !== policy.name ||
     form.description !== (policy.description ?? '') ||
     form.priority !== policy.priority ||
-    form.effect !== policy.effect ||
-    JSON.stringify(form.conditions) !== JSON.stringify(policy.conditions) ||
-    JSON.stringify(form.target) !== JSON.stringify(policy.target ?? {}) ||
-    form.obligations !== JSON.stringify(policy.obligations ?? [], null, 2)
+    form.effect !== (policy.effect === 'PERMIT' ? 'ALLOW' : policy.effect) ||
+    JSON.stringify(form.conditions) !== JSON.stringify(policy.conditions)
   );
 
   const updateMutation = useMutation({
@@ -800,24 +792,12 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey }) {
       return;
     }
 
-    let parsedObligations = [];
-    try {
-      parsedObligations = JSON.parse(form.obligations || '[]');
-    } catch {
-      toast({
-        title: 'Invalid JSON in obligations',
-        variant: 'destructive'
-      });
-      return;
-    }
     updateMutation.mutate({
       name:        form.name,
       description: form.description || undefined,
-      priority:    parseInt(form.priority) || 100,
+      priority:    parseInt(form.priority) || 10,
       effect:      form.effect,
       conditions:  form.conditions,
-      target:      form.target,
-      obligations: parsedObligations,
     });
   };
 
@@ -862,12 +842,8 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey }) {
                     name:        policy.name,
                     description: policy.description ?? '',
                     priority:    policy.priority,
-                    effect:      policy.effect,
+                    effect:      policy.effect === 'PERMIT' ? 'ALLOW' : policy.effect,
                     conditions:  policy.conditions,
-                    target:      policy.target ?? {},
-                    obligations: JSON.stringify(
-                      policy.obligations ?? [], null, 2
-                    ),
                   })}
                 >
                   Discard
@@ -959,7 +935,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey }) {
               <Input
                 type="number"
                 min={1}
-                max={999}
+                max={10}
                 value={form.priority}
                 disabled={isArchived}
                 onChange={e => setForm(f => ({
@@ -977,7 +953,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey }) {
                 Effect
               </Label>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {['PERMIT', 'DENY'].map(eff => (
+                {['ALLOW', 'DENY'].map(eff => (
                   <button
                     key={eff}
                     type="button"
@@ -988,7 +964,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey }) {
                       transition-colors
                       disabled:opacity-50 disabled:cursor-not-allowed
                       ${form.effect === eff
-                        ? eff === 'PERMIT'
+                        ? eff === 'ALLOW'
                           ? 'bg-green-600 text-white'
                           : 'bg-red-600 text-white'
                         : 'bg-white text-gray-600 hover:bg-gray-50'
@@ -1017,24 +993,11 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey }) {
               value={form.conditions}
               onChange={conditions => setForm(f => ({ ...f, conditions }))}
               disabled={isArchived}
+              attributeDefs={attributeDefs}
             />
           </div>
 
-          <Separator className="my-2" />
 
-          <TargetSection
-            value={form.target}
-            onChange={target => setForm(f => ({ ...f, target }))}
-            disabled={isArchived}
-          />
-
-          <Separator className="my-2" />
-
-          <ObligationsSection
-            value={form.obligations}
-            onChange={obligations => setForm(f => ({ ...f, obligations }))}
-            disabled={isArchived}
-          />
 
           <Separator className="my-2" />
 
@@ -1055,39 +1018,26 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey }) {
 // PolicyCreatePanel
 // ---------------------------------------------------------------------------
 
-function PolicyCreatePanel({ onClose, onCreated, appKey, createTitle = 'New Global Policy' }) {
+function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose, onCreated, attributeDefs }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState({
     name: '',
     description: '',
-    priority: 100,
+    priority: 10,
     effect: 'DENY',
     conditions: DEFAULT_CONDITIONS,
-    target: {},
-    obligations: '[]',
   });
 
   const createMutation = useMutation({
     mutationFn: () => {
-      const errors = validatePolicyForm(form);
-      if (errors.length > 0) throw new Error(errors[0]);
-
-      let parsedObligations = [];
-      try {
-        parsedObligations = JSON.parse(form.obligations || '[]');
-      } catch {
-        throw new Error('Invalid JSON in obligations');
-      }
       return abacService.createAppPolicy(appKey, {
         name:        form.name,
         description: form.description || undefined,
-        priority:    parseInt(form.priority) || 100,
+        priority:    parseInt(form.priority) || 10,
         effect:      form.effect,
         conditions:  form.conditions,
-        target:      form.target,
-        obligations: parsedObligations,
       });
     },
     onSuccess: (res) => {
@@ -1153,9 +1103,8 @@ function PolicyCreatePanel({ onClose, onCreated, appKey, createTitle = 'New Glob
 
           <div className="flex items-start gap-4">
             <div className="space-y-1.5 w-32">
-              <Label>Priority</Label>
               <Input
-                type="number" min={1} max={999}
+                type="number" min={1} max={10}
                 value={form.priority}
                 onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
               />
@@ -1163,14 +1112,14 @@ function PolicyCreatePanel({ onClose, onCreated, appKey, createTitle = 'New Glob
             <div className="space-y-1.5">
               <Label>Effect</Label>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {['PERMIT', 'DENY'].map(eff => (
+                {['ALLOW', 'DENY'].map(eff => (
                   <button key={eff} type="button"
                     onClick={() => setForm(f => ({ ...f, effect: eff }))}
                     className={`
                       px-4 py-2 text-sm font-semibold
                       transition-colors
                       ${form.effect === eff
-                        ? eff === 'PERMIT'
+                        ? eff === 'ALLOW'
                           ? 'bg-green-600 text-white'
                           : 'bg-red-600 text-white'
                         : 'bg-white text-gray-600 hover:bg-gray-50'
@@ -1198,22 +1147,11 @@ function PolicyCreatePanel({ onClose, onCreated, appKey, createTitle = 'New Glob
             <ConditionTreeBuilder
               value={form.conditions}
               onChange={conditions => setForm(f => ({ ...f, conditions }))}
+              attributeDefs={attributeDefs}
             />
           </div>
 
-          <Separator />
 
-          <TargetSection
-            value={form.target}
-            onChange={target => setForm(f => ({ ...f, target }))}
-          />
-
-          <Separator />
-
-          <ObligationsSection
-            value={form.obligations}
-            onChange={obligations => setForm(f => ({ ...f, obligations }))}
-          />
         </div>
       </div>
     </div>
@@ -1300,9 +1238,9 @@ function HubGlobalConfigTab({ appName }) {
                       <span className={`
                         flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full
                         text-[10px] font-bold uppercase tracking-wide
-                        ${policy.effect === 'PERMIT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}
+                        ${(policy.effect === 'PERMIT' || policy.effect === 'ALLOW') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}
                       `}>
-                        {policy.effect}
+                        {policy.effect === 'PERMIT' || policy.effect === 'ALLOW' ? 'ALLOW' : 'DENY'}
                       </span>
                       <span className="flex-1 text-sm font-medium text-gray-800 truncate">
                         {policy.name}
@@ -1446,6 +1384,22 @@ function AppPoliciesContent({ appKey, appName }) {
   const selectedPolicy =
     selectedData?.data?.data ?? selectedData?.data ?? null;
 
+  const { data: appAttrsData } = useQuery({
+    queryKey: ['abac', 'appAttributes', appKey],
+    queryFn: () => abacService.listAppAttrDefs(appKey),
+    staleTime: 60_000,
+  });
+
+  const { data: hubAttrsData } = useQuery({
+    queryKey: ['abac', 'hubAttributes'],
+    queryFn: () => abacService.listHubAttrDefs(),
+    staleTime: 60_000,
+  });
+
+  const hubDefs = hubAttrsData?.data?.data ?? hubAttrsData?.data ?? [];
+  const appDefs = appAttrsData?.data?.data ?? appAttrsData?.data ?? [];
+  const attributeDefs = [...hubDefs, ...appDefs];
+
   const { data: versionsData } = useQuery({
     queryKey: ['abac', 'appPolicyVersions', appKey, selectedPolicyId],
     queryFn: () => abacService.getAppPolicyVersions(appKey, selectedPolicyId),
@@ -1525,6 +1479,7 @@ function AppPoliciesContent({ appKey, appName }) {
             <PolicyCreatePanel
               appKey={appKey}
               createTitle="New App Policy"
+              attributeDefs={attributeDefs}
               onClose={() => setShowCreatePanel(false)}
               onCreated={(id) => {
                 setSelectedPolicyId(id);
@@ -1538,6 +1493,7 @@ function AppPoliciesContent({ appKey, appName }) {
               appKey={appKey}
               policy={selectedPolicy}
               versions={versions}
+              attributeDefs={attributeDefs}
               onDelete={() => {
                 setSelectedPolicyId(null);
               }}
