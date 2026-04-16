@@ -60,6 +60,33 @@ class ResourceService {
     }
   }
 
+  async listAttributeDefinitions() {
+    try {
+      const response = await apiClient.get('/resources/attribute-definitions');
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getResourceAttributes(resourceId) {
+    try {
+      const response = await apiClient.get(`/resources/${resourceId}/attributes`);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async upsertResourceAttributes(resourceId, entries) {
+    try {
+      const response = await apiClient.post(`/resources/${resourceId}/attributes`, entries);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
   async setClassification(resourceId, applicationId, classificationId) {
     try {
       const response = await apiClient.patch(

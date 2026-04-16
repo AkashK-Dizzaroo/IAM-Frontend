@@ -127,13 +127,114 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
   const isArrayOp = ARRAY_OPS.has(condition.op);
 
   const filteredAttrs = attributeDefs.filter(attr => attr.namespace === condition.namespace);
+  // When operator switches, coerce value type
+  const handleOpChange = (e) => {
+    const newOp = e.target.value;
+    const switchingToArray = ARRAY_OPS.has(newOp) && !isArrayOp;
+    const switchingFromArray = !ARRAY_OPS.has(newOp) && isArrayOp;
+    if (switchingToArray) {
+      const cur = condition.value;
+      onChange('value', cur ? [cur] : []);
+    } else if (switchingFromArray) {
+      onChange('value', Array.isArray(condition.value) ? condition.value.join(', ') : '');
+    }
+    onChange('op', newOp);
+  };
+
+  // Resolve the selected attr definition for smart value inputs
+  const selectedAttr = filteredAttrs.find(a => a.key === condition.key);
+  let constraints = selectedAttr?.constraints || {};
+  if (typeof constraints === 'string') {
+    try { constraints = JSON.parse(constraints); } catch { constraints = {}; }
+  }
+  const allowedValues = constraints.allowedValues;
+  const dataType = selectedAttr?.dataType;
+
+  const valueInput = !noValue && (() => {
+    if (allowedValues && Array.isArray(allowedValues) && !isArrayOp) {
+      return (
+        <select
+          disabled={disabled}
+          value={condition.value ?? ''}
+          onChange={e => onChange('value', e.target.value)}
+          className="
+            flex-1 min-w-0 text-xs border border-gray-200
+            rounded px-2 py-1.5
+            bg-white text-gray-900
+            focus:outline-none focus:ring-1
+            focus:ring-primary/30 focus:border-primary
+          "
+        >
+          <option value="">Select value...</option>
+          {allowedValues.map(v => (
+            <option key={v} value={v}>{v}</option>
+          ))}
+        </select>
+      );
+    }
+    if (dataType === 'boolean' && !isArrayOp) {
+      return (
+        <select
+          disabled={disabled}
+          value={String(condition.value ?? '')}
+          onChange={e => onChange('value', e.target.value === 'true')}
+          className="
+            flex-1 min-w-0 text-xs border border-gray-200
+            rounded px-2 py-1.5
+            bg-white text-gray-900
+            focus:outline-none focus:ring-1
+            focus:ring-primary/30 focus:border-primary
+          "
+        >
+          <option value="">Select...</option>
+          <option value="true">True</option>
+          <option value="false">False</option>
+        </select>
+      );
+    }
+    return (
+      <input
+        disabled={disabled}
+        type={dataType === 'number' ? 'number' : 'text'}
+        maxLength={constraints.maxLength}
+        pattern={constraints.pattern}
+        placeholder={isArrayOp ? 'val1, val2, … or @namespace.attr' : 'value or @namespace.attr'}
+        title={isArrayOp
+          ? 'Comma-separated list of values, or @namespace.attr to reference another attribute'
+          : constraints.pattern ? `Pattern: ${constraints.pattern}` : 'Use @namespace.attr (e.g. @subject.study_access) to compare against another attribute'
+        }
+        value={
+          isArrayOp && Array.isArray(condition.value)
+            ? condition.value.join(', ')
+            : condition.value ?? ''
+        }
+        onChange={e => {
+          const raw = e.target.value;
+          if (isArrayOp) {
+            const arr = raw.split(',').map(s => s.trim()).filter(Boolean);
+            onChange('value', raw.trimEnd().endsWith(',') ? [...arr, ''] : arr);
+          } else {
+            onChange('value', raw);
+          }
+        }}
+        className="
+          flex-1 min-w-0 text-xs border border-gray-200
+          rounded px-2 py-1.5 font-mono
+          bg-white text-gray-900 placeholder-gray-400
+          focus:outline-none focus:ring-1
+          focus:ring-primary/30 focus:border-primary
+        "
+      />
+    );
+  })();
 
   return (
     <div className="
-      flex items-center gap-2 p-2.5 rounded-lg
+      flex items-start gap-2 p-2.5 rounded-lg
       bg-gray-50 border border-gray-200
       group
     ">
+      {/* 1. Namespace */}
       <select
         disabled={disabled}
         value={condition.namespace}
@@ -142,6 +243,7 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
           text-xs border border-gray-200 rounded px-2 py-1.5
           bg-white text-gray-700 focus:outline-none
           focus:ring-1 focus:ring-primary/30 focus:border-primary
+          shrink-0
         "
       >
         {NAMESPACES.map(ns => (
@@ -149,6 +251,7 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
         ))}
       </select>
 
+      {/* 2. Attribute key — dropdown when attrs exist, text fallback with hint when empty */}
       {filteredAttrs.length > 0 ? (
         <select
           disabled={disabled}
@@ -170,131 +273,37 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
           ))}
         </select>
       ) : (
-        <input
-          disabled={disabled}
-          type="text"
-          placeholder="attribute.key"
-          value={condition.key}
-          onChange={e => onChange('key', e.target.value)}
-          className="
-            flex-1 min-w-0 text-xs border border-gray-200
-            rounded px-2 py-1.5 font-mono
-            bg-white text-gray-900 placeholder-gray-400
-            focus:outline-none focus:ring-1
-            focus:ring-primary/30 focus:border-primary
-          "
-        />
-      )}
-
-      {!noValue && (() => {
-        const attr = filteredAttrs.find(a => a.key === condition.key);
-        let constraints = attr?.constraints || {};
-        if (typeof constraints === 'string') {
-          try { constraints = JSON.parse(constraints); } catch (e) { constraints = {}; }
-        }
-        
-        const allowedValues = constraints.allowedValues;
-        const dataType = attr?.dataType;
-
-        if (allowedValues && Array.isArray(allowedValues) && !isArrayOp) {
-          return (
-            <select
-              disabled={disabled}
-              value={condition.value ?? ''}
-              onChange={e => onChange('value', e.target.value)}
-              className="
-                flex-1 min-w-0 text-xs border border-gray-200
-                rounded px-2 py-1.5
-                bg-white text-gray-900
-                focus:outline-none focus:ring-1
-                focus:ring-primary/30 focus:border-primary
-              "
-            >
-              <option value="">Select value...</option>
-              {allowedValues.map(v => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-          );
-        }
-
-        if (dataType === 'boolean' && !isArrayOp) {
-          return (
-            <select
-              disabled={disabled}
-              value={String(condition.value ?? '')}
-              onChange={e => onChange('value', e.target.value === 'true')}
-              className="
-                flex-1 min-w-0 text-xs border border-gray-200
-                rounded px-2 py-1.5
-                bg-white text-gray-900
-                focus:outline-none focus:ring-1
-                focus:ring-primary/30 focus:border-primary
-              "
-            >
-              <option value="">Select...</option>
-              <option value="true">True</option>
-              <option value="false">False</option>
-            </select>
-          );
-        }
-
-        return (
+        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
           <input
             disabled={disabled}
-            type={dataType === 'number' ? 'number' : 'text'}
-            maxLength={constraints.maxLength}
-            pattern={constraints.pattern}
-            placeholder={isArrayOp ? 'val1, val2, … or @namespace.attr' : 'value or @namespace.attr'}
-            title={isArrayOp
-              ? 'Comma-separated list of values, or @namespace.attr to reference another attribute'
-              : constraints.pattern ? `Pattern: ${constraints.pattern}` : 'Use @namespace.attr (e.g. @subject.study_access) to compare against another attribute'
-            }
-            value={
-              isArrayOp && Array.isArray(condition.value)
-                ? condition.value.join(', ')
-                : condition.value ?? ''
-            }
-            onChange={e => {
-              const raw = e.target.value;
-              if (isArrayOp) {
-                const arr = raw.split(',').map(s => s.trim()).filter(Boolean);
-                onChange('value', raw.trimEnd().endsWith(',') ? [...arr, ''] : arr);
-              } else {
-                onChange('value', raw);
-              }
-            }}
+            type="text"
+            placeholder="attribute.key"
+            value={condition.key}
+            onChange={e => onChange('key', e.target.value)}
             className="
-              flex-1 min-w-0 text-xs border border-gray-200
+              w-full text-xs border border-gray-200
               rounded px-2 py-1.5 font-mono
               bg-white text-gray-900 placeholder-gray-400
               focus:outline-none focus:ring-1
               focus:ring-primary/30 focus:border-primary
             "
           />
-        );
-      })()}
+          <span className="text-[10px] text-amber-600 leading-tight">
+            No attributes defined for &quot;{condition.namespace}&quot; — define them in App Attributes first
+          </span>
+        </div>
+      )}
 
+      {/* 3. Operator — NOW before value for natural key → op → value reading order */}
       <select
         disabled={disabled}
         value={condition.op}
-        onChange={e => {
-          const newOp = e.target.value;
-          const switchingToArray = ARRAY_OPS.has(newOp) && !isArrayOp;
-          const switchingFromArray = !ARRAY_OPS.has(newOp) && isArrayOp;
-          if (switchingToArray) {
-            const cur = condition.value;
-            const arr = cur ? [cur] : [];
-            onChange('value', arr);
-          } else if (switchingFromArray) {
-            onChange('value', Array.isArray(condition.value) ? condition.value.join(', ') : '');
-          }
-          onChange('op', newOp);
-        }}
+        onChange={handleOpChange}
         className="
           text-xs border border-gray-200 rounded px-2 py-1.5
           bg-white text-gray-700 focus:outline-none
           focus:ring-1 focus:ring-primary/30 focus:border-primary
+          shrink-0
         "
       >
         {OPERATORS.map(op => (
@@ -302,12 +311,16 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
         ))}
       </select>
 
+      {/* 4. Value */}
+      {!noValue && valueInput}
+
+      {/* 5. Remove */}
       <button
         type="button"
         onClick={onRemove}
         disabled={disabled || !canRemove}
         className="
-          w-6 h-6 flex items-center justify-center
+          w-6 h-6 flex items-center justify-center shrink-0
           rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50
           transition-colors disabled:opacity-0
         "
@@ -834,6 +847,11 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
         <div className="flex items-center gap-2 flex-shrink-0 ml-4">
           {policy.status !== 'archived' && (
             <>
+              {isDirty && policy.status === 'active' && (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5 mr-1">
+                  Editing a live policy — changes take effect immediately on save
+                </div>
+              )}
               {isDirty && (
                 <Button
                   size="sm"
@@ -854,7 +872,11 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
                 onClick={handleSave}
                 disabled={updateMutation.isPending}
               >
-                {updateMutation.isPending ? 'Saving...' : 'Save Draft'}
+                {updateMutation.isPending
+                  ? 'Saving...'
+                  : policy.status === 'active'
+                  ? 'Save Changes'
+                  : 'Save Draft'}
               </Button>
             </>
           )}
@@ -975,6 +997,11 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
                   </button>
                 ))}
               </div>
+              {form.effect === 'DENY' && !isArchived && (
+                <p className="text-xs text-red-600 flex items-center gap-1 mt-1">
+                  ⚠ DENY policies block access even if other ALLOW policies match (unless a higher-priority ALLOW overrides).
+                </p>
+              )}
             </div>
           </div>
 
@@ -1026,7 +1053,7 @@ function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose,
     name: '',
     description: '',
     priority: 10,
-    effect: 'DENY',
+    effect: 'ALLOW',
     conditions: DEFAULT_CONDITIONS,
   });
 
@@ -1103,11 +1130,13 @@ function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose,
 
           <div className="flex items-start gap-4">
             <div className="space-y-1.5 w-32">
+              <Label>Priority</Label>
               <Input
                 type="number" min={1} max={10}
                 value={form.priority}
                 onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
               />
+              <p className="text-[11px] text-gray-400">Lower = evaluated first</p>
             </div>
             <div className="space-y-1.5">
               <Label>Effect</Label>
@@ -1130,6 +1159,11 @@ function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose,
                   </button>
                 ))}
               </div>
+              {form.effect === 'DENY' && (
+                <p className="text-xs text-red-600 flex items-center gap-1 mt-1">
+                  ⚠ DENY policies block access even if other ALLOW policies match (unless a higher-priority ALLOW overrides).
+                </p>
+              )}
             </div>
           </div>
 
@@ -1265,13 +1299,42 @@ function HubGlobalConfigTab({ appName }) {
                         {policy.description && (
                           <p className="text-xs text-gray-500 mb-2">{policy.description}</p>
                         )}
-                        <div className="flex items-center gap-2">
-                          <Info size={10} className="text-gray-400" />
-                          <span className="text-[11px] text-gray-400">
-                            {policy.conditions?.conditions?.length ?? 0} condition(s) ·{' '}
-                            {policy.conditions?.operator ?? 'AND'} logic
-                          </span>
-                        </div>
+                        {(() => {
+                          const conds = policy.conditions?.conditions ?? [];
+                          const op = policy.conditions?.operator ?? 'AND';
+                          if (conds.length === 0) {
+                            return (
+                              <div className="flex items-center gap-2">
+                                <Info size={10} className="text-gray-400" />
+                                <span className="text-[11px] text-gray-400">No conditions — policy matches all requests</span>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <Info size={10} className="text-gray-400" />
+                                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                                  Conditions ({op})
+                                </span>
+                              </div>
+                              {conds.map((c, i) => (
+                                <div key={i} className="flex items-center gap-1.5 text-[11px] font-mono bg-white border border-gray-100 rounded px-2.5 py-1">
+                                  {i > 0 && (
+                                    <span className="text-[10px] font-sans font-semibold text-indigo-400 w-7 text-center shrink-0">
+                                      {op}
+                                    </span>
+                                  )}
+                                  <span className="text-blue-600">{c.namespace}</span>
+                                  <span className="text-gray-300">.</span>
+                                  <span className="text-gray-700 font-semibold">{c.key ?? c.attribute}</span>
+                                  <span className="text-amber-600 px-1">{c.op ?? c.operator}</span>
+                                  <span className="text-green-700">&quot;{String(c.value ?? '')}&quot;</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>

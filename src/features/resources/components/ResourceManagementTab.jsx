@@ -647,9 +647,15 @@ export function ResourceManagementTab() {
                                       })
                                     }
                                   >
-                                    <SelectTrigger className="h-7 text-xs w-[160px]">
+                                    <SelectTrigger className="h-7 text-xs w-[180px]">
                                       <SelectValue>
-                                        {cls ? `${cls.displayName} (L${cls.sensitivityLevel})` : "Unclassified"}
+                                        {cls ? (
+                                          <span className="flex items-center gap-1.5">
+                                            <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
+                                            {cls.displayName}
+                                            <span className="text-[10px] text-gray-400">S{cls.sensitivityLevel}</span>
+                                          </span>
+                                        ) : "Unclassified"}
                                       </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
@@ -659,8 +665,9 @@ export function ResourceManagementTab() {
                                         .map((c) => (
                                           <SelectItem key={c.id || c._id} value={c.id || c._id}>
                                             <span className="flex items-center gap-2">
-                                              <ShieldCheck className="w-3 h-3" />
-                                              {c.displayName} (L{c.sensitivityLevel})
+                                              <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(c.sensitivityLevel)}`} />
+                                              {c.displayName}
+                                              <span className="text-[10px] text-gray-400">S{c.sensitivityLevel}</span>
                                             </span>
                                           </SelectItem>
                                         ))}
@@ -668,7 +675,7 @@ export function ResourceManagementTab() {
                                   </Select>
                                 ) : cls ? (
                                   <Badge
-                                    className={`text-xs ${
+                                    className={`text-xs flex items-center gap-1.5 ${
                                       cls.sensitivityLevel >= 4
                                         ? "bg-red-100 text-red-800 border-red-200"
                                         : cls.sensitivityLevel >= 2
@@ -676,15 +683,14 @@ export function ResourceManagementTab() {
                                         : "bg-green-100 text-green-800 border-green-200"
                                     }`}
                                   >
-                                    {cls.displayName} (L{cls.sensitivityLevel})
+                                    <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
+                                    {cls.displayName}
+                                    <span className="text-[10px] opacity-70">S{cls.sensitivityLevel}</span>
                                   </Badge>
                                 ) : (
                                   <span className="text-xs text-gray-400">—</span>
                                 )}
-                                {(r.assignedApplications ?? []).length > 1 && (
-                                  <span className="text-[10px] text-gray-400">{app.appCode}</span>
-                                )}
-                              </div>
+                                </div>
                             );
                           })}
                         </div>
@@ -702,28 +708,32 @@ export function ResourceManagementTab() {
                       </td>
                       {showActionsColumn && (
                         <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex justify-end gap-1">
                             {isHubOwner && (
                               <>
                                 <Button
-                                  variant="outline"
-                                  size="sm"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  title="Edit resource"
                                   onClick={() => {
                                     setEditingResource(r);
                                     setEditModalOpen(true);
                                   }}
                                 >
-                                  <Pencil className="w-3.5 h-3.5 mr-1" />
-                                  Edit
+                                  <Pencil className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
-                                  variant="destructive"
-                                  size="sm"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                  title="Delete resource"
                                   onClick={() => handleDelete(r)}
                                   disabled={deletingId === rid}
                                 >
-                                  <Trash2 className="w-3.5 h-3.5 mr-1" />
-                                  {deletingId === rid ? "Deleting..." : "Delete"}
+                                  {deletingId === rid
+                                    ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                    : <Trash2 className="w-3.5 h-3.5" />}
                                 </Button>
                               </>
                             )}
@@ -734,9 +744,7 @@ export function ResourceManagementTab() {
                                 onClick={() => handleAddMyApp(rid, missingAppId)}
                                 disabled={addingAppToResourceId === rid}
                               >
-                                {addingAppToResourceId === rid
-                                  ? "Adding..."
-                                  : "+ Add my App"}
+                                {addingAppToResourceId === rid ? "Adding…" : "+ Add my App"}
                               </Button>
                             )}
                           </div>

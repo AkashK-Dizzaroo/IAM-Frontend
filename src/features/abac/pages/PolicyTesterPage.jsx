@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
 import { useAbacScope } from '../contexts/AbacScopeContext';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { resourceService } from '@/features/resources/api/resourceService';
 
 // Helper to flatten policies for the UI
 function flattenMatchedPolicies(matched) {
@@ -108,6 +109,15 @@ export function PolicyTesterPage() {
     queryFn: () => abacService.listUsers(),
     retry: false,
   });
+
+  // Fetch resources for this app to populate the "Load from resource" quick-select
+  const { data: resourcesData } = useQuery({
+    queryKey: ['resources-tester', selectedAppKey],
+    queryFn: () => resourceService.getResourcesByApplication(selectedAppKey),
+    enabled: !!selectedAppKey,
+    staleTime: 60_000,
+  });
+  const testResources = (resourcesData?.data ?? []).filter(r => r.isUnassignedNode !== true).slice(0, 8);
 
   // Safely extract the users array regardless of backend pagination/wrapper format
   const rawData = usersData?.data;
@@ -275,7 +285,46 @@ export function PolicyTesterPage() {
 
           {/* Resource Section */}
           <div className="space-y-3 pt-4 border-t border-gray-100">
-            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Resource Attributes</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Resource Attributes</Label>
+              {testResources.length > 0 && (
+                <span className="text-[10px] text-gray-400">Load from:</span>
+              )}
+            </div>
+            {/* Quick-load from a real resource */}
+            {testResources.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {testResources.map(r => {
+                  const cls = r.assignedApplications?.[0]?.classification;
+                  return (
+                    <button
+                      key={r._id ?? r.id}
+                      type="button"
+                      title={`Load attrs from: ${r.name}`}
+                      onClick={() => {
+                        const attrs = [
+                          { key: 'id', value: String(r._id ?? r.id) },
+                          { key: 'level', value: String(r.level) },
+                          ...(cls ? [{ key: 'classification', value: cls.key }] : []),
+                          ...(r.resourceExternalId ? [{ key: 'externalId', value: r.resourceExternalId }] : []),
+                        ];
+                        setForm(f => ({ ...f, resourceAttrs: attrs }));
+                      }}
+                      className="text-xs px-2 py-1 border border-gray-200 rounded-md bg-white hover:bg-gray-50 hover:border-gray-300 transition-colors max-w-[120px] truncate"
+                    >
+                      {r.name}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, resourceAttrs: [{ key: '', value: '' }] }))}
+                  className="text-xs px-2 py-1 border border-dashed border-gray-200 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  clear
+                </button>
+              </div>
+            )}
             {form.resourceAttrs.map((attr, i) => (
               <div key={`res-${i}`} className="flex items-center gap-2">
                 <Input placeholder="key" value={attr.key} onChange={e => updateAttrRow('resourceAttrs', i, 'key', e.target.value)} className="flex-1 font-mono text-sm" />
@@ -415,15 +464,11 @@ export function PolicyTesterPage() {
                       </span>
                     )}
                   </div>
-                  <p
-                    className={`text-sm mt-1 ${
-                      result.effect === 'PERMIT'
-                        ? 'text-green-600'
-                        : 'text-red-600'
-                    }`}
-                  >
-                    {result.reason || 'Decision reached successfully.'}
-                  </p>
+                  {result.effect !== 'DENY' && (
+                    <p className="text-sm mt-1 text-green-600">
+                      {result.reason || 'Decision reached successfully.'}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <span className="text-xs text-gray-500 uppercase font-semibold">
@@ -434,6 +479,18 @@ export function PolicyTesterPage() {
                   </p>
                 </div>
               </div>
+
+              {result.effect === 'DENY' && (
+                <div className="flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+                  <span className="text-red-500 text-lg leading-none mt-0.5">✕</span>
+                  <div>
+                    <p className="text-sm font-semibold text-red-800">Access Denied</p>
+                    <p className="text-sm text-red-700 mt-0.5">
+                      {result.reason || 'A DENY policy matched this request. No ALLOW policy overrode it.'}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <ResolvedAttributesPanel attrs={result.resolvedAttributes} />
 
@@ -447,35 +504,53 @@ export function PolicyTesterPage() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {rows.map((p, i) => (
-                      <div
-                        key={`${p.scope}-${p.policyId ?? i}`}
-                        className="bg-white border border-gray-200 p-3 rounded text-sm flex justify-between items-center shadow-sm"
-                      >
-                        <span className="font-medium text-gray-800">
-                          {p.policyName ?? p.name ?? 'Policy'}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {p.isDraft && (
-                            <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded uppercase">
-                              draft
+                    {rows.map((p, i) => {
+                      const isDecisiveDeny =
+                        result.effect === 'DENY' &&
+                        p.effect !== 'PERMIT' &&
+                        rows.findIndex((r) => r.effect !== 'PERMIT') === i;
+                      return (
+                        <div
+                          key={`${p.scope}-${p.policyId ?? i}`}
+                          className={`p-3 rounded text-sm flex justify-between items-center shadow-sm border ${
+                            isDecisiveDeny
+                              ? 'bg-red-50 border-red-300'
+                              : 'bg-white border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {isDecisiveDeny && (
+                              <span className="text-red-500 text-xs shrink-0" title="This policy caused the DENY">▶</span>
+                            )}
+                            <span className={`font-medium truncate ${isDecisiveDeny ? 'text-red-800' : 'text-gray-800'}`}>
+                              {p.policyName ?? p.name ?? 'Policy'}
                             </span>
-                          )}
-                          <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded uppercase">
-                            {p.scope}
-                          </span>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                              p.effect === 'PERMIT'
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-red-100 text-red-700'
-                            }`}
-                          >
-                            {p.effect}
-                          </span>
+                            {isDecisiveDeny && (
+                              <span className="text-[10px] text-red-600 font-semibold shrink-0">decisive</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                            {p.isDraft && (
+                              <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded uppercase">
+                                draft
+                              </span>
+                            )}
+                            <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded uppercase">
+                              {p.scope}
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                p.effect === 'PERMIT'
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-red-100 text-red-700'
+                              }`}
+                            >
+                              {p.effect}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

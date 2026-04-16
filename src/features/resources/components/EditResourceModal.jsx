@@ -31,11 +31,27 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
   const [assignedApps, setAssignedApps] = useState([]);
   const [isActive, setIsActive] = useState(true);
   const [nameError, setNameError] = useState("");
+  const [attrValues, setAttrValues] = useState({});
 
   const { data: applicationsResponse } = useQuery({
     queryKey: ["applications-edit-modal"],
     queryFn: () => applicationService.getApplications(),
     enabled: open,
+  });
+
+  const { data: attrDefsResponse } = useQuery({
+    queryKey: ["resource-attribute-definitions"],
+    queryFn: () => resourceService.listAttributeDefinitions(),
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
+  const attrDefs = attrDefsResponse?.data ?? [];
+
+  const resourceId = resource?._id ?? resource?.id;
+  const { data: existingAttrsResponse } = useQuery({
+    queryKey: ["resource-attributes", resourceId],
+    queryFn: () => resourceService.getResourceAttributes(resourceId),
+    enabled: open && !!resourceId,
   });
 
   const applications = applicationsResponse?.data ?? applicationsResponse ?? [];
@@ -55,18 +71,35 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
     }
   }, [open, resource]);
 
+  useEffect(() => {
+    const rows = existingAttrsResponse?.data ?? [];
+    const map = {};
+    for (const row of rows) {
+      map[row.attributeDefId] = row.value;
+    }
+    setAttrValues(map);
+  }, [existingAttrsResponse]);
+
   const { mutate: save, isPending } = useMutation({
-    mutationFn: () =>
-      resourceService.updateResource(resource._id ?? resource.id, {
+    mutationFn: async () => {
+      await resourceService.updateResource(resourceId, {
         name: name.trim(),
         description,
         assignedApplications: assignedApps.map((a) => a._id ?? a.id ?? a),
         isActive,
-      }),
+      });
+      const entries = attrDefs
+        .filter((def) => attrValues[def.id] !== undefined && attrValues[def.id] !== "")
+        .map((def) => ({ attributeDefId: def.id, value: attrValues[def.id] }));
+      if (entries.length > 0) {
+        await resourceService.upsertResourceAttributes(resourceId, entries);
+      }
+    },
     onSuccess: () => {
       toast({ title: "Success", description: "Resource updated successfully" });
       queryClient.invalidateQueries({ queryKey: ["resources"] });
       queryClient.invalidateQueries({ queryKey: ["all-resources-modal"] });
+      queryClient.invalidateQueries({ queryKey: ["resource-attributes", resourceId] });
       onSuccess?.();
       onOpenChange(false);
     },
@@ -181,6 +214,71 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
             )}
           </div>
         </div>
+
+          {attrDefs.length > 0 && (
+            <div className="space-y-4 pt-2">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                  Attributes
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Custom attributes for this resource.
+                </p>
+              </div>
+              {attrDefs.map((def) => (
+                <div key={def.id}>
+                  <Label className="text-sm font-medium mb-1 block">
+                    {def.displayName}
+                    {def.isRequired && <span className="text-destructive ml-1">*</span>}
+                  </Label>
+                  {def.dataType === "boolean" ? (
+                    <select
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={attrValues[def.id] === undefined ? "" : String(attrValues[def.id])}
+                      onChange={(e) =>
+                        setAttrValues((p) => ({ ...p, [def.id]: e.target.value === "" ? "" : e.target.value === "true" }))
+                      }
+                      disabled={isPending}
+                    >
+                      <option value="">— not set —</option>
+                      <option value="true">true</option>
+                      <option value="false">false</option>
+                    </select>
+                  ) : def.dataType === "enum" && def.constraints?.allowedValues?.length > 0 ? (
+                    <select
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={attrValues[def.id] ?? ""}
+                      onChange={(e) =>
+                        setAttrValues((p) => ({ ...p, [def.id]: e.target.value }))
+                      }
+                      disabled={isPending}
+                    >
+                      <option value="">— not set —</option>
+                      {def.constraints.allowedValues.map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      type={def.dataType === "number" ? "number" : "text"}
+                      placeholder={def.dataType === "datetime" ? "e.g. 2025-01-01T00:00:00Z" : `Enter ${def.displayName.toLowerCase()}`}
+                      value={attrValues[def.id] ?? ""}
+                      onChange={(e) =>
+                        setAttrValues((p) => ({
+                          ...p,
+                          [def.id]: def.dataType === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value,
+                        }))
+                      }
+                      disabled={isPending}
+                    />
+                  )}
+                  {def.description && (
+                    <p className="text-xs text-muted-foreground mt-1">{def.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
         <DialogFooter>
           <Button

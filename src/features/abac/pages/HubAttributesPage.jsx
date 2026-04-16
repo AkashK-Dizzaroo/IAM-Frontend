@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { abacService } from '@/features/abac/api/abacService';
 import { useToast } from '@/hooks/use-toast';
@@ -17,6 +17,14 @@ import {
 import { Plus, Pencil, Trash2, X } from 'lucide-react';
 
 const DATA_TYPES = ['string', 'number', 'boolean', 'enum', 'list', 'datetime'];
+const NAMESPACES = ['subject', 'resource', 'action', 'environment'];
+
+const NAMESPACE_BADGE = {
+  subject:     'bg-blue-50 text-blue-700 border-blue-200',
+  resource:    'bg-purple-50 text-purple-700 border-purple-200',
+  action:      'bg-teal-50 text-teal-700 border-teal-200',
+  environment: 'bg-gray-100 text-gray-600 border-gray-200',
+};
 
 const DATA_TYPE_COLORS = {
   string: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -49,6 +57,27 @@ export function HubAttributesPage() {
     staleTime: 60_000,
   });
   const defs = data?.data?.data ?? data?.data ?? [];
+
+  const { data: globalPoliciesData } = useQuery({
+    queryKey: ['abac', 'globalPolicies', 'active'],
+    queryFn: () => abacService.listGlobalPolicies({ status: 'active' }),
+    staleTime: 60_000,
+  });
+
+  const referencedKeys = useMemo(() => {
+    const raw = globalPoliciesData?.data?.data ?? globalPoliciesData?.data ?? [];
+    const policies = Array.isArray(raw) ? raw : [];
+    const set = new Set();
+    policies.forEach((p) => {
+      const conds = p.conditions?.conditions ?? [];
+      conds.forEach((c) => {
+        if (c.namespace && (c.key ?? c.attribute)) {
+          set.add(`${c.namespace}.${c.key ?? c.attribute}`);
+        }
+      });
+    });
+    return set;
+  }, [globalPoliciesData]);
 
   const resetForm = useCallback(() => {
     setFormData(EMPTY_FORM);
@@ -210,73 +239,72 @@ export function HubAttributesPage() {
 
       {/* Table */}
       {!isLoading && defs.length > 0 && (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="border border-gray-200 rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-left">
-                <th className="px-4 py-3 font-medium text-gray-600">Key</th>
-                <th className="px-4 py-3 font-medium text-gray-600">
-                  Display Name
-                </th>
-                <th className="px-4 py-3 font-medium text-gray-600">
-                  Data Type
-                </th>
-                <th className="px-4 py-3 font-medium text-gray-600">
-                  Constraints
-                </th>
-                <th className="px-4 py-3 font-medium text-gray-600">
-                  Required
-                </th>
-                <th className="px-4 py-3 font-medium text-gray-600">
-                  Actions
-                </th>
+              <tr className="bg-gray-50 border-b border-gray-200 text-left uppercase text-xs text-gray-500">
+                <th className="px-3 py-2.5 font-medium w-[22%]">Key</th>
+                <th className="px-3 py-2.5 font-medium w-[20%]">Display Name</th>
+                <th className="px-3 py-2.5 font-medium w-[10%]">Namespace</th>
+                <th className="px-3 py-2.5 font-medium w-[9%]">Data Type</th>
+                <th className="px-3 py-2.5 font-medium w-[22%]">Constraints</th>
+                <th className="px-3 py-2.5 font-medium w-[7%]">Flags</th>
+                <th className="px-3 py-2.5 font-medium w-[10%] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {defs.map((def) => {
                 const id = def.id || def._id;
                 const isDeleting = deleteConfirmId === id;
+                const isPolicyReferenced = referencedKeys.has(`${def.namespace}.${def.key}`);
                 return (
                   <tr key={id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-sm text-gray-900">
-                      {def.key}
+                    <td className="px-3 py-2.5 font-mono text-xs text-gray-900">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="truncate">{def.key}</span>
+                        {isPolicyReferenced && (
+                          <span className="text-[10px] text-green-700 font-sans font-medium">● in active policy</span>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-700">
+                    <td className="px-3 py-2.5 text-gray-700 truncate">
                       {def.displayName || '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5">
+                      <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded border capitalize ${NAMESPACE_BADGE[def.namespace] ?? NAMESPACE_BADGE.environment}`}>
+                        {def.namespace ?? '—'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
                       <Badge
-                        className={
-                          DATA_TYPE_COLORS[def.dataType] ||
-                          'bg-gray-100 text-gray-700'
-                        }
+                        className={DATA_TYPE_COLORS[def.dataType] || 'bg-gray-100 text-gray-700'}
                       >
                         {def.dataType}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[200px] truncate">
+                    <td className="px-3 py-2.5 text-xs text-gray-500 truncate max-w-0">
                       {formatConstraints(def)}
                     </td>
-                    <td className="px-4 py-3">
-                      <Badge
-                        className={
-                          def.isRequired
-                            ? 'bg-red-100 text-red-700 border-red-200'
-                            : 'bg-gray-100 text-gray-500 border-gray-200'
-                        }
-                      >
-                        {def.isRequired ? 'yes' : 'no'}
-                      </Badge>
+                    <td className="px-3 py-2.5">
+                      {def.isRequired ? (
+                        <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] w-fit">Required</Badge>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5 text-right">
                       {isDeleting ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-red-600">
-                            Delete? Cannot be undone.
-                          </span>
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {isPolicyReferenced && (
+                            <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                              ⚠ used in policy
+                            </span>
+                          )}
+                          <span className="text-xs text-red-600">Confirm?</span>
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-7 px-2 text-xs"
                             onClick={() => setDeleteConfirmId(null)}
                           >
                             Cancel
@@ -284,27 +312,29 @@ export function HubAttributesPage() {
                           <Button
                             variant="destructive"
                             size="sm"
+                            className="h-7 px-2 text-xs"
                             onClick={() => deleteMutation.mutate(id)}
                             disabled={deleteMutation.isPending}
                           >
-                            {deleteMutation.isPending
-                              ? 'Deleting...'
-                              : 'Confirm Delete'}
+                            {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
                           </Button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
+                            className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            title="Edit attribute"
                             onClick={() => openEdit(def)}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
-                            size="sm"
-                            className="text-gray-400 hover:text-red-500"
+                            size="icon"
+                            className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                            title="Delete attribute"
                             onClick={() => setDeleteConfirmId(id)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -403,18 +433,22 @@ export function HubAttributesPage() {
 
               <div className="space-y-1.5">
                 <Label>Namespace</Label>
-                <Input
+                <Select
                   value={formData.namespace}
-                  onChange={(e) =>
-                    setFormData((p) => ({
-                      ...p,
-                      namespace: e.target.value.toLowerCase().replace(/\s/g, ''),
-                    }))
+                  onValueChange={(val) =>
+                    setFormData((p) => ({ ...p, namespace: val }))
                   }
-                  className="font-mono"
                   disabled={isEditing}
-                  placeholder="e.g. subject"
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {NAMESPACES.map((ns) => (
+                      <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {isEditing && (
                   <p className="text-xs text-gray-400">Cannot be changed after creation.</p>
                 )}

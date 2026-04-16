@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
 import { useAbacScope } from '../contexts/AbacScopeContext';
+import { userService } from '@/features/users/api/userService';
 
 function normalizeList(res) {
   return res?.data?.data ?? res?.data ?? [];
@@ -174,12 +175,28 @@ export function AppUserAttributesPage() {
 
   const [selectedUserId, setSelectedUserId] = useState('');
   const [form, setForm] = useState({ attributeDefId: '', value: '' });
+  const [showOnlyAssigned, setShowOnlyAssigned] = useState(true);
 
   const { data: usersData, isLoading: loadingUsers } = useQuery({
     queryKey: ['abac', 'users', 'appUserAttrsPicker'],
     queryFn: () => abacService.listUsers({ limit: 200 }),
   });
-  const users = normalizeList(usersData);
+  const allUsers = normalizeList(usersData);
+
+  // Fetch users assigned to this specific app so we can scope the picker
+  const { data: appTeamData } = useQuery({
+    queryKey: ['appTeam', selectedAppKey],
+    queryFn: () => userService.getAppTeamUsers(selectedAppKey),
+    enabled: !!selectedAppKey && showOnlyAssigned,
+  });
+  const assignedUserIds = useMemo(() => {
+    const entries = appTeamData?.data ?? [];
+    return new Set(entries.map(e => String(e.user?.id ?? e.user?._id)).filter(Boolean));
+  }, [appTeamData]);
+
+  const users = showOnlyAssigned && assignedUserIds.size > 0
+    ? allUsers.filter(u => assignedUserIds.has(String(u.id)))
+    : allUsers;
 
   const { data: attrDefsData } = useQuery({
     queryKey: ['abac', 'appAttributes', selectedAppKey],
@@ -187,6 +204,24 @@ export function AppUserAttributesPage() {
     enabled: !!selectedAppKey,
   });
   const attributeDefs = normalizeList(attrDefsData);
+
+  // Derive which attribute keys are referenced by active policies
+  const { data: activePoliciesData } = useQuery({
+    queryKey: ['abac', 'appPolicies', selectedAppKey, 'active'],
+    queryFn: () => abacService.listAppPolicies(selectedAppKey, { status: 'active' }),
+    enabled: !!selectedAppKey,
+    staleTime: 60_000,
+  });
+  const referencedKeys = useMemo(() => {
+    const policies = activePoliciesData?.data?.data ?? activePoliciesData?.data ?? [];
+    const keys = new Set();
+    for (const policy of policies) {
+      for (const cond of policy.conditions?.conditions ?? []) {
+        if (cond.key) keys.add(cond.key);
+      }
+    }
+    return keys;
+  }, [activePoliciesData]);
 
   const { data: userAttrsData, isLoading: loadingUserAttrs } = useQuery({
     queryKey: ['abac', 'appUserAttributes', selectedAppKey, selectedUserId],
@@ -277,11 +312,25 @@ export function AppUserAttributesPage() {
       </div>
 
       <div className="w-full max-w-md space-y-2">
-        <Label>Select User</Label>
+        <div className="flex items-center justify-between">
+          <Label>Select User</Label>
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showOnlyAssigned}
+              onChange={e => {
+                setShowOnlyAssigned(e.target.checked);
+                setSelectedUserId('');
+              }}
+              className="rounded"
+            />
+            Show only users assigned to this app
+          </label>
+        </div>
         <Select value={selectedUserId} onValueChange={setSelectedUserId}>
           <SelectTrigger>
             <SelectValue
-              placeholder={loadingUsers ? 'Loading users…' : 'Select a user…'}
+              placeholder={loadingUsers ? 'Loading users…' : users.length === 0 ? 'No users found' : 'Select a user…'}
             />
           </SelectTrigger>
           <SelectContent>
@@ -292,6 +341,9 @@ export function AppUserAttributesPage() {
             ))}
           </SelectContent>
         </Select>
+        {showOnlyAssigned && users.length === 0 && !loadingUsers && (
+          <p className="text-xs text-gray-400">No users assigned to this app yet.</p>
+        )}
       </div>
 
       {selectedUserId && (
@@ -311,15 +363,23 @@ export function AppUserAttributesPage() {
                   <SelectValue placeholder="Select attribute…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {attributeDefs.map((def) => (
-                    <SelectItem key={def.id} value={def.id}>
-                      {def.displayName} ({def.key})
-                    </SelectItem>
-                  ))}
+                  {attributeDefs.map((def) => {
+                    const isReferenced = referencedKeys.has(def.key);
+                    return (
+                      <SelectItem key={def.id} value={def.id}>
+                        <span className="flex items-center gap-2">
+                          {def.displayName} ({def.key})
+                          {isReferenced && (
+                            <span className="text-[10px] text-green-700 font-semibold">● policy</span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
 
-              {/* Show type + multi-valued hint */}
+              {/* Show type + multi-valued hint + policy coverage status */}
               {selectedDef && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   <Badge variant="outline" className="text-xs capitalize">
@@ -333,6 +393,15 @@ export function AppUserAttributesPage() {
                   {selectedDef.isRequired && (
                     <Badge variant="outline" className="text-xs text-red-700 border-red-300">
                       required
+                    </Badge>
+                  )}
+                  {referencedKeys.has(selectedDef.key) ? (
+                    <Badge variant="outline" className="text-xs text-green-700 border-green-300">
+                      ✓ referenced in active policy
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs text-gray-400 border-gray-200">
+                      not in any active policy
                     </Badge>
                   )}
                 </div>

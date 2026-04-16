@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,10 +33,20 @@ const DATA_TYPES = [
   { value: 'datetime', label: 'DateTime' },
 ];
 
+const NAMESPACES = ['subject', 'resource', 'action', 'environment'];
+
+const NAMESPACE_BADGE = {
+  subject:     'bg-blue-50 text-blue-700 border-blue-200',
+  resource:    'bg-purple-50 text-purple-700 border-purple-200',
+  action:      'bg-teal-50 text-teal-700 border-teal-200',
+  environment: 'bg-gray-100 text-gray-600 border-gray-200',
+};
+
 const EMPTY_FORM = {
   attribute_name:     '',
   display_name:       '',
   description:        '',
+  namespace:          'subject',
   attribute_type:     'string',
   allowed_values:     '',   // comma-separated string in UI
   default_value:      '',
@@ -51,6 +62,7 @@ function formFromAttr(attr) {
     attribute_name:  attr.key          ?? '',
     display_name:    attr.displayName  ?? '',
     description:     attr.description  ?? '',
+    namespace:       attr.namespace    ?? 'subject',
     attribute_type:  attr.dataType     ?? 'string',
     allowed_values:  (c.allowedValues ?? []).join(', '),
     default_value:   c.defaultValue != null ? String(c.defaultValue) : '',
@@ -77,7 +89,7 @@ function buildPayload(form) {
     constraints.defaultValue = form.default_value.trim();
   }
   return {
-    namespace:     'subject',        // always default; not exposed in UI
+    namespace:     form.namespace,
     key:           form.attribute_name.trim(),
     displayName:   form.display_name.trim(),
     description:   form.description.trim() || undefined,
@@ -143,6 +155,30 @@ function AttributeForm({ form, setForm, mode }) {
           value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
         />
+      </div>
+
+      {/* namespace */}
+      <div className="space-y-1.5">
+        <Label>
+          Namespace {!isEdit && <span className="text-red-500">*</span>}
+        </Label>
+        <Select
+          value={form.namespace}
+          disabled={isEdit}
+          onValueChange={(v) => setForm({ ...form, namespace: v })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {NAMESPACES.map((ns) => (
+              <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {isEdit && (
+          <p className="text-xs text-gray-400">Cannot be changed after creation.</p>
+        )}
       </div>
 
       {/* attribute_type */}
@@ -319,6 +355,29 @@ export function AppAttributesPage() {
   const rawData = data?.data?.data ?? data?.data ?? [];
   const attributes = Array.isArray(rawData) ? rawData : [];
 
+  // Fetch active policies to detect which attr keys are referenced
+  const { data: policiesData } = useQuery({
+    queryKey: ['abac', 'appPolicies', selectedApp?.key, 'active'],
+    queryFn: () => abacService.listAppPolicies(selectedApp.key, { status: 'active' }),
+    enabled: !!selectedApp?.key,
+    staleTime: 60_000,
+  });
+
+  const referencedKeys = useMemo(() => {
+    const raw = policiesData?.data?.data ?? policiesData?.data ?? [];
+    const policies = Array.isArray(raw) ? raw : [];
+    const set = new Set();
+    policies.forEach((p) => {
+      const conds = p.conditions?.conditions ?? [];
+      conds.forEach((c) => {
+        if (c.namespace && (c.key ?? c.attribute)) {
+          set.add(`${c.namespace}.${c.key ?? c.attribute}`);
+        }
+      });
+    });
+    return set;
+  }, [policiesData]);
+
   const createMutation = useMutation({
     mutationFn: (payload) => abacService.createAppAttrDef(selectedApp?.key, payload),
     onSuccess: () => {
@@ -429,27 +488,28 @@ export function AppAttributesPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
             <tr>
-              <th className="px-4 py-3 font-medium">Display Name</th>
-              <th className="px-4 py-3 font-medium">Attribute Name</th>
-              <th className="px-4 py-3 font-medium">Type</th>
-              <th className="px-4 py-3 font-medium">Allowed Values</th>
-              <th className="px-4 py-3 font-medium">Default</th>
-              <th className="px-4 py-3 font-medium">Flags</th>
-              <th className="px-4 py-3 font-medium text-right">Actions</th>
+              <th className="px-3 py-2.5 font-medium w-[22%]">Display Name</th>
+              <th className="px-3 py-2.5 font-medium w-[18%]">Attribute Name</th>
+              <th className="px-3 py-2.5 font-medium w-[10%]">Namespace</th>
+              <th className="px-3 py-2.5 font-medium w-[8%]">Type</th>
+              <th className="px-3 py-2.5 font-medium w-[18%]">Allowed Values</th>
+              <th className="px-3 py-2.5 font-medium w-[10%]">Default</th>
+              <th className="px-3 py-2.5 font-medium w-[8%]">Flags</th>
+              <th className="px-3 py-2.5 font-medium w-[6%] text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading…</td>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">Loading…</td>
               </tr>
             ) : attributes.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
                   <p className="font-medium">No attributes defined yet.</p>
                   <p className="text-xs mt-1">Click <strong>+ New Attribute</strong> to get started.</p>
                 </td>
@@ -459,38 +519,50 @@ export function AppAttributesPage() {
                 const c = attr.constraints ?? {};
                 return (
                   <tr key={attr.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-gray-900">{attr.displayName}</p>
+                    <td className="px-3 py-2.5">
+                      <p className="font-medium text-gray-900 truncate">{attr.displayName}</p>
                       {attr.description && (
-                        <p className="text-xs text-gray-400 mt-0.5 max-w-xs truncate">{attr.description}</p>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">{attr.description}</p>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-500">{attr.key}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5 font-mono text-xs text-gray-500">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="truncate">{attr.key}</span>
+                        {referencedKeys.has(`${attr.namespace}.${attr.key}`) && (
+                          <span className="text-[10px] text-green-700 font-sans font-medium">● in active policy</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded border capitalize ${NAMESPACE_BADGE[attr.namespace] ?? NAMESPACE_BADGE.environment}`}>
+                        {attr.namespace}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
                       <Badge variant="outline" className="capitalize text-xs">{attr.dataType}</Badge>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600 max-w-[180px]">
+                    <td className="px-3 py-2.5 text-xs text-gray-600">
                       {c.allowedValues?.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
-                          {c.allowedValues.slice(0, 4).map((v) => (
+                          {c.allowedValues.slice(0, 3).map((v) => (
                             <span key={v} className="bg-gray-100 rounded px-1.5 py-0.5 font-mono">{v}</span>
                           ))}
-                          {c.allowedValues.length > 4 && (
-                            <span className="text-gray-400">+{c.allowedValues.length - 4}</span>
+                          {c.allowedValues.length > 3 && (
+                            <span className="text-gray-400">+{c.allowedValues.length - 3}</span>
                           )}
                         </div>
                       ) : (
                         <span className="text-gray-300">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600">
+                    <td className="px-3 py-2.5 text-xs text-gray-600">
                       {c.defaultValue != null ? (
                         <span className="font-mono bg-gray-100 rounded px-1.5 py-0.5">{String(c.defaultValue)}</span>
                       ) : (
                         <span className="text-gray-300">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5">
                       <div className="flex flex-col gap-1">
                         {attr.isRequired && (
                           <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] w-fit">Required</Badge>
@@ -503,23 +575,25 @@ export function AppAttributesPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
-                          size="sm"
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          size="icon"
+                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          title="Edit attribute"
                           onClick={() => openEdit(attr)}
                         >
-                          Edit
+                          <Pencil size={14} />
                         </Button>
                         <Button
                           variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          size="icon"
+                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Delete attribute"
                           onClick={() => setDeleteTarget(attr)}
                         >
-                          Delete
+                          <Trash2 size={14} />
                         </Button>
                       </div>
                     </td>
@@ -589,6 +663,17 @@ export function AppAttributesPage() {
             Delete <span className="font-mono font-medium">{deleteTarget?.key}</span>?
             This will fail if any users still have values for this attribute.
           </p>
+          {deleteTarget && referencedKeys.has(`${deleteTarget.namespace}.${deleteTarget.key}`) && (
+            <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2.5 mt-1">
+              <span className="text-amber-500 text-sm mt-0.5">⚠</span>
+              <p className="text-xs text-amber-800">
+                <strong className="font-semibold">Used in an active policy.</strong>{' '}
+                Deleting this attribute will break any policy conditions that reference{' '}
+                <span className="font-mono">{deleteTarget.namespace}.{deleteTarget.key}</span>.
+                Evaluation will silently fail for those conditions.
+              </p>
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button
