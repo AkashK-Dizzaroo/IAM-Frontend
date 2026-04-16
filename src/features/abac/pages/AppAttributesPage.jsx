@@ -607,12 +607,14 @@ export function AppAttributesPage() {
 
       {/* ── Create Dialog ── */}
       <Dialog open={showCreate} onOpenChange={(o) => { if (!o) setShowCreate(false); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg flex flex-col max-h-[90vh]">
+          <DialogHeader className="shrink-0">
             <DialogTitle>New Attribute — {selectedApp.name}</DialogTitle>
           </DialogHeader>
-          <AttributeForm form={createForm} setForm={setCreateForm} mode="create" />
-          <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2">
+          <div className="flex-1 overflow-y-auto pr-1">
+            <AttributeForm form={createForm} setForm={setCreateForm} mode="create" />
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2 shrink-0">
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button
               onClick={handleCreate}
@@ -630,16 +632,18 @@ export function AppAttributesPage() {
 
       {/* ── Edit Dialog ── */}
       <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg flex flex-col max-h-[90vh]">
+          <DialogHeader className="shrink-0">
             <DialogTitle>
               Edit Attribute — <span className="font-mono text-sm">{editTarget?.key}</span>
             </DialogTitle>
           </DialogHeader>
           {editTarget && (
             <>
-              <AttributeForm form={editForm} setForm={setEditForm} mode="edit" />
-              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2">
+              <div className="flex-1 overflow-y-auto pr-1">
+                <AttributeForm form={editForm} setForm={setEditForm} mode="edit" />
+              </div>
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2 shrink-0">
                 <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
                 <Button
                   onClick={handleUpdate}
