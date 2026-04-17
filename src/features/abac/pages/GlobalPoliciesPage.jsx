@@ -6,9 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
 import { logger } from '@/lib/logger';
+import { ChevronDown, Check } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Badge helpers
@@ -46,20 +49,79 @@ function StatusBadge({ status }) {
   );
 }
 
+function MultiValueDropdown({ allowedValues = [], selectedValues = [], onChange, disabled }) {
+  const selected = Array.isArray(selectedValues) ? selectedValues.map(v => String(v)) : [];
+  const summary =
+    selected.length === 0
+      ? 'Select values...'
+      : selected.length <= 2
+        ? selected.join(', ')
+        : `${selected.length} selected`;
+
+  const toggleValue = (value, checked) => {
+    const val = String(value);
+    if (checked) {
+      onChange(Array.from(new Set([...selected, val])));
+    } else {
+      onChange(selected.filter(v => v !== val));
+    }
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          className="flex-1 min-w-0 h-8 px-2 justify-between text-xs font-normal"
+        >
+          <span className="truncate text-left">{summary}</span>
+          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1" align="start">
+        <div className="max-h-56 overflow-auto">
+          {allowedValues.map((v) => {
+            const value = String(v);
+            const checked = selected.includes(value);
+            return (
+              <button
+                key={value}
+                type="button"
+                className="w-full flex items-center justify-between rounded px-2 py-1.5 text-xs hover:bg-gray-50"
+                onClick={() => toggleValue(value, !checked)}
+              >
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(next) => toggleValue(value, !!next)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <span>{value}</span>
+                </div>
+                {checked && <Check className="h-3.5 w-3.5 text-primary" />}
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Condition tree helpers
 // ---------------------------------------------------------------------------
 
 const DEFAULT_CONDITIONS = {
   operator: 'AND',
-  conditions: [
-    { namespace: 'subject', key: '', op: 'eq', value: '' }
-  ]
+  conditions: []
 };
 
 function normalizeConditions(raw) {
   if (!raw || Object.keys(raw).length === 0) {
-    return DEFAULT_CONDITIONS;
+    return { operator: 'AND', conditions: [] };
   }
   if ('operator' in raw && 'conditions' in raw) {
     return raw;
@@ -228,7 +290,18 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
         const allowedValues = constraints.allowedValues;
         const dataType = attr?.dataType;
 
-        if (allowedValues && Array.isArray(allowedValues) && !isArrayOp) {
+        if (allowedValues && Array.isArray(allowedValues)) {
+          if (isArrayOp) {
+            return (
+              <MultiValueDropdown
+                allowedValues={allowedValues}
+                selectedValues={condition.value}
+                disabled={disabled}
+                onChange={(values) => onChange('value', values)}
+              />
+            );
+          }
+
           return (
             <select
               disabled={disabled}
@@ -394,7 +467,7 @@ function ConditionTreeBuilder({ value, onChange, disabled, attributeDefs }) {
   };
 
   const removeCondition = (index) => {
-    if (disabled || tree.conditions.length <= 1) return;
+    if (disabled || tree.conditions.length <= 0) return;
     onChange({
       ...tree,
       conditions: tree.conditions.filter((_, i) => i !== index)
@@ -437,17 +510,23 @@ function ConditionTreeBuilder({ value, onChange, disabled, attributeDefs }) {
       </div>
 
       <div className="space-y-2">
-        {tree.conditions.map((cond, index) => (
-          <ConditionRow
-            key={index}
-            condition={cond}
-            disabled={disabled}
-            attributeDefs={attributeDefs}
-            onChange={(field, val) => updateCondition(index, field, val)}
-            onRemove={() => removeCondition(index)}
-            canRemove={tree.conditions.length > 1}
-          />
-        ))}
+        {tree.conditions.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+            No conditions configured. This policy applies to all requests.
+          </div>
+        ) : (
+          tree.conditions.map((cond, index) => (
+            <ConditionRow
+              key={index}
+              condition={cond}
+              disabled={disabled}
+              attributeDefs={attributeDefs}
+              onChange={(field, val) => updateCondition(index, field, val)}
+              onRemove={() => removeCondition(index)}
+              canRemove={tree.conditions.length > 0}
+            />
+          ))
+        )}
       </div>
 
       <button
@@ -950,7 +1029,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
               <Input
                 type="number"
                 min={1}
-                max={10}
+                max={1000}
                 value={form.priority}
                 disabled={isArchived}
                 onChange={e => setForm(f => ({
@@ -1001,7 +1080,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
                 Conditions
               </Label>
               <p className="text-xs text-gray-400 mt-0.5">
-                When these conditions are true, apply the effect
+                Leave empty to apply the effect to all requests.
               </p>
             </div>
             <ConditionTreeBuilder
@@ -1126,16 +1205,24 @@ function PolicyCreatePanel({ onClose, onCreated, attributeDefs }) {
             />
           </div>
 
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-6">
             <div className="space-y-1.5 w-32">
+              <Label className="text-xs text-gray-500 uppercase tracking-wider">
+                Priority
+              </Label>
               <Input
-                type="number" min={1} max={10}
+                type="number"
+                min={1}
+                max={1000}
                 value={form.priority}
                 onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
               />
+              <p className="text-[11px] text-gray-400">
+                Lower = evaluated first
+              </p>
             </div>
             <div className="space-y-1.5">
-              <Label>Effect</Label>
+              <Label className="text-xs text-gray-500 uppercase tracking-wider">Effect</Label>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden">
                 {['ALLOW', 'DENY'].map(eff => (
                   <button key={eff} type="button"
@@ -1166,7 +1253,7 @@ function PolicyCreatePanel({ onClose, onCreated, attributeDefs }) {
                 Conditions
               </Label>
               <p className="text-xs text-gray-400 mt-0.5">
-                When these conditions are true, apply the effect
+                Leave empty to apply the effect to all requests.
               </p>
             </div>
             <ConditionTreeBuilder
