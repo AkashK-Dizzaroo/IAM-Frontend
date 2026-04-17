@@ -119,8 +119,6 @@ export const UserProfileManagementPage = () => {
   const { user, effectiveRoles } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const isAdmin = user?.globalRole === "ADMIN";
-
   const isHubOwner = effectiveRoles.isHubOwner;
   const isAppOwner = effectiveRoles.isAppOwner && !isHubOwner;
 
@@ -533,7 +531,7 @@ export const UserProfileManagementPage = () => {
             {pageSubtitle}
           </p>
         </div>
-        {isAdmin && isHubOwner && (
+        {isHubOwner && (
           <Button onClick={() => setShowAssignDialog(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Add Assignment

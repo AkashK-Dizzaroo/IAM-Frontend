@@ -28,13 +28,6 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false);
   };
 
-  const normalizeUser = (backendUser) => {
-    if (!backendUser.globalRole) {
-      backendUser.globalRole = "USER";
-    }
-    return backendUser;
-  };
-
   useEffect(() => {
     const initializeAuth = async () => {
       try {
@@ -43,7 +36,7 @@ export function AuthProvider({ children }) {
         const body = verifyRes.data;
 
         if (body?.success && body?.data?.user) {
-          const backendUser = normalizeUser(body.data.user);
+          const backendUser = body.data.user;
           localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(backendUser));
           setUser(backendUser);
           setIsAuthenticated(true);
@@ -73,7 +66,7 @@ export function AuthProvider({ children }) {
     const hubRoles = user?.hubRoles ?? [];
     const assignments = [];
 
-    const isHubOwner = hubRoles.includes("HUB_OWNER") || user?.globalRole === "ADMIN";
+    const isHubOwner = hubRoles.includes("HUB_OWNER");
     const isITSupport = hubRoles.includes("IT_SUPPORT");
 
     const getRoleCode = (a) => {

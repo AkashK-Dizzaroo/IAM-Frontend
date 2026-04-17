@@ -264,9 +264,9 @@ export const UserProfilePage = () => {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <p className="text-sm text-gray-500">Global Role</p>
+              <p className="text-sm text-gray-500">Role</p>
               <p className="font-medium text-gray-900">
-                {profile.globalRole || "USER"}
+                {Array.isArray(profile.hubRoles) && profile.hubRoles.includes("HUB_OWNER") ? "Hub Owner" : "User"}
               </p>
             </div>
             <div>

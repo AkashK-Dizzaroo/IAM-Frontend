@@ -274,10 +274,10 @@ export const ApplicationAccessManagementPage = () => {
                       <td className="px-4 py-4 align-top">
                         <Badge
                           variant={
-                            user.globalRole === "ADMIN" ? "default" : "secondary"
+                            Array.isArray(user.hubRoles) && user.hubRoles.includes("HUB_OWNER") ? "default" : "secondary"
                           }
                         >
-                          {user.globalRole || "USER"}
+                          {Array.isArray(user.hubRoles) && user.hubRoles.includes("HUB_OWNER") ? "HUB_OWNER" : "USER"}
                         </Badge>
                       </td>
                       <td className="px-4 py-4 align-top">

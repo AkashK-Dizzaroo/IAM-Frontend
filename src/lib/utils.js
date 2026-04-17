@@ -7,7 +7,6 @@ export function cn(...inputs) {
 
 /**
  * Returns a human-readable platform role label derived from effectiveRoles.
- * Keeps raw globalRole ("ADMIN"/"USER") out of the UI.
  */
 export function getDisplayRole(effectiveRoles) {
   if (!effectiveRoles) return "User";
