@@ -14,6 +14,13 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Plus, Pencil, Trash2, X } from 'lucide-react';
 
 const DATA_TYPES = ['string', 'number', 'boolean', 'enum', 'list', 'datetime'];
@@ -46,7 +53,7 @@ const EMPTY_FORM = {
 
 export function HubAttributesPage() {
   const { toast } = useToast();
-  const [slideOver, setSlideOver] = useState(null);
+  const [dialogMode, setDialogMode] = useState(null); // null | 'create' | <def object>
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [enumInput, setEnumInput] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -86,7 +93,7 @@ export function HubAttributesPage() {
 
   const openCreate = () => {
     resetForm();
-    setSlideOver('create');
+    setDialogMode('create');
   };
 
   const openEdit = (def) => {
@@ -99,13 +106,14 @@ export function HubAttributesPage() {
       isRequired: def.isRequired || false,
     });
     setEnumInput('');
-    setSlideOver(def);
+    setDialogMode(def);
   };
 
-  const closePanel = () => setSlideOver(null);
+  const closeDialog = () => setDialogMode(null);
 
-  const isEditing = slideOver !== null && slideOver !== 'create';
-  const editId = isEditing ? (slideOver.id || slideOver._id) : null;
+  const isOpen = dialogMode !== null;
+  const isEditing = isOpen && dialogMode !== 'create';
+  const editId = isEditing ? (dialogMode.id || dialogMode._id) : null;
 
   // --- Mutations ---
   const createMutation = useMutation({
@@ -113,7 +121,7 @@ export function HubAttributesPage() {
     onSuccess: () => {
       toast({ title: 'Attribute created' });
       refetch();
-      closePanel();
+      closeDialog();
     },
     onError: (err) =>
       toast({ title: 'Error', description: err.message, variant: 'destructive' }),
@@ -124,7 +132,7 @@ export function HubAttributesPage() {
     onSuccess: () => {
       toast({ title: 'Attribute updated' });
       refetch();
-      closePanel();
+      closeDialog();
     },
     onError: (err) =>
       toast({ title: 'Error', description: err.message, variant: 'destructive' }),
@@ -149,7 +157,7 @@ export function HubAttributesPage() {
 
   const handleSave = () => {
     const payload = { ...formData };
-    if (slideOver === 'create') {
+    if (dialogMode === 'create') {
       createMutation.mutate(payload);
     } else {
       const { key, ...rest } = payload;
@@ -211,9 +219,7 @@ export function HubAttributesPage() {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">
-              Hub Attributes
-            </h1>
+            <h1 className="text-xl font-semibold text-gray-900">Hub Attributes</h1>
             <p className="text-sm text-gray-500 mt-0.5">
               Define the identity attribute schema for all users
             </p>
@@ -229,10 +235,7 @@ export function HubAttributesPage() {
       {isLoading && (
         <div className="space-y-2">
           {[...Array(5)].map((_, i) => (
-            <div
-              key={i}
-              className="h-12 rounded-lg bg-gray-100 animate-pulse"
-            />
+            <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />
           ))}
         </div>
       )}
@@ -276,9 +279,7 @@ export function HubAttributesPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <Badge
-                        className={DATA_TYPE_COLORS[def.dataType] || 'bg-gray-100 text-gray-700'}
-                      >
+                      <Badge className={DATA_TYPE_COLORS[def.dataType] || 'bg-gray-100 text-gray-700'}>
                         {def.dataType}
                       </Badge>
                     </td>
@@ -354,31 +355,13 @@ export function HubAttributesPage() {
       {!isLoading && defs.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="rounded-full bg-gray-100 p-4 mb-4">
-            <svg
-              className="h-8 w-8 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 6h.008v.008H6V6z"
-              />
+            <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
             </svg>
           </div>
-          <h3 className="text-base font-medium text-gray-900 mb-1">
-            No attributes defined
-          </h3>
-          <p className="text-sm text-gray-500 mb-4">
-            Define Hub identity attributes for your users
-          </p>
+          <h3 className="text-base font-medium text-gray-900 mb-1">No attributes defined</h3>
+          <p className="text-sm text-gray-500 mb-4">Define Hub identity attributes for your users</p>
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" />
             New Attribute
@@ -386,33 +369,24 @@ export function HubAttributesPage() {
         </div>
       )}
 
-      {/* Slide-over panel */}
-      {slideOver !== null && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/20 z-40"
-            onClick={closePanel}
-          />
-          <div className="fixed right-0 top-0 h-full w-[440px] z-50 bg-white border-l border-gray-200 shadow-xl flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-900 text-base">
-                {slideOver === 'create' ? 'New Attribute' : 'Edit Attribute'}
-              </h2>
-              <Button variant="ghost" size="sm" onClick={closePanel}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+      {/* Centered Dialog */}
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+        <DialogContent className="max-w-2xl w-full max-h-[85vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 py-5 border-b border-gray-100 shrink-0">
+            <DialogTitle className="text-base font-semibold text-gray-900">
+              {dialogMode === 'create' ? 'New Hub Attribute' : 'Edit Hub Attribute'}
+            </DialogTitle>
+          </DialogHeader>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
-              {slideOver === 'create' && (
-                <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-800">
-                  Key cannot be changed after creation. Choose carefully — it is
-                  used in policy conditions.
-                </div>
-              )}
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            {dialogMode === 'create' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-800">
+                Key and namespace cannot be changed after creation. Choose carefully — they are used in policy conditions.
+              </div>
+            )}
 
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Key</Label>
                 <Input
@@ -420,24 +394,23 @@ export function HubAttributesPage() {
                   onChange={(e) =>
                     setFormData((p) => ({
                       ...p,
-                      key: e.target.value
-                        .toLowerCase()
-                        .replace(/\s/g, ''),
+                      key: e.target.value.toLowerCase().replace(/\s/g, ''),
                     }))
                   }
                   className="font-mono"
                   disabled={isEditing}
                   placeholder="e.g. department"
                 />
+                {isEditing && (
+                  <p className="text-xs text-gray-400">Cannot be changed after creation.</p>
+                )}
               </div>
 
               <div className="space-y-1.5">
                 <Label>Namespace</Label>
                 <Select
                   value={formData.namespace}
-                  onValueChange={(val) =>
-                    setFormData((p) => ({ ...p, namespace: val }))
-                  }
+                  onValueChange={(val) => setFormData((p) => ({ ...p, namespace: val }))}
                   disabled={isEditing}
                 >
                   <SelectTrigger>
@@ -453,17 +426,14 @@ export function HubAttributesPage() {
                   <p className="text-xs text-gray-400">Cannot be changed after creation.</p>
                 )}
               </div>
+            </div>
 
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Display Name</Label>
                 <Input
                   value={formData.displayName}
-                  onChange={(e) =>
-                    setFormData((p) => ({
-                      ...p,
-                      displayName: e.target.value,
-                    }))
-                  }
+                  onChange={(e) => setFormData((p) => ({ ...p, displayName: e.target.value }))}
                   placeholder="e.g. Department"
                 />
               </div>
@@ -473,11 +443,7 @@ export function HubAttributesPage() {
                 <Select
                   value={formData.dataType}
                   onValueChange={(val) =>
-                    setFormData((p) => ({
-                      ...p,
-                      dataType: val,
-                      constraints: {},
-                    }))
+                    setFormData((p) => ({ ...p, dataType: val, constraints: {} }))
                   }
                 >
                   <SelectTrigger>
@@ -485,164 +451,138 @@ export function HubAttributesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {DATA_TYPES.map((dt) => (
-                      <SelectItem key={dt} value={dt}>
-                        {dt}
-                      </SelectItem>
+                      <SelectItem key={dt} value={dt}>{dt}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Dynamic constraints */}
-              <div className="space-y-3">
-                <Label>Constraints</Label>
-
-                {formData.dataType === 'string' && (
-                  <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-gray-500">Pattern</Label>
-                      <Input
-                        value={formData.constraints.pattern || ''}
-                        onChange={(e) =>
-                          updateConstraint('pattern', e.target.value)
-                        }
-                        placeholder="regex pattern, optional"
-                        className="font-mono text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-gray-500">
-                        Max Length
-                      </Label>
-                      <Input
-                        type="number"
-                        value={formData.constraints.maxLength || ''}
-                        onChange={(e) =>
-                          updateConstraint(
-                            'maxLength',
-                            e.target.value ? Number(e.target.value) : ''
-                          )
-                        }
-                        placeholder="e.g. 255"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {formData.dataType === 'number' && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-gray-500">Min</Label>
-                      <Input
-                        type="number"
-                        value={formData.constraints.min ?? ''}
-                        onChange={(e) =>
-                          updateConstraint(
-                            'min',
-                            e.target.value !== '' ? Number(e.target.value) : undefined
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-gray-500">Max</Label>
-                      <Input
-                        type="number"
-                        value={formData.constraints.max ?? ''}
-                        onChange={(e) =>
-                          updateConstraint(
-                            'max',
-                            e.target.value !== '' ? Number(e.target.value) : undefined
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {formData.dataType === 'boolean' && (
-                  <p className="text-sm text-gray-400">
-                    Boolean attributes have no constraints
-                  </p>
-                )}
-
-                {formData.dataType === 'datetime' && (
-                  <p className="text-sm text-gray-400">
-                    Datetime attributes have no constraints
-                  </p>
-                )}
-
-                {(formData.dataType === 'enum' ||
-                  formData.dataType === 'list') && (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-1.5">
-                      {(formData.constraints.allowedValues || []).map(
-                        (val) => (
-                          <span
-                            key={val}
-                            className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs font-mono px-2 py-1 rounded"
-                          >
-                            {val}
-                            <button
-                              type="button"
-                              onClick={() => removeEnumValue(val)}
-                              className="text-gray-400 hover:text-red-500"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        )
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input
-                        value={enumInput}
-                        onChange={(e) => setEnumInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            addEnumValue();
-                          }
-                        }}
-                        placeholder="Type a value..."
-                        className="flex-1"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={addEnumValue}
-                        disabled={!enumInput.trim()}
-                      >
-                        Add value
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
-                <Label>Required</Label>
-                <Switch
-                  checked={formData.isRequired}
-                  onCheckedChange={(val) =>
-                    setFormData((p) => ({ ...p, isRequired: val }))
-                  }
-                />
-              </div>
             </div>
 
-            {/* Footer */}
-            <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-3">
-              <Button variant="outline" onClick={closePanel}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving...' : 'Save'}
-              </Button>
+            {/* Dynamic constraints */}
+            <div className="space-y-3">
+              <Label>Constraints</Label>
+
+              {formData.dataType === 'string' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-gray-500">Pattern</Label>
+                    <Input
+                      value={formData.constraints.pattern || ''}
+                      onChange={(e) => updateConstraint('pattern', e.target.value)}
+                      placeholder="regex pattern, optional"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-gray-500">Max Length</Label>
+                    <Input
+                      type="number"
+                      value={formData.constraints.maxLength || ''}
+                      onChange={(e) =>
+                        updateConstraint('maxLength', e.target.value ? Number(e.target.value) : '')
+                      }
+                      placeholder="e.g. 255"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.dataType === 'number' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-gray-500">Min</Label>
+                    <Input
+                      type="number"
+                      value={formData.constraints.min ?? ''}
+                      onChange={(e) =>
+                        updateConstraint('min', e.target.value !== '' ? Number(e.target.value) : undefined)
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-gray-500">Max</Label>
+                    <Input
+                      type="number"
+                      value={formData.constraints.max ?? ''}
+                      onChange={(e) =>
+                        updateConstraint('max', e.target.value !== '' ? Number(e.target.value) : undefined)
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(formData.dataType === 'boolean' || formData.dataType === 'datetime') && (
+                <p className="text-sm text-gray-400">
+                  {formData.dataType === 'boolean' ? 'Boolean' : 'Datetime'} attributes have no constraints.
+                </p>
+              )}
+
+              {(formData.dataType === 'enum' || formData.dataType === 'list') && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5 min-h-[2rem]">
+                    {(formData.constraints.allowedValues || []).map((val) => (
+                      <span
+                        key={val}
+                        className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs font-mono px-2 py-1 rounded"
+                      >
+                        {val}
+                        <button
+                          type="button"
+                          onClick={() => removeEnumValue(val)}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                    {(formData.constraints.allowedValues || []).length === 0 && (
+                      <span className="text-xs text-gray-400 italic">No values added yet</span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={enumInput}
+                      onChange={(e) => setEnumInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); addEnumValue(); }
+                      }}
+                      placeholder="Type a value and press Enter or Add…"
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={addEnumValue}
+                      disabled={!enumInput.trim()}
+                    >
+                      Add value
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-1 pb-1">
+              <div>
+                <Label>Required</Label>
+                <p className="text-xs text-gray-500 mt-0.5">Users must have a value for this attribute</p>
+              </div>
+              <Switch
+                checked={formData.isRequired}
+                onCheckedChange={(val) => setFormData((p) => ({ ...p, isRequired: val }))}
+              />
             </div>
           </div>
-        </>
-      )}
+
+          <DialogFooter className="px-6 py-4 border-t border-gray-100 shrink-0">
+            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Attribute'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -31,7 +31,6 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        await apiClient.post("/auth/refresh", {}, { timeout: 15000 }).catch(() => null);
         const verifyRes = await apiClient.post("/auth/verify", {}, { timeout: 15000 });
         const body = verifyRes.data;
 
