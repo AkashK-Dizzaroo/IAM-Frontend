@@ -648,15 +648,15 @@ export function ResourceManagementTab() {
                                     }
                                   >
                                     <SelectTrigger className="h-7 text-xs w-[180px]">
-                                      <SelectValue>
-                                        {cls ? (
-                                          <span className="flex items-center gap-1.5">
-                                            <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
-                                            {cls.displayName}
-                                            <span className="text-[10px] text-gray-400">S{cls.sensitivityLevel}</span>
-                                          </span>
-                                        ) : "Unclassified"}
-                                      </SelectValue>
+                                      {cls ? (
+                                        <span className="flex items-center gap-1.5 truncate">
+                                          <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
+                                          <span className="truncate">{cls.displayName}</span>
+                                          <span className="text-[10px] text-gray-400 shrink-0">S{cls.sensitivityLevel}</span>
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">Unclassified</span>
+                                      )}
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="none">Unclassified</SelectItem>
