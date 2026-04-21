@@ -87,6 +87,15 @@ class ResourceService {
     }
   }
 
+  async checkName(name) {
+    try {
+      const response = await apiClient.get('/resources/check-name', { params: { name } });
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
   async setClassification(resourceId, applicationId, classificationId) {
     try {
       const response = await apiClient.patch(

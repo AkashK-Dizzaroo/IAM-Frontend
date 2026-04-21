@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/features/auth";
 import { resourceService } from "../api/resourceService";
 import { applicationService } from "@/features/applications";
+import { abacService } from "@/features/abac/api/abacService";
 import { useResourceForm } from "../hooks/useResourceForm";
 import {
   Dialog,
@@ -84,6 +85,8 @@ export function ResourceRegistrationModal({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [nameError, setNameError] = useState("");
+  const [nameAvailable, setNameAvailable] = useState(null); // null=unchecked, true=available, false=taken
+  const [classificationId, setClassificationId] = useState("");
   const [attrValues, setAttrValues] = useState({});
   // App-specific overrides: [{ appId, attributeDefId, value }]
   const [overrides, setOverrides] = useState([]);
@@ -121,6 +124,14 @@ export function ResourceRegistrationModal({
   });
   const attrDefs = attrDefsResponse?.data ?? [];
 
+  const { data: classificationsResponse } = useQuery({
+    queryKey: ["resource-classifications"],
+    queryFn: () => abacService.listClassifications(),
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
+  const classifications = classificationsResponse?.data?.data ?? classificationsResponse?.data ?? [];
+
   const { data: allResourcesResponse } = useQuery({
     queryKey: ["all-resources-modal"],
     queryFn: async () => {
@@ -138,9 +149,25 @@ export function ResourceRegistrationModal({
     ? allResources.filter((r) => r.level === 2)
     : [];
 
+  useEffect(() => {
+    const trimmed = String(resourceName ?? "").trim();
+    if (!trimmed) { setNameAvailable(null); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await resourceService.checkName(trimmed);
+        setNameAvailable(res?.available ?? null);
+      } catch {
+        setNameAvailable(null);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [resourceName]);
+
   const handleClose = () => {
     reset();
     setNameError("");
+    setNameAvailable(null);
+    setClassificationId("");
     setAttrValues({});
     setOverrides([]);
     if (onOpenChange) onOpenChange(false);
@@ -181,6 +208,13 @@ export function ResourceRegistrationModal({
       const allEntries = [...commonEntries, ...overrideEntries];
       if (resourceId && allEntries.length > 0) {
         await resourceService.upsertResourceAttributes(resourceId, allEntries);
+      }
+      if (resourceId && classificationId) {
+        await Promise.all(
+          selectedL1Apps.map((app) =>
+            resourceService.setClassification(resourceId, app._id ?? app.id, classificationId)
+          )
+        );
       }
       return result;
     },
@@ -339,6 +373,7 @@ export function ResourceRegistrationModal({
                 onChange={(e) => {
                   setResourceName(e.target.value);
                   setNameError("");
+                  setNameAvailable(null);
                 }}
                 placeholder={
                   creationLevel === 2
@@ -348,6 +383,10 @@ export function ResourceRegistrationModal({
               />
               {nameError ? (
                 <p className="text-sm text-destructive mt-1">{nameError}</p>
+              ) : nameAvailable === true ? (
+                <p className="text-xs text-green-600 mt-1">✓ Name is available</p>
+              ) : nameAvailable === false ? (
+                <p className="text-xs text-destructive mt-1">✗ Name already taken</p>
               ) : (
                 <p className="text-xs text-muted-foreground mt-1">
                   Must be unique across the entire platform.
@@ -393,13 +432,36 @@ export function ResourceRegistrationModal({
             </div>
           </div>
 
-          {attrDefs.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                3. Attributes
-              </h3>
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+              3. Attributes
+            </h3>
 
-              {/* 3a: Common attributes (applicationId = null) */}
+            {/* 3a: Classification */}
+            <div>
+              <Label className="text-sm font-medium mb-1 block">
+                Classification *
+              </Label>
+              <select
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={classificationId}
+                onChange={(e) => setClassificationId(e.target.value)}
+              >
+                <option value="">— select classification —</option>
+                {classifications.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.displayName} (Level {c.sensitivityLevel})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Sensitivity level is derived from the selected classification.
+              </p>
+            </div>
+
+            {attrDefs.length > 0 && (
+              <>
+              {/* 3b: Common attributes (applicationId = null) */}
               <div className="space-y-3">
                 <div>
                   <p className="text-xs font-medium text-gray-600">Common Attributes</p>
@@ -441,10 +503,28 @@ export function ResourceRegistrationModal({
                           <option key={v} value={v}>{v}</option>
                         ))}
                       </select>
+                    ) : def.dataType === "datetime" ? (
+                      <Input
+                        type="datetime-local"
+                        value={attrValues[def.id] ?? ""}
+                        onChange={(e) => setAttrValues((p) => ({ ...p, [def.id]: e.target.value }))}
+                      />
+                    ) : def.dataType === "list" ? (
+                      <Input
+                        type="text"
+                        placeholder="Comma-separated values (e.g. a, b, c)"
+                        value={Array.isArray(attrValues[def.id]) ? attrValues[def.id].join(", ") : (attrValues[def.id] ?? "")}
+                        onChange={(e) =>
+                          setAttrValues((p) => ({
+                            ...p,
+                            [def.id]: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                          }))
+                        }
+                      />
                     ) : (
                       <Input
                         type={def.dataType === "number" ? "number" : "text"}
-                        placeholder={def.dataType === "datetime" ? "e.g. 2025-01-01T00:00:00Z" : `Enter ${def.displayName.toLowerCase()}`}
+                        placeholder={`Enter ${def.displayName.toLowerCase()}`}
                         value={attrValues[def.id] ?? ""}
                         onChange={(e) =>
                           setAttrValues((p) => ({
@@ -537,6 +617,25 @@ export function ResourceRegistrationModal({
                                       <option key={v} value={v}>{v}</option>
                                     ))}
                                   </select>
+                                ) : def?.dataType === "datetime" ? (
+                                  <Input
+                                    className="h-8 text-xs"
+                                    type="datetime-local"
+                                    value={override.value ?? ""}
+                                    onChange={(e) => updateOverride(i, { value: e.target.value })}
+                                  />
+                                ) : def?.dataType === "list" ? (
+                                  <Input
+                                    className="h-8 text-xs"
+                                    type="text"
+                                    placeholder="a, b, c"
+                                    value={Array.isArray(override.value) ? override.value.join(", ") : (override.value ?? "")}
+                                    onChange={(e) =>
+                                      updateOverride(i, {
+                                        value: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                                      })
+                                    }
+                                  />
                                 ) : (
                                   <Input
                                     className="h-8 text-xs"
@@ -578,8 +677,9 @@ export function ResourceRegistrationModal({
                   </Button>
                 </div>
               )}
-            </div>
-          )}
+            </>
+            )}
+          </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={handleClose}>
