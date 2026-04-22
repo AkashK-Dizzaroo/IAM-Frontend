@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,10 +16,15 @@ import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
 import { useAbacScope } from '../contexts/AbacScopeContext';
 import { userService } from '@/features/users/api/userService';
+import { resourceService } from '@/features/resources';
 import { Save, Trash2, User, ChevronDown, ChevronUp } from 'lucide-react';
 
 function normalizeList(res) {
   return res?.data?.data ?? res?.data ?? [];
+}
+
+function getUserId(u) {
+  return String(u?.id ?? u?._id ?? u?.userId ?? '').trim();
 }
 
 const NAMESPACE_STYLES = {
@@ -29,12 +34,141 @@ const NAMESPACE_STYLES = {
   environment: { badge: 'bg-gray-100 text-gray-600 border-gray-200',  dot: 'bg-gray-400',   label: 'Environment' },
 };
 
+const STUDY_ROLE_OPTIONS = [
+  'admin',
+  'study_manager',
+  'study_monitor',
+  'principal_investigator',
+  'tmf_lead',
+  'qa_reviewer',
+];
+
+function normalizeStudyAccessValue(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return normalizeStudyAccessValue([value]);
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return normalizeStudyAccessValue(parsed);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const study_id = String(
+        entry.study_id ?? entry.studyId ?? entry.study ?? entry.id ?? ''
+      ).trim();
+      const role = String(entry.role ?? '').trim();
+      return { study_id, role };
+    })
+    .filter(Boolean);
+}
+
+function StudyAccessInput({ value, onChange, studyOptions = [] }) {
+  const rows = normalizeStudyAccessValue(value);
+  const mergedOptions = [
+    ...studyOptions,
+    ...rows
+      .map((r) => ({ value: r.study_id, label: r.study_id }))
+      .filter((x) => x.value),
+  ]
+    .filter((x) => x && String(x.value || '').trim())
+    .reduce((acc, cur) => {
+    const cleanValue = String(cur.value).trim();
+    if (!cleanValue) return acc;
+    if (!acc.some((x) => x.value === cleanValue)) {
+      acc.push({ value: cleanValue, label: cur.label || cleanValue });
+    }
+    return acc;
+  }, []);
+
+  const updateRow = (idx, patch) => {
+    const next = rows.map((r, i) => (i === idx ? { ...r, ...patch } : r));
+    onChange(next);
+  };
+
+  const removeRow = (idx) => onChange(rows.filter((_, i) => i !== idx));
+  const addRow = () => onChange([...rows, { study_id: '', role: '' }]);
+
+  return (
+    <div className="space-y-2 rounded-md border border-gray-200 bg-white p-3">
+      {rows.length === 0 && (
+        <p className="text-xs text-gray-500">No study role assigned yet.</p>
+      )}
+      {rows.map((row, idx) => (
+        <div key={`${row.study_id}-${idx}`} className="grid grid-cols-12 gap-2">
+          <div className="col-span-7">
+            <Select
+              value={row.study_id || undefined}
+              onValueChange={(v) => updateRow(idx, { study_id: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select study…" />
+              </SelectTrigger>
+              <SelectContent>
+                {mergedOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-4">
+            <Select
+              value={row.role || undefined}
+              onValueChange={(v) => updateRow(idx, { role: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Role…" />
+              </SelectTrigger>
+              <SelectContent>
+                {STUDY_ROLE_OPTIONS.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-1 flex items-center justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
+              onClick={() => removeRow(idx)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      ))}
+      <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={addRow}>
+        Add study role
+      </Button>
+      <p className="text-[10px] text-gray-500">
+        Stored format: [{'{'}"study_id":"...","role":"..."{'}'}]
+      </p>
+    </div>
+  );
+}
+
 // Renders the appropriate value input for an attribute definition
-function ValueInput({ def, value, onChange }) {
+function ValueInput({ def, value, onChange, studyOptions }) {
   if (!def) return <Input placeholder="Select an attribute first…" value={value} disabled />;
 
   const { dataType, isMultiValued, constraints } = def;
   const allowedValues = constraints?.allowedValues ?? [];
+  const key = String(def.key || '').trim().toLowerCase();
+
+  if (key === 'study_access') {
+    return <StudyAccessInput value={value} onChange={onChange} studyOptions={studyOptions} />;
+  }
 
   if (isMultiValued && allowedValues.length > 0) {
     const selected = Array.isArray(value) ? value : [];
@@ -135,11 +269,18 @@ function ValueInput({ def, value, onChange }) {
 }
 
 // A single attribute row in the edit grid
-function AttributeRow({ def, existingAttr, isReferenced, onSave, onRemove, isSaving, isRemoving }) {
+function AttributeRow({ def, existingAttr, isReferenced, onSave, onRemove, isSaving, isRemoving, studyOptions }) {
   const emptyValue = def.isMultiValued ? [] : '';
   const currentValue = existingAttr?.value ?? emptyValue;
   const [localValue, setLocalValue] = useState(currentValue);
   const [isDirty, setIsDirty] = useState(false);
+  const key = String(def?.key || '').trim().toLowerCase();
+
+  useEffect(() => {
+    // Keep editor in sync when user attributes arrive/refetch from API.
+    setLocalValue(currentValue);
+    setIsDirty(false);
+  }, [existingAttr?.attributeDefId, existingAttr?.id, JSON.stringify(currentValue)]);
 
   const handleChange = (v) => {
     setLocalValue(v);
@@ -147,12 +288,26 @@ function AttributeRow({ def, existingAttr, isReferenced, onSave, onRemove, isSav
   };
 
   const handleSave = () => {
-    onSave(def.id, localValue);
+    if (key === 'study_access') {
+      const normalized = normalizeStudyAccessValue(localValue).filter(
+        (r) => String(r.study_id || '').trim() && String(r.role || '').trim()
+      );
+      onSave(def.id, normalized);
+    } else {
+      onSave(def.id, localValue);
+    }
     setIsDirty(false);
   };
 
   const isAssigned = !!existingAttr;
-  const isEmpty = Array.isArray(localValue) ? localValue.length === 0 : localValue === '' || localValue === null || localValue === undefined;
+  const isEmpty =
+    key === 'study_access'
+      ? normalizeStudyAccessValue(localValue).filter(
+          (r) => String(r.study_id || '').trim() && String(r.role || '').trim()
+        ).length === 0
+      : Array.isArray(localValue)
+      ? localValue.length === 0
+      : localValue === '' || localValue === null || localValue === undefined;
 
   return (
     <div className={`p-4 rounded-lg border transition-colors ${
@@ -186,7 +341,7 @@ function AttributeRow({ def, existingAttr, isReferenced, onSave, onRemove, isSav
       </div>
 
       <div className="space-y-2">
-        <ValueInput def={def} value={localValue} onChange={handleChange} />
+        <ValueInput def={def} value={localValue} onChange={handleChange} studyOptions={studyOptions} />
 
         <div className="flex gap-2 justify-end">
           {isAssigned && (
@@ -218,7 +373,7 @@ function AttributeRow({ def, existingAttr, isReferenced, onSave, onRemove, isSav
 }
 
 // Namespace section with collapsible group
-function NamespaceSection({ namespace, defs, userAttributes, referencedKeys, onSave, onRemove, savingIds, removingIds }) {
+function NamespaceSection({ namespace, defs, userAttributes, referencedKeys, onSave, onRemove, savingIds, removingIds, studyOptions }) {
   const [collapsed, setCollapsed] = useState(false);
   const style = NAMESPACE_STYLES[namespace] ?? NAMESPACE_STYLES.environment;
   const assignedCount = defs.filter(d => userAttributes.some(a => (a.attributeDefId ?? a.id) === d.id)).length;
@@ -259,6 +414,7 @@ function NamespaceSection({ namespace, defs, userAttributes, referencedKeys, onS
                 onRemove={onRemove}
                 isSaving={savingIds.has(def.id)}
                 isRemoving={removingIds.has(existingAttr?.attributeDefId ?? def.id)}
+                studyOptions={studyOptions}
               />
             );
           })}
@@ -295,10 +451,10 @@ export function AppUserAttributesPage() {
   }, [appTeamData]);
 
   const users = showOnlyAssigned && assignedUserIds.size > 0
-    ? allUsers.filter(u => assignedUserIds.has(String(u.id)))
+    ? allUsers.filter((u) => assignedUserIds.has(getUserId(u)))
     : allUsers;
 
-  const selectedUser = users.find(u => String(u.id) === selectedUserId);
+  const selectedUser = users.find((u) => getUserId(u) === selectedUserId);
 
   const { data: attrDefsData } = useQuery({
     queryKey: ['abac', 'appAttributes', selectedAppKey],
@@ -330,6 +486,58 @@ export function AppUserAttributesPage() {
     enabled: !!selectedAppKey && !!selectedUserId,
   });
   const userAttributes = normalizeList(userAttrsData);
+
+  const { data: applicationsData } = useQuery({
+    queryKey: ['abac', 'applications', 'forStudyAccess'],
+    queryFn: () => abacService.getApplications(),
+    staleTime: 60_000,
+  });
+  const applications = normalizeList(applicationsData);
+  const selectedApplication = applications.find(
+    (a) =>
+      a?.key === selectedAppKey ||
+      a?.appCode === selectedAppKey ||
+      String(a?.id || a?._id || '') === String(selectedAppKey)
+  );
+
+  const { data: resourcesData } = useQuery({
+    queryKey: ['abac', 'studyResources', selectedAppKey, selectedApplication?.id],
+    queryFn: () =>
+      resourceService.getResources({
+        applicationId: selectedApplication?.id,
+        limit: 1000,
+        isActive: 'true',
+      }),
+    enabled: !!selectedAppKey,
+    staleTime: 60_000,
+  });
+
+  const studyOptions = useMemo(() => {
+    const options = [];
+    const seen = new Set();
+
+    const rows = resourcesData?.data ?? resourcesData?.resources ?? [];
+    for (const r of Array.isArray(rows) ? rows : []) {
+      const studyId = String(
+        r.resourceExternalId ?? r.externalId ?? r.studyId ?? ''
+      ).trim();
+      if (!studyId || seen.has(studyId)) continue;
+      seen.add(studyId);
+      options.push({
+        value: studyId,
+        label: r.name ? `${r.name} (${studyId})` : studyId,
+      });
+    }
+
+    for (const attr of userAttributes) {
+      for (const row of normalizeStudyAccessValue(attr?.value)) {
+        if (seen.has(row.study_id)) continue;
+        seen.add(row.study_id);
+        options.push({ value: row.study_id, label: row.study_id });
+      }
+    }
+    return options.sort((a, b) => a.label.localeCompare(b.label));
+  }, [resourcesData, userAttributes]);
 
   const invalidateUserAttrs = () =>
     queryClient.invalidateQueries({
@@ -447,8 +655,10 @@ export function AppUserAttributesPage() {
           <SelectContent>
             {users.map((u) => {
               const initial = (u.displayName || u.email || '?')[0].toUpperCase();
+              const uid = getUserId(u);
+              if (!uid) return null;
               return (
-                <SelectItem key={u.id} value={String(u.id)}>
+                <SelectItem key={uid} value={uid}>
                   <div className="flex items-center gap-2">
                     <div className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-semibold shrink-0">
                       {initial}
@@ -518,6 +728,7 @@ export function AppUserAttributesPage() {
                   onRemove={(attributeDefId) => removeMutation.mutate(attributeDefId)}
                   savingIds={savingIds}
                   removingIds={removingIds}
+                  studyOptions={studyOptions}
                 />
               ))}
             </div>
