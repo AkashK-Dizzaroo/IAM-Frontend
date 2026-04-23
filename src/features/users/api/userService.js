@@ -91,9 +91,8 @@ class UserService {
 
   async createUser(userData) {
     try {
-      const nameParts = (userData.name || "").trim().split(" ");
-      const firstName = nameParts[0] || "";
-      const lastName = nameParts.slice(1).join(" ") || firstName;
+      const firstName = userData.firstName || (userData.name || "").trim().split(" ")[0] || "";
+      const lastName = userData.lastName || (userData.name || "").trim().split(" ").slice(1).join(" ") || firstName;
       const tempPassword = userData.password || this.generateTempPassword();
       const applications = (userData.selectedApplications || []).map((app) => ({
         appId: app.appId || app.id || app.code,

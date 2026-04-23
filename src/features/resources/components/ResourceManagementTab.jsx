@@ -280,11 +280,276 @@ export function ResourceManagementTab() {
     }
   };
 
-  const showActionsColumn = isHubOwner || isAppOwner;
+  const [viewMode, setViewMode] = useState("tree"); // 'table' | 'tree'
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
+  const toggleExpand = (id) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const treeData = useMemo(() => {
+    if (!resources || !applications) return [];
+
+    // Map of appId -> { app, children: Map<l2Id, { l2, children: [] }> }
+    const appMap = new Map();
+
+    // Initialize applications that have resources assigned
+    // If applicationFilter is "all", we show all apps that have resources.
+    // If applicationFilter is specific, resources list is already filtered by API.
+    
+    const l2s = resources.filter(r => r.level === 2);
+    const l3s = resources.filter(r => r.level === 3);
+
+    // Group L2s under their applications
+    l2s.forEach(l2 => {
+      const assignedApps = l2.assignedApplications || [];
+      assignedApps.forEach(app => {
+        const appId = (app._id || app.id || app).toString();
+        
+        if (!appMap.has(appId)) {
+          const fullApp = applications.find(a => (a._id || a.id).toString() === appId);
+          if (fullApp) {
+            appMap.set(appId, {
+              ...fullApp,
+              type: 'application',
+              treeId: `app-${appId}`,
+              children: new Map()
+            });
+          }
+        }
+
+        const appNode = appMap.get(appId);
+        if (appNode) {
+          appNode.children.set((l2._id || l2.id).toString(), {
+            ...l2,
+            type: 'resource',
+            treeId: `app-${appId}-l2-${l2._id || l2.id}`,
+            children: []
+          });
+        }
+      });
+    });
+
+    // Group L3s under their L2 parents
+    l3s.forEach(l3 => {
+      const parentId = (l3.parentResource?._id || l3.parentResource?.id || l3.parentId)?.toString();
+      if (!parentId) return;
+
+      // Find L2 nodes in any application tree
+      appMap.forEach(appNode => {
+        const l2Node = appNode.children.get(parentId);
+        if (l2Node) {
+          l2Node.children.push({
+            ...l3,
+            type: 'resource',
+            treeId: `${l2Node.treeId}-l3-${l3._id || l3.id}`
+          });
+        }
+      });
+    });
+
+    // Convert Maps to arrays for rendering
+    return Array.from(appMap.values())
+      .map(app => ({
+        ...app,
+        children: Array.from(app.children.values())
+      }))
+      .filter(app => app.children.length > 0)
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }, [resources, applications]);
 
   const sortedClassifications = [...classifications].sort(
     (a, b) => a.sensitivityLevel - b.sensitivityLevel
   );
+
+  const TreeNode = ({ node, level = 0 }) => {
+    const isExpanded = expandedIds.has(node.treeId);
+    const hasChildren = node.children && node.children.length > 0;
+    const isApp = node.type === 'application';
+    const isL2 = node.type === 'resource' && node.level === 2;
+    const isL3 = node.type === 'resource' && node.level === 3;
+
+    const rid = node._id || node.id;
+    const universalId = node.resourceExternalId ?? "—";
+    const active = node.isActive !== false;
+    const missingAppId = isAppOwner ? getMissingAppId(node) : null;
+
+    // Classification logic for resource nodes
+    const renderClassification = (resource) => {
+      if (isApp) return null;
+      
+      return (
+        <div className="space-y-1">
+          {(resource.assignedApplications ?? []).map((app) => {
+            const appId = app._id || app.id;
+            const cls = app.classification;
+            return (
+              <div key={appId} className="flex items-center gap-2">
+                {isHubOwner ? (
+                  <Select
+                    value={cls?.id ?? "none"}
+                    onValueChange={(val) =>
+                      classificationMutation.mutate({
+                        resourceId: rid,
+                        applicationId: appId,
+                        classificationId: val === "none" ? null : val,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="h-7 text-[10px] w-[140px] px-2">
+                      {cls ? (
+                        <span className="flex items-center gap-1 truncate">
+                          <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
+                          <span className="truncate">{cls.displayName}</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Unclassified</span>
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Unclassified</SelectItem>
+                      {classifications
+                        .sort((a, b) => a.sensitivityLevel - b.sensitivityLevel)
+                        .map((c) => (
+                          <SelectItem key={c.id || c._id} value={c.id || c._id}>
+                            <span className="flex items-center gap-2 text-xs">
+                              <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(c.sensitivityLevel)}`} />
+                              {c.displayName}
+                            </span>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                ) : cls ? (
+                  <Badge className="text-[10px] px-1.5 py-0 h-5" variant="outline">
+                    {cls.displayName}
+                  </Badge>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      );
+    };
+
+    return (
+      <>
+        <div 
+          className={`group flex items-center py-2 px-4 hover:bg-gray-50 border-b border-gray-100 transition-colors ${isApp ? 'bg-gray-50/50' : ''}`}
+          style={{ paddingLeft: `${level * 24 + 16}px` }}
+        >
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="flex items-center w-6 justify-center">
+              {hasChildren ? (
+                <button 
+                  onClick={() => toggleExpand(node.treeId)}
+                  className="p-1 hover:bg-gray-200 rounded transition-colors"
+                >
+                  {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
+                </button>
+              ) : (
+                <div className="w-4 h-4" />
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 min-w-0">
+              {isApp && <FolderOpen className="w-4 h-4 text-blue-500 shrink-0" />}
+              {isL2 && <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0" />}
+              {isL3 && <RefreshCw className="w-4 h-4 text-green-500 shrink-0" />}
+              
+              <span className={`truncate text-sm ${isApp ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
+                {node.name}
+                {isApp && <span className="ml-2 text-xs font-normal text-gray-500">({node.appCode})</span>}
+              </span>
+
+              {!isApp && (
+                <Badge variant="outline" className="text-[10px] px-1 h-4 bg-white">
+                  L{node.level}
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 text-xs text-gray-500 w-[500px]">
+            <div className="w-[120px] truncate font-mono text-[10px]" title={universalId}>
+              {!isApp && universalId}
+            </div>
+            
+            <div className="w-[150px]">
+              {renderClassification(node)}
+            </div>
+
+            <div className="w-[80px]">
+              {!isApp && (
+                active ? (
+                  <Badge className="bg-green-100 text-green-800 border-green-200 text-[10px] h-5 px-1.5">Active</Badge>
+                ) : (
+                  <Badge className="bg-red-100 text-red-800 border-red-200 text-[10px] h-5 px-1.5">Inactive</Badge>
+                )
+              )}
+            </div>
+
+            <div className="flex items-center justify-end flex-1 gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {isApp ? (
+                <span className="text-[10px] text-gray-400">Application</span>
+              ) : (
+                <>
+                  {isHubOwner && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        onClick={() => {
+                          setEditingResource(node);
+                          setEditModalOpen(true);
+                        }}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50"
+                        onClick={() => handleDelete(node)}
+                        disabled={deletingId === rid}
+                      >
+                        {deletingId === rid ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      </Button>
+                    </>
+                  )}
+                  {isAppOwner && missingAppId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[10px] px-2"
+                      onClick={() => handleAddMyApp(rid, missingAppId)}
+                      disabled={addingAppToResourceId === rid}
+                    >
+                      + Add
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        {isExpanded && hasChildren && (
+          <div className="animate-in slide-in-from-top-1 duration-200">
+            {node.children.map(child => (
+              <TreeNode key={child.treeId} node={child} level={level + 1} />
+            ))}
+          </div>
+        )}
+      </>
+    );
+  };
+
 
   return (
     <div className="space-y-6">
@@ -459,7 +724,7 @@ export function ResourceManagementTab() {
 
       <div className="bg-white rounded-xl shadow-sm border p-4">
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div className="relative md:col-span-2">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
@@ -511,6 +776,20 @@ export function ResourceManagementTab() {
                 <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
+            <div className="flex bg-gray-100 p-1 rounded-lg">
+              <button
+                className={`flex-1 text-xs py-1.5 rounded-md transition-all ${viewMode === 'tree' ? 'bg-white shadow-sm font-semibold' : 'text-gray-500'}`}
+                onClick={() => setViewMode('tree')}
+              >
+                Tree
+              </button>
+              <button
+                className={`flex-1 text-xs py-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-white shadow-sm font-semibold' : 'text-gray-500'}`}
+                onClick={() => setViewMode('table')}
+              >
+                Table
+              </button>
+            </div>
           </div>
           <div className="flex items-center justify-between">
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
@@ -542,221 +821,246 @@ export function ResourceManagementTab() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm border">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Resource Name
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Level
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Resource Hierarchy
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Universal ID
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Assigned Applications
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Classification
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                  Status
-                </th>
-                {showActionsColumn && (
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600">
-                    Actions
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        {viewMode === 'table' ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    Resource Name
                   </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={showActionsColumn ? 8 : 7} className="px-4 py-6 text-center text-gray-500">
-                    Loading resources...
-                  </td>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    Level
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    Resource Hierarchy
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    Universal ID
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    Assigned Applications
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    Classification
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    Status
+                  </th>
+                  {(isHubOwner || isAppOwner) && (
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600">
+                      Actions
+                    </th>
+                  )}
                 </tr>
-              ) : filteredResources.length === 0 ? (
-                <tr>
-                  <td colSpan={showActionsColumn ? 8 : 7} className="px-4 py-6 text-center text-gray-500">
-                    No resources found
-                  </td>
-                </tr>
-              ) : (
-                filteredResources.map((r) => {
-                  const universalId = r.resourceExternalId ?? "—";
-                  const boundApps = (r.assignedApplications ?? []).map(
-                    (a) => a?.name ?? a?.appCode ?? null
-                  ).filter(Boolean);
-                  const active = r.isActive !== false;
-                  const rid = r._id || r.id;
-                  const missingAppId = isAppOwner ? getMissingAppId(r) : null;
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={(isHubOwner || isAppOwner) ? 8 : 7} className="px-4 py-6 text-center text-gray-500">
+                      Loading resources...
+                    </td>
+                  </tr>
+                ) : filteredResources.length === 0 ? (
+                  <tr>
+                    <td colSpan={(isHubOwner || isAppOwner) ? 8 : 7} className="px-4 py-6 text-center text-gray-500">
+                      No resources found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredResources.map((r) => {
+                    const universalId = r.resourceExternalId ?? "—";
+                    const boundApps = (r.assignedApplications ?? []).map(
+                      (a) => a?.name ?? a?.appCode ?? null
+                    ).filter(Boolean);
+                    const active = r.isActive !== false;
+                    const rid = r._id || r.id;
+                    const missingAppId = isAppOwner ? getMissingAppId(r) : null;
 
-                  return (
-                    <tr key={rid}>
-                      <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                        {r.name ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        L{r.level ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {getResourceHierarchy(r)}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-mono text-xs text-gray-700">
-                        {universalId}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {boundApps.length > 0 ? (
-                            boundApps.map((appName) => (
-                              <Badge
-                                key={appName}
-                                variant="secondary"
-                                className="text-xs"
-                              >
-                                {appName}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-sm text-gray-400">—</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="space-y-1">
-                          {(r.assignedApplications ?? []).map((app) => {
-                            const appId = app._id || app.id;
-                            const cls = app.classification;
-                            return (
-                              <div key={appId} className="flex items-center gap-2">
-                                {isHubOwner ? (
-                                  <Select
-                                    value={cls?.id ?? "none"}
-                                    onValueChange={(val) =>
-                                      classificationMutation.mutate({
-                                        resourceId: rid,
-                                        applicationId: appId,
-                                        classificationId: val === "none" ? null : val,
-                                      })
-                                    }
-                                  >
-                                    <SelectTrigger className="h-7 text-xs w-[180px]">
-                                      {cls ? (
-                                        <span className="flex items-center gap-1.5 truncate">
-                                          <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
-                                          <span className="truncate">{cls.displayName}</span>
-                                          <span className="text-[10px] text-gray-400 shrink-0">S{cls.sensitivityLevel}</span>
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground">Unclassified</span>
-                                      )}
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="none">Unclassified</SelectItem>
-                                      {classifications
-                                        .sort((a, b) => a.sensitivityLevel - b.sensitivityLevel)
-                                        .map((c) => (
-                                          <SelectItem key={c.id || c._id} value={c.id || c._id}>
-                                            <span className="flex items-center gap-2">
-                                              <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(c.sensitivityLevel)}`} />
-                                              {c.displayName}
-                                              <span className="text-[10px] text-gray-400">S{c.sensitivityLevel}</span>
-                                            </span>
-                                          </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : cls ? (
-                                  <Badge
-                                    className={`text-xs flex items-center gap-1.5 ${
-                                      cls.sensitivityLevel >= 4
-                                        ? "bg-red-100 text-red-800 border-red-200"
-                                        : cls.sensitivityLevel >= 2
-                                        ? "bg-amber-100 text-amber-800 border-amber-200"
-                                        : "bg-green-100 text-green-800 border-green-200"
-                                    }`}
-                                  >
-                                    <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
-                                    {cls.displayName}
-                                    <span className="text-[10px] opacity-70">S{cls.sensitivityLevel}</span>
-                                  </Badge>
-                                ) : (
-                                  <span className="text-xs text-gray-400">—</span>
-                                )}
-                                </div>
-                            );
-                          })}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {active ? (
-                          <Badge className="bg-green-100 text-green-800 border-green-200">
-                            Active
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-red-100 text-red-800 border-red-200">
-                            Inactive
-                          </Badge>
-                        )}
-                      </td>
-                      {showActionsColumn && (
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-1">
-                            {isHubOwner && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                  title="Edit resource"
-                                  onClick={() => {
-                                    setEditingResource(r);
-                                    setEditModalOpen(true);
-                                  }}
+                    return (
+                      <tr key={rid}>
+                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                          {r.name ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          L{r.level ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {getResourceHierarchy(r)}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-mono text-xs text-gray-700">
+                          {universalId}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {boundApps.length > 0 ? (
+                              boundApps.map((appName) => (
+                                <Badge
+                                  key={appName}
+                                  variant="secondary"
+                                  className="text-xs"
                                 >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
-                                  title="Delete resource"
-                                  onClick={() => handleDelete(r)}
-                                  disabled={deletingId === rid}
-                                >
-                                  {deletingId === rid
-                                    ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                    : <Trash2 className="w-3.5 h-3.5" />}
-                                </Button>
-                              </>
-                            )}
-                            {isAppOwner && missingAppId && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleAddMyApp(rid, missingAppId)}
-                                disabled={addingAppToResourceId === rid}
-                              >
-                                {addingAppToResourceId === rid ? "Adding…" : "+ Add my App"}
-                              </Button>
+                                  {appName}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-sm text-gray-400">—</span>
                             )}
                           </div>
                         </td>
-                      )}
-                    </tr>
-                  );
-                })
+                        <td className="px-4 py-3">
+                          <div className="space-y-1">
+                            {(r.assignedApplications ?? []).map((app) => {
+                              const appId = app._id || app.id;
+                              const cls = app.classification;
+                              return (
+                                <div key={appId} className="flex items-center gap-2">
+                                  {isHubOwner ? (
+                                    <Select
+                                      value={cls?.id ?? "none"}
+                                      onValueChange={(val) =>
+                                        classificationMutation.mutate({
+                                          resourceId: rid,
+                                          applicationId: appId,
+                                          classificationId: val === "none" ? null : val,
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger className="h-7 text-xs w-[180px]">
+                                        {cls ? (
+                                          <span className="flex items-center gap-1.5 truncate">
+                                            <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
+                                            <span className="truncate">{cls.displayName}</span>
+                                            <span className="text-[10px] text-gray-400 shrink-0">S{cls.sensitivityLevel}</span>
+                                          </span>
+                                        ) : (
+                                          <span className="text-muted-foreground">Unclassified</span>
+                                        )}
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">Unclassified</SelectItem>
+                                        {classifications
+                                          .sort((a, b) => a.sensitivityLevel - b.sensitivityLevel)
+                                          .map((c) => (
+                                            <SelectItem key={c.id || c._id} value={c.id || c._id}>
+                                              <span className="flex items-center gap-2">
+                                                <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(c.sensitivityLevel)}`} />
+                                                {c.displayName}
+                                                <span className="text-[10px] text-gray-400">S{c.sensitivityLevel}</span>
+                                              </span>
+                                            </SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : cls ? (
+                                    <Badge
+                                      className={`text-xs flex items-center gap-1.5 ${
+                                        cls.sensitivityLevel >= 4
+                                          ? "bg-red-100 text-red-800 border-red-200"
+                                          : cls.sensitivityLevel >= 2
+                                          ? "bg-amber-100 text-amber-800 border-amber-200"
+                                          : "bg-green-100 text-green-800 border-green-200"
+                                      }`}
+                                    >
+                                      <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
+                                      {cls.displayName}
+                                      <span className="text-[10px] opacity-70">S{cls.sensitivityLevel}</span>
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-xs text-gray-400">—</span>
+                                  )}
+                                  </div>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {active ? (
+                            <Badge className="bg-green-100 text-green-800 border-green-200">
+                              Active
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-red-100 text-red-800 border-red-200">
+                              Inactive
+                            </Badge>
+                          )}
+                        </td>
+                        {(isHubOwner || isAppOwner) && (
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex justify-end gap-1">
+                              {isHubOwner && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                    title="Edit resource"
+                                    onClick={() => {
+                                      setEditingResource(r);
+                                      setEditModalOpen(true);
+                                    }}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                    title="Delete resource"
+                                    onClick={() => handleDelete(r)}
+                                    disabled={deletingId === rid}
+                                  >
+                                    {deletingId === rid
+                                      ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                      : <Trash2 className="w-3.5 h-3.5" />}
+                                  </Button>
+                                </>
+                              )}
+                              {isAppOwner && missingAppId && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleAddMyApp(rid, missingAppId)}
+                                  disabled={addingAppToResourceId === rid}
+                                >
+                                  {addingAppToResourceId === rid ? "Adding…" : "+ Add my App"}
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            <div className="flex items-center py-2.5 px-4 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              <div className="flex-1">Hierarchy / Name</div>
+              <div className="flex items-center gap-6 w-[500px]">
+                <div className="w-[120px]">Universal ID</div>
+                <div className="w-[150px]">Classification</div>
+                <div className="w-[80px]">Status</div>
+                <div className="flex-1 text-right">Actions</div>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {isLoading ? (
+                <div className="p-8 text-center text-gray-500 text-sm">Loading resources...</div>
+              ) : treeData.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 text-sm">No hierarchical resources found</div>
+              ) : (
+                treeData.map(app => (
+                  <TreeNode key={app.treeId} node={app} />
+                ))
               )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <ResourceRegistrationModal
