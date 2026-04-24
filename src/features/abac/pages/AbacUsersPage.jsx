@@ -190,7 +190,7 @@ export function AbacUsersPage() {
       displayName: user.displayName || '',
       username: user.username || '',
       email: user.email || '',
-      isActive: user.isActive !== false,
+      status: user.status || 'pending_approval',
     });
     setEditNewAttr({ attributeDefId: '', value: '' });
     setSubmitted(false);
@@ -411,8 +411,12 @@ export function AbacUsersPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge className={user.isActive !== false ? 'bg-green-100 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}>
-                        {user.isActive !== false ? 'Active' : 'Inactive'}
+                      <Badge className={
+                        user.status === 'active' ? 'bg-green-100 text-green-700 border-green-200' :
+                        user.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                        'bg-gray-100 text-gray-500 border-gray-200'
+                      }>
+                        {user.status ? user.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—'}
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
@@ -496,9 +500,22 @@ export function AbacUsersPage() {
                     <div className="flex items-center justify-between w-full bg-gray-50 border border-gray-200 rounded-md px-3 py-2.5">
                       <div>
                         <Label className="text-sm">Status</Label>
-                        <p className="text-xs text-gray-500">{editFormData.isActive ? 'Active' : 'Inactive'}</p>
+                        <p className="text-xs text-gray-500">{editFormData.status}</p>
                       </div>
-                      <Switch checked={editFormData.isActive} onCheckedChange={(val) => setEditFormData((p) => ({ ...p, isActive: val }))} />
+                      <Select
+                        value={editFormData.status}
+                        onValueChange={(val) => setEditFormData((p) => ({ ...p, status: val }))}
+                      >
+                        <SelectTrigger className="w-[140px] h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="pending_approval">Pending</SelectItem>
+                          <SelectItem value="suspended">Suspended</SelectItem>
+                          <SelectItem value="rejected">Rejected</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>

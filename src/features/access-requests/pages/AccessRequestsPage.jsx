@@ -34,26 +34,50 @@ const STATUS_FILTERS = ['all', 'pending', 'approved', 'rejected', 'cancelled'];
 
 function ReviewModal({ request, action, onConfirm, onCancel, loading }) {
   const [notes, setNotes] = useState('');
+
   const isApprove = action === 'approve';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 p-6 space-y-4">
         <h3 className={`text-lg font-semibold ${isApprove ? 'text-green-700' : 'text-red-700'}`}>
           {isApprove ? 'Approve Access Request' : 'Reject Access Request'}
         </h3>
 
-        <div className="text-sm text-gray-600 space-y-1">
-          <p><span className="font-medium">Requester:</span> {[request.requester?.firstName, request.requester?.lastName].filter(Boolean).join(' ') || request.requester?.email || '—'}</p>
-          <p><span className="font-medium">Application:</span> {request.application?.name || request.application?.appCode || '—'}</p>
-          <p><span className="font-medium">Requested Role:</span> <span className="font-mono">{request.requestedAttributes?.role || '—'}</span></p>
+        <div className="bg-gray-50 border rounded-lg p-4 space-y-2.5 text-sm">
+          <div className="flex">
+            <span className="font-semibold w-32 text-gray-500 uppercase text-[10px] self-center">Requester</span>
+            <span className="text-gray-900 font-medium">
+              {[request.requester?.firstName, request.requester?.lastName].filter(Boolean).join(' ') || request.requester?.email || '—'}
+            </span>
+          </div>
+          <div className="flex">
+            <span className="font-semibold w-32 text-gray-500 uppercase text-[10px] self-center">Application</span>
+            <span className="text-gray-900">{request.application?.name || request.application?.appCode || '—'}</span>
+          </div>
+          <div className="flex">
+            <span className="font-semibold w-32 text-gray-500 uppercase text-[10px] self-center">Resource</span>
+            <span className="text-gray-900">
+              {request.requestedResource 
+                ? (request.requestedResource.name || request.requestedResource.resourceExternalId) 
+                : <span className="text-gray-400 italic">Global Access</span>
+              }
+            </span>
+          </div>
+          <div className="flex">
+            <span className="font-semibold w-32 text-gray-500 uppercase text-[10px] self-center">Requested Role</span>
+            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded font-mono text-xs font-semibold">
+              {request.requestedAttributes?.role || request.requestedAttributes?.requestedRole || '—'}
+            </span>
+          </div>
         </div>
+
 
         <div className="space-y-1">
           <label className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
           <textarea
             className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            rows={3}
+            rows={2}
             placeholder={isApprove ? 'Any notes for the requester…' : 'Reason for rejection…'}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -111,7 +135,7 @@ export const AccessRequestsPage = () => {
   }, {});
 
   const approveMutation = useMutation({
-    mutationFn: ({ id, notes }) => accessRequestService.approveAccessRequest(id, notes),
+    mutationFn: ({ id, notes, attributes }) => accessRequestService.approveAccessRequest(id, notes, attributes),
     onSuccess: () => {
       toast({ title: 'Request approved' });
       queryClient.invalidateQueries({ queryKey: ['access-requests'] });
@@ -132,11 +156,11 @@ export const AccessRequestsPage = () => {
 
   const actionLoading = approveMutation.isPending || rejectMutation.isPending;
 
-  const handleConfirm = (notes) => {
+  const handleConfirm = (notes, attributes = {}) => {
     if (!modal) return;
     const { request, action } = modal;
     if (action === 'approve') {
-      approveMutation.mutate({ id: request.id, notes });
+      approveMutation.mutate({ id: request.id, notes, attributes });
     } else {
       rejectMutation.mutate({ id: request.id, notes });
     }

@@ -54,6 +54,7 @@ const EMPTY_FORM = {
   max_value:          '',
   is_required:        false,
   is_multi_valued:    false,
+  parentId:           '',
 };
 
 function formFromAttr(attr) {
@@ -70,6 +71,8 @@ function formFromAttr(attr) {
     max_value:       c.max != null ? String(c.max) : '',
     is_required:     attr.isRequired   ?? false,
     is_multi_valued: attr.isMultiValued ?? false,
+    parentId:        attr.parentId      ?? '',
+    id:              attr.id,
   };
 }
 
@@ -96,13 +99,14 @@ function buildPayload(form) {
     dataType:      form.attribute_type,
     isRequired:    form.is_required,
     isMultiValued: form.is_multi_valued,
+    parentId:      form.parentId || null,
     constraints,
   };
 }
 
 // ─── Form fields ─────────────────────────────────────────────────────────────
 
-function AttributeForm({ form, setForm, mode }) {
+function AttributeForm({ form, setForm, mode, allAttributes = [] }) {
   const isEdit = mode === 'edit';
 
   return (
@@ -325,6 +329,28 @@ function AttributeForm({ form, setForm, mode }) {
           )}
         </div>
       </div>
+
+      {/* parentId */}
+      <div className="space-y-1.5 pt-2 border-t border-gray-100">
+        <Label>Parent Attribute (Optional)</Label>
+        <Select
+          value={form.parentId || '__none__'}
+          onValueChange={(v) => setForm({ ...form, parentId: v === '__none__' ? '' : v })}
+        >
+          <SelectTrigger className="bg-gray-50 border-gray-200">
+            <SelectValue placeholder="No parent" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">No parent</SelectItem>
+            {allAttributes
+              .filter(a => a.id !== form.id && a.namespace === form.namespace)
+              .map(a => (
+                <SelectItem key={a.id} value={a.id}>{a.displayName} ({a.key})</SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+        <p className="text-[11px] text-gray-400">Defining a parent creates a logical grouping in the UI.</p>
+      </div>
     </div>
   );
 }
@@ -377,6 +403,29 @@ export function AppAttributesPage() {
     });
     return set;
   }, [policiesData]);
+
+  const treeAttributes = useMemo(() => {
+    const base = [...attributes].sort((a,b) => a.displayName.localeCompare(b.displayName));
+    const processed = new Set();
+    const result = [];
+
+    const addWithChildren = (parent, level) => {
+      if (processed.has(parent.id)) return;
+      processed.add(parent.id);
+      result.push({ ...parent, level });
+      
+      const children = base.filter(a => a.parentId === parent.id);
+      children.forEach(c => addWithChildren(c, level + 1));
+    };
+
+    // First pass: non-child items (roots)
+    base.filter(a => !a.parentId).forEach(r => addWithChildren(r, 0));
+
+    // Cleanup pass: any remaining items (circular refs or missing parents)
+    base.filter(a => !processed.has(a.id)).forEach(u => addWithChildren(u, 0));
+
+    return result;
+  }, [attributes]);
 
   const createMutation = useMutation({
     mutationFn: (payload) => abacService.createAppAttrDef(selectedApp?.key, payload),
@@ -457,6 +506,7 @@ export function AppAttributesPage() {
         displayName: editForm.display_name.trim(),
         description: editForm.description.trim() || undefined,
         isRequired:  editForm.is_required,
+        parentId:    editForm.parentId || null,
         constraints: c,
       },
     });
@@ -507,7 +557,7 @@ export function AppAttributesPage() {
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-gray-500">Loading…</td>
               </tr>
-            ) : attributes.length === 0 ? (
+            ) : treeAttributes.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
                   <p className="font-medium">No attributes defined yet.</p>
@@ -515,15 +565,23 @@ export function AppAttributesPage() {
                 </td>
               </tr>
             ) : (
-              attributes.map((attr) => {
+              treeAttributes.map((attr) => {
                 const c = attr.constraints ?? {};
+                const indent = attr.level * 24;
                 return (
-                  <tr key={attr.id} className="hover:bg-gray-50">
+                  <tr key={attr.id} className="hover:bg-gray-50 group">
                     <td className="px-3 py-2.5">
-                      <p className="font-medium text-gray-900 truncate">{attr.displayName}</p>
-                      {attr.description && (
-                        <p className="text-xs text-gray-400 mt-0.5 truncate">{attr.description}</p>
-                      )}
+                      <div className="flex items-start gap-2" style={{ paddingLeft: `${indent}px` }}>
+                        {attr.level > 0 && (
+                          <span className="text-gray-300 mt-1 shrink-0">└</span>
+                        )}
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{attr.displayName}</p>
+                          {attr.description && (
+                            <p className="text-xs text-gray-400 mt-0.5 truncate">{attr.description}</p>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-3 py-2.5 font-mono text-xs text-gray-500">
                       <div className="flex flex-col gap-0.5">
@@ -612,7 +670,7 @@ export function AppAttributesPage() {
             <DialogTitle>New Attribute — {selectedApp.name}</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto pr-1">
-            <AttributeForm form={createForm} setForm={setCreateForm} mode="create" />
+            <AttributeForm form={createForm} setForm={setCreateForm} mode="create" allAttributes={attributes} />
           </div>
           <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2 shrink-0">
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
@@ -641,7 +699,7 @@ export function AppAttributesPage() {
           {editTarget && (
             <>
               <div className="flex-1 overflow-y-auto pr-1">
-                <AttributeForm form={editForm} setForm={setEditForm} mode="edit" />
+                <AttributeForm form={editForm} setForm={setEditForm} mode="edit" allAttributes={attributes} />
               </div>
               <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2 shrink-0">
                 <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
