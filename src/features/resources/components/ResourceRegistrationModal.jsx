@@ -4,7 +4,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/features/auth";
 import { resourceService } from "../api/resourceService";
 import { applicationService } from "@/features/applications";
-import { abacService } from "@/features/abac/api/abacService";
 import { useResourceForm } from "../hooks/useResourceForm";
 import {
   Dialog,
@@ -86,8 +85,7 @@ export function ResourceRegistrationModal({
   const queryClient = useQueryClient();
   const [nameError, setNameError] = useState("");
   const [nameAvailable, setNameAvailable] = useState(null); // null=unchecked, true=available, false=taken
-  const [classificationId, setClassificationId] = useState("");
-  const [attrValues, setAttrValues] = useState({});
+  const [attributeRows, setAttributeRows] = useState([]);
   // App-specific overrides: [{ appId, attributeDefId, value }]
   const [overrides, setOverrides] = useState([]);
 
@@ -124,14 +122,6 @@ export function ResourceRegistrationModal({
   });
   const attrDefs = attrDefsResponse?.data ?? [];
 
-  const { data: classificationsResponse } = useQuery({
-    queryKey: ["resource-classifications"],
-    queryFn: () => abacService.listClassifications(),
-    enabled: open,
-    staleTime: 5 * 60_000,
-  });
-  const classifications = classificationsResponse?.data?.data ?? classificationsResponse?.data ?? [];
-
   const { data: allResourcesResponse } = useQuery({
     queryKey: ["all-resources-modal"],
     queryFn: async () => {
@@ -167,8 +157,7 @@ export function ResourceRegistrationModal({
     reset();
     setNameError("");
     setNameAvailable(null);
-    setClassificationId("");
-    setAttrValues({});
+    setAttributeRows([]);
     setOverrides([]);
     if (onOpenChange) onOpenChange(false);
     if (onClose) onClose();
@@ -192,6 +181,18 @@ export function ResourceRegistrationModal({
   const removeOverride = (index) =>
     setOverrides((prev) => prev.filter((_, i) => i !== index));
 
+  const addAttributeRow = () => {
+    const firstDefId = attrDefs[0]?.id ?? "";
+    if (!firstDefId) return;
+    setAttributeRows((prev) => [...prev, { attributeDefId: firstDefId, value: "" }]);
+  };
+
+  const updateAttributeRow = (index, patch) =>
+    setAttributeRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+
+  const removeAttributeRow = (index) =>
+    setAttributeRows((prev) => prev.filter((_, i) => i !== index));
+
   const createMutation = useMutation({
     mutationFn: async (payload) => {
       const result = await resourceService.createResource(payload);
@@ -199,22 +200,15 @@ export function ResourceRegistrationModal({
         throw new Error(result.error);
       }
       const resourceId = result?.data?.id ?? result?.data?._id;
-      const commonEntries = attrDefs
-        .filter((def) => attrValues[def.id] !== undefined && attrValues[def.id] !== "")
-        .map((def) => ({ attributeDefId: def.id, value: attrValues[def.id] }));
+      const commonEntries = attributeRows
+        .filter((row) => row.attributeDefId && row.value !== "" && row.value !== undefined)
+        .map((row) => ({ attributeDefId: row.attributeDefId, value: row.value }));
       const overrideEntries = overrides
         .filter((o) => o.attributeDefId && o.value !== "" && o.value !== undefined)
         .map((o) => ({ attributeDefId: o.attributeDefId, value: o.value, applicationId: o.appId }));
       const allEntries = [...commonEntries, ...overrideEntries];
       if (resourceId && allEntries.length > 0) {
         await resourceService.upsertResourceAttributes(resourceId, allEntries);
-      }
-      if (resourceId && classificationId) {
-        await Promise.all(
-          selectedL1Apps.map((app) =>
-            resourceService.setClassification(resourceId, app._id ?? app.id, classificationId)
-          )
-        );
       }
       return result;
     },
@@ -437,110 +431,106 @@ export function ResourceRegistrationModal({
               3. Attributes
             </h3>
 
-            {/* 3a: Classification */}
-            <div>
-              <Label className="text-sm font-medium mb-1 block">
-                Classification *
-              </Label>
-              <select
-                className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={classificationId}
-                onChange={(e) => setClassificationId(e.target.value)}
-              >
-                <option value="">— select classification —</option>
-                {classifications.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.displayName} (Level {c.sensitivityLevel})
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground mt-1">
-                Sensitivity level is derived from the selected classification.
-              </p>
-            </div>
-
             {attrDefs.length > 0 && (
               <>
-              {/* 3b: Common attributes (applicationId = null) */}
+              {/* 3a: Resource attributes (applicationId = null) */}
               <div className="space-y-3">
-                <div>
-                  <p className="text-xs font-medium text-gray-600">Common Attributes</p>
-                  <p className="text-xs text-muted-foreground">
-                    These values apply across all selected applications.
-                  </p>
-                </div>
-                {attrDefs.map((def) => (
-                  <div key={def.id}>
-                    <Label className="text-sm font-medium mb-1 block">
-                      {def.displayName}
-                      {def.isRequired && <span className="text-destructive ml-1">*</span>}
-                    </Label>
-                    {def.dataType === "boolean" ? (
-                      <select
-                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={attrValues[def.id] === undefined ? "" : String(attrValues[def.id])}
-                        onChange={(e) =>
-                          setAttrValues((p) => ({
-                            ...p,
-                            [def.id]: e.target.value === "" ? "" : e.target.value === "true",
-                          }))
-                        }
-                      >
-                        <option value="">— not set —</option>
-                        <option value="true">true</option>
-                        <option value="false">false</option>
-                      </select>
-                    ) : def.dataType === "enum" && def.constraints?.allowedValues?.length > 0 ? (
-                      <select
-                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={attrValues[def.id] ?? ""}
-                        onChange={(e) =>
-                          setAttrValues((p) => ({ ...p, [def.id]: e.target.value }))
-                        }
-                      >
-                        <option value="">— not set —</option>
-                        {def.constraints.allowedValues.map((v) => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
-                    ) : def.dataType === "datetime" ? (
-                      <Input
-                        type="datetime-local"
-                        value={attrValues[def.id] ?? ""}
-                        onChange={(e) => setAttrValues((p) => ({ ...p, [def.id]: e.target.value }))}
-                      />
-                    ) : def.dataType === "list" ? (
-                      <Input
-                        type="text"
-                        placeholder="Comma-separated values (e.g. a, b, c)"
-                        value={Array.isArray(attrValues[def.id]) ? attrValues[def.id].join(", ") : (attrValues[def.id] ?? "")}
-                        onChange={(e) =>
-                          setAttrValues((p) => ({
-                            ...p,
-                            [def.id]: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                          }))
-                        }
-                      />
-                    ) : (
-                      <Input
-                        type={def.dataType === "number" ? "number" : "text"}
-                        placeholder={`Enter ${def.displayName.toLowerCase()}`}
-                        value={attrValues[def.id] ?? ""}
-                        onChange={(e) =>
-                          setAttrValues((p) => ({
-                            ...p,
-                            [def.id]: def.dataType === "number"
-                              ? (e.target.value === "" ? "" : Number(e.target.value))
-                              : e.target.value,
-                          }))
-                        }
-                      />
-                    )}
-                    {def.description && (
-                      <p className="text-xs text-muted-foreground mt-1">{def.description}</p>
-                    )}
+                {attributeRows.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No attributes added.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {attributeRows.map((row, i) => {
+                      const def = attrDefs.find((d) => d.id === row.attributeDefId);
+                      return (
+                        <div key={i} className="flex items-start gap-2 p-3 rounded-md border border-gray-100 bg-gray-50">
+                          <div className="flex-1 grid grid-cols-2 gap-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Attribute Key</p>
+                              <select
+                                className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                                value={row.attributeDefId}
+                                onChange={(e) => updateAttributeRow(i, { attributeDefId: e.target.value, value: "" })}
+                              >
+                                {attrDefs.map((d) => (
+                                  <option key={d.id} value={d.id}>{d.displayName}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Value</p>
+                              {def?.dataType === "boolean" ? (
+                                <select
+                                  className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                                  value={row.value === undefined ? "" : String(row.value)}
+                                  onChange={(e) => updateAttributeRow(i, { value: e.target.value === "" ? "" : e.target.value === "true" })}
+                                >
+                                  <option value="">— not set —</option>
+                                  <option value="true">true</option>
+                                  <option value="false">false</option>
+                                </select>
+                              ) : def?.dataType === "enum" && def?.constraints?.allowedValues?.length > 0 ? (
+                                <select
+                                  className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                                  value={row.value ?? ""}
+                                  onChange={(e) => updateAttributeRow(i, { value: e.target.value })}
+                                >
+                                  <option value="">— not set —</option>
+                                  {def.constraints.allowedValues.map((v) => (
+                                    <option key={v} value={v}>{v}</option>
+                                  ))}
+                                </select>
+                              ) : def?.dataType === "datetime" ? (
+                                <Input
+                                  className="h-8 text-xs"
+                                  type="datetime-local"
+                                  value={row.value ?? ""}
+                                  onChange={(e) => updateAttributeRow(i, { value: e.target.value })}
+                                />
+                              ) : def?.dataType === "list" ? (
+                                <Input
+                                  className="h-8 text-xs"
+                                  type="text"
+                                  placeholder="a, b, c"
+                                  value={Array.isArray(row.value) ? row.value.join(", ") : (row.value ?? "")}
+                                  onChange={(e) =>
+                                    updateAttributeRow(i, {
+                                      value: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                                    })
+                                  }
+                                />
+                              ) : (
+                                <Input
+                                  className="h-8 text-xs"
+                                  type={def?.dataType === "number" ? "number" : "text"}
+                                  value={row.value ?? ""}
+                                  onChange={(e) =>
+                                    updateAttributeRow(i, {
+                                      value: def?.dataType === "number"
+                                        ? (e.target.value === "" ? "" : Number(e.target.value))
+                                        : e.target.value,
+                                    })
+                                  }
+                                  placeholder="Enter value..."
+                                />
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeAttributeRow(i)}
+                            className="mt-5 text-gray-400 hover:text-red-500 shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
+                )}
+                <Button type="button" variant="outline" size="sm" onClick={addAttributeRow}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add Attribute
+                </Button>
               </div>
 
               {/* 3b: App-specific overrides — only shown when multiple apps are selected */}
