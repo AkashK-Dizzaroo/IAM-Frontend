@@ -1,15 +1,11 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/features/auth";
 import { resourceService } from "../api/resourceService";
 import { applicationService } from "@/features/applications";
-import { abacService } from "@/features/abac/api/abacService";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -20,18 +16,10 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   Plus, Search, RefreshCw, Pencil, Trash2, ShieldCheck,
-  ChevronDown, ChevronRight, X, FolderOpen,
+  ChevronDown, ChevronRight, FolderOpen,
 } from "lucide-react";
 import { ResourceRegistrationModal } from "./ResourceRegistrationModal";
 import { EditResourceModal } from "./EditResourceModal";
-
-const EMPTY_CLS_FORM = { key: "", displayName: "", description: "", sensitivityLevel: 0 };
-
-function sensitivityColor(level) {
-  if (level <= 1) return "bg-green-500";
-  if (level <= 3) return "bg-amber-500";
-  return "bg-red-500";
-}
 
 export function ResourceManagementTab() {
   const { effectiveRoles } = useAuth();
@@ -54,12 +42,6 @@ export function ResourceManagementTab() {
   const [deleteError, setDeleteError] = useState(null);
   const [addingAppToResourceId, setAddingAppToResourceId] = useState(null);
 
-  // Classification management state
-  const [clsPanelOpen, setClsPanelOpen] = useState(false);
-  const [clsSlideOver, setClsSlideOver] = useState(null); // null | 'create' | classificationObject
-  const [clsForm, setClsForm] = useState(EMPTY_CLS_FORM);
-  const [clsDeleteConfirmId, setClsDeleteConfirmId] = useState(null);
-
   const { data: applicationsData } = useQuery({
     queryKey: ["applications-resources"],
     queryFn: async () => {
@@ -69,89 +51,6 @@ export function ResourceManagementTab() {
   });
 
   const applications = applicationsData ?? [];
-
-  const { data: classificationsData } = useQuery({
-    queryKey: ["classifications"],
-    queryFn: async () => {
-      const res = await abacService.listClassifications();
-      return res?.data?.data ?? res?.data ?? [];
-    },
-    staleTime: 60_000,
-  });
-
-  const classifications = classificationsData ?? [];
-
-  // Classification CRUD mutations
-  const createClsMutation = useMutation({
-    mutationFn: (data) => abacService.createClassification(data),
-    onSuccess: () => {
-      toast({ title: "Classification created" });
-      queryClient.invalidateQueries({ queryKey: ["classifications"] });
-      setClsSlideOver(null);
-    },
-    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
-  });
-
-  const updateClsMutation = useMutation({
-    mutationFn: ({ id, data }) => abacService.updateClassification(id, data),
-    onSuccess: () => {
-      toast({ title: "Classification updated" });
-      queryClient.invalidateQueries({ queryKey: ["classifications"] });
-      setClsSlideOver(null);
-    },
-    onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
-  });
-
-  const deleteClsMutation = useMutation({
-    mutationFn: (id) => abacService.deleteClassification(id),
-    onSuccess: () => {
-      toast({ title: "Classification deleted" });
-      setClsDeleteConfirmId(null);
-      queryClient.invalidateQueries({ queryKey: ["classifications"] });
-    },
-    onError: (err) => {
-      setClsDeleteConfirmId(null);
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const openClsCreate = useCallback(() => {
-    setClsForm(EMPTY_CLS_FORM);
-    setClsSlideOver("create");
-  }, []);
-
-  const openClsEdit = useCallback((item) => {
-    setClsForm({
-      key: item.key || "",
-      displayName: item.displayName || "",
-      description: item.description || "",
-      sensitivityLevel: item.sensitivityLevel ?? 0,
-    });
-    setClsSlideOver(item);
-  }, []);
-
-  const handleClsSave = () => {
-    if (clsSlideOver === "create") {
-      createClsMutation.mutate(clsForm);
-    } else {
-      const { key, ...rest } = clsForm;
-      updateClsMutation.mutate({ id: clsSlideOver.id || clsSlideOver._id, data: rest });
-    }
-  };
-
-  const clsSaving = createClsMutation.isPending || updateClsMutation.isPending;
-
-  const classificationMutation = useMutation({
-    mutationFn: ({ resourceId, applicationId, classificationId }) =>
-      resourceService.setClassification(resourceId, applicationId, classificationId),
-    onSuccess: () => {
-      toast({ title: "Success", description: "Classification updated" });
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
-    },
-    onError: (err) => {
-      toast({ title: "Error", description: err?.message ?? "Failed to update classification", variant: "destructive" });
-    },
-  });
 
   const {
     data: resourcesResponse,
@@ -172,30 +71,12 @@ export function ResourceManagementTab() {
 
   const resources = resourcesResponse?.data ?? [];
 
-  // Count resources per classification (across all resource-application mappings)
-  const classificationCounts = useMemo(() => {
-    const counts = {}; // classificationId -> Set of resourceIds
-    for (const r of resources) {
-      for (const app of r.assignedApplications ?? []) {
-        if (app.classification?.id) {
-          if (!counts[app.classification.id]) counts[app.classification.id] = new Set();
-          counts[app.classification.id].add(r._id || r.id);
-        }
-      }
-    }
-    const result = {};
-    for (const [clsId, resourceSet] of Object.entries(counts)) {
-      result[clsId] = resourceSet.size;
-    }
-    return result;
-  }, [resources]);
-
   let filteredResources = resources.filter((r) => r.isUnassignedNode !== true);
 
   if (searchTerm) {
     const term = searchTerm.toLowerCase();
     filteredResources = filteredResources.filter((r) => {
-      const universalId = r.resourceExternalId ?? "";
+      const universalId = r.resourceExternalId ?? r.externalId ?? "";
       return (
         (r.name || "").toLowerCase().includes(term) ||
         universalId.toLowerCase().includes(term)
@@ -280,7 +161,7 @@ export function ResourceManagementTab() {
     }
   };
 
-  const [viewMode, setViewMode] = useState("tree"); // 'table' | 'tree'
+  const [viewMode, setViewMode] = useState("tree");
   const [expandedIds, setExpandedIds] = useState(new Set());
 
   const toggleExpand = (id) => {
@@ -295,22 +176,16 @@ export function ResourceManagementTab() {
   const treeData = useMemo(() => {
     if (!resources || !applications) return [];
 
-    // Map of appId -> { app, children: Map<l2Id, { l2, children: [] }> }
     const appMap = new Map();
 
-    // Initialize applications that have resources assigned
-    // If applicationFilter is "all", we show all apps that have resources.
-    // If applicationFilter is specific, resources list is already filtered by API.
-    
     const l2s = resources.filter(r => r.level === 2);
     const l3s = resources.filter(r => r.level === 3);
 
-    // Group L2s under their applications
     l2s.forEach(l2 => {
       const assignedApps = l2.assignedApplications || [];
       assignedApps.forEach(app => {
         const appId = (app._id || app.id || app).toString();
-        
+
         if (!appMap.has(appId)) {
           const fullApp = applications.find(a => (a._id || a.id).toString() === appId);
           if (fullApp) {
@@ -335,12 +210,10 @@ export function ResourceManagementTab() {
       });
     });
 
-    // Group L3s under their L2 parents
     l3s.forEach(l3 => {
       const parentId = (l3.parentResource?._id || l3.parentResource?.id || l3.parentId)?.toString();
       if (!parentId) return;
 
-      // Find L2 nodes in any application tree
       appMap.forEach(appNode => {
         const l2Node = appNode.children.get(parentId);
         if (l2Node) {
@@ -353,7 +226,6 @@ export function ResourceManagementTab() {
       });
     });
 
-    // Convert Maps to arrays for rendering
     return Array.from(appMap.values())
       .map(app => ({
         ...app,
@@ -363,10 +235,6 @@ export function ResourceManagementTab() {
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [resources, applications]);
 
-  const sortedClassifications = [...classifications].sort(
-    (a, b) => a.sensitivityLevel - b.sensitivityLevel
-  );
-
   const TreeNode = ({ node, level = 0 }) => {
     const isExpanded = expandedIds.has(node.treeId);
     const hasChildren = node.children && node.children.length > 0;
@@ -375,78 +243,21 @@ export function ResourceManagementTab() {
     const isL3 = node.type === 'resource' && node.level === 3;
 
     const rid = node._id || node.id;
-    const universalId = node.resourceExternalId ?? "—";
+    const universalId = node.resourceExternalId ?? node.externalId ?? "—";
     const active = node.isActive !== false;
     const missingAppId = isAppOwner ? getMissingAppId(node) : null;
-
-    // Classification logic for resource nodes
-    const renderClassification = (resource) => {
-      if (isApp) return null;
-      
-      return (
-        <div className="space-y-1">
-          {(resource.assignedApplications ?? []).map((app) => {
-            const appId = app._id || app.id;
-            const cls = app.classification;
-            return (
-              <div key={appId} className="flex items-center gap-2">
-                {isHubOwner ? (
-                  <Select
-                    value={cls?.id ?? "none"}
-                    onValueChange={(val) =>
-                      classificationMutation.mutate({
-                        resourceId: rid,
-                        applicationId: appId,
-                        classificationId: val === "none" ? null : val,
-                      })
-                    }
-                  >
-                    <SelectTrigger className="h-7 text-[10px] w-[140px] px-2">
-                      {cls ? (
-                        <span className="flex items-center gap-1 truncate">
-                          <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
-                          <span className="truncate">{cls.displayName}</span>
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">Unclassified</span>
-                      )}
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Unclassified</SelectItem>
-                      {classifications
-                        .sort((a, b) => a.sensitivityLevel - b.sensitivityLevel)
-                        .map((c) => (
-                          <SelectItem key={c.id || c._id} value={c.id || c._id}>
-                            <span className="flex items-center gap-2 text-xs">
-                              <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(c.sensitivityLevel)}`} />
-                              {c.displayName}
-                            </span>
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                ) : cls ? (
-                  <Badge className="text-[10px] px-1.5 py-0 h-5" variant="outline">
-                    {cls.displayName}
-                  </Badge>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      );
-    };
+    const classification = node.metadata?.classification ?? null;
 
     return (
       <>
-        <div 
+        <div
           className={`group flex items-center py-2 px-4 hover:bg-gray-50 border-b border-gray-100 transition-colors ${isApp ? 'bg-gray-50/50' : ''}`}
           style={{ paddingLeft: `${level * 24 + 16}px` }}
         >
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="flex items-center w-6 justify-center">
               {hasChildren ? (
-                <button 
+                <button
                   onClick={() => toggleExpand(node.treeId)}
                   className="p-1 hover:bg-gray-200 rounded transition-colors"
                 >
@@ -461,7 +272,7 @@ export function ResourceManagementTab() {
               {isApp && <FolderOpen className="w-4 h-4 text-blue-500 shrink-0" />}
               {isL2 && <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0" />}
               {isL3 && <RefreshCw className="w-4 h-4 text-green-500 shrink-0" />}
-              
+
               <span className={`truncate text-sm ${isApp ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
                 {node.name}
                 {isApp && <span className="ml-2 text-xs font-normal text-gray-500">({node.appCode})</span>}
@@ -479,9 +290,17 @@ export function ResourceManagementTab() {
             <div className="w-[120px] truncate font-mono text-[10px]" title={universalId}>
               {!isApp && universalId}
             </div>
-            
+
             <div className="w-[150px]">
-              {renderClassification(node)}
+              {!isApp && (
+                classification ? (
+                  <Badge variant="outline" className="text-[10px] px-1.5 h-5 capitalize">
+                    {classification}
+                  </Badge>
+                ) : (
+                  <span className="text-[10px] text-gray-400">—</span>
+                )
+              )}
             </div>
 
             <div className="w-[80px]">
@@ -554,173 +373,11 @@ export function ResourceManagementTab() {
   return (
     <div className="space-y-6">
       <div className="flex justify-end gap-2">
-        {isHubOwner && (
-          <Button variant="outline" onClick={() => setClsPanelOpen((v) => !v)}>
-            {clsPanelOpen ? <ChevronDown className="w-4 h-4 mr-2" /> : <ChevronRight className="w-4 h-4 mr-2" />}
-            Classifications ({classifications.length})
-          </Button>
-        )}
         <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Create Resource
         </Button>
       </div>
-
-      {/* ── Classification Management Panel (HubOwner only) ────────── */}
-      {isHubOwner && clsPanelOpen && (
-        <div className="bg-white rounded-xl shadow-sm border p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">Resource Classifications</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Sensitivity taxonomy used in ABAC policy conditions</p>
-            </div>
-            <Button size="sm" onClick={openClsCreate}>
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              New Classification
-            </Button>
-          </div>
-
-          {sortedClassifications.length === 0 ? (
-            <div className="text-center py-8">
-              <ShieldCheck className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No classifications defined yet</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {sortedClassifications.map((item) => {
-                const id = item.id || item._id;
-                const isDeleting = clsDeleteConfirmId === id;
-                const level = item.sensitivityLevel ?? 0;
-                const pct = Math.min(Math.max((level / 4) * 100, 0), 100);
-                const count = classificationCounts[id] ?? 0;
-
-                return (
-                  <Card key={id} className="p-4 flex flex-col gap-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-gray-900">{item.key}</span>
-                        <Badge variant="secondary" className="text-[10px] gap-1">
-                          <FolderOpen className="w-2.5 h-2.5" />
-                          {count} resource{count !== 1 ? "s" : ""}
-                        </Badge>
-                      </div>
-                      {!isDeleting && (
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openClsEdit(item)}>
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-red-500" onClick={() => setClsDeleteConfirmId(id)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-700">{item.displayName || "—"}</div>
-                    <p className="text-[11px] text-gray-500 line-clamp-2">{item.description || "—"}</p>
-                    <div>
-                      <div className="text-[11px] text-gray-500 mb-1">Sensitivity Level {level}/4</div>
-                      <div className="bg-gray-100 rounded-full h-1.5 w-full">
-                        <div
-                          className={`${sensitivityColor(level)} rounded-full h-1.5 transition-all`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                    {isDeleting && (
-                      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                        <span className="text-xs text-red-600 flex-1">Delete? This cannot be undone.</span>
-                        <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setClsDeleteConfirmId(null)}>Cancel</Button>
-                        <Button variant="destructive" size="sm" className="h-6 text-xs" onClick={() => deleteClsMutation.mutate(id)} disabled={deleteClsMutation.isPending}>
-                          {deleteClsMutation.isPending ? "..." : "Confirm"}
-                        </Button>
-                      </div>
-                    )}
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Classification Slide-over (create/edit) ─────────────────── */}
-      {clsSlideOver !== null && (
-        <>
-          <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setClsSlideOver(null)} />
-          <div className="fixed right-0 top-0 h-full w-[400px] z-50 bg-white border-l border-gray-200 shadow-xl flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-900 text-sm">
-                {clsSlideOver === "create" ? "New Classification" : "Edit Classification"}
-              </h2>
-              <Button variant="ghost" size="sm" onClick={() => setClsSlideOver(null)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
-              <div className="space-y-1.5">
-                <Label>Key</Label>
-                <Input
-                  value={clsForm.key}
-                  onChange={(e) => setClsForm((p) => ({ ...p, key: e.target.value.toLowerCase().replace(/\s/g, "") }))}
-                  className="font-mono"
-                  disabled={clsSlideOver !== "create"}
-                  placeholder="e.g. phi"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Display Name</Label>
-                <Input
-                  value={clsForm.displayName}
-                  onChange={(e) => setClsForm((p) => ({ ...p, displayName: e.target.value }))}
-                  placeholder="e.g. Protected Health Information"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Description</Label>
-                <Textarea
-                  rows={3}
-                  value={clsForm.description}
-                  onChange={(e) => setClsForm((p) => ({ ...p, description: e.target.value }))}
-                  placeholder="Describe this classification level..."
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Sensitivity Level (0-4)</Label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={4}
-                    value={clsForm.sensitivityLevel}
-                    onChange={(e) => setClsForm((p) => ({ ...p, sensitivityLevel: Number(e.target.value) }))}
-                    className="flex-1 accent-gray-900"
-                  />
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={4}
-                      value={clsForm.sensitivityLevel}
-                      onChange={(e) => {
-                        const v = Math.min(4, Math.max(0, Number(e.target.value) || 0));
-                        setClsForm((p) => ({ ...p, sensitivityLevel: v }));
-                      }}
-                      className="w-14 text-center"
-                    />
-                    <div className={`h-3 w-3 rounded-full ${sensitivityColor(clsForm.sensitivityLevel)}`} />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setClsSlideOver(null)}>Cancel</Button>
-              <Button onClick={handleClsSave} disabled={clsSaving}>
-                {clsSaving ? "Saving..." : "Save"}
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
 
       <div className="bg-white rounded-xl shadow-sm border p-4">
         <div className="space-y-4">
@@ -870,13 +527,14 @@ export function ResourceManagementTab() {
                   </tr>
                 ) : (
                   filteredResources.map((r) => {
-                    const universalId = r.resourceExternalId ?? "—";
+                    const universalId = r.resourceExternalId ?? r.externalId ?? "—";
                     const boundApps = (r.assignedApplications ?? []).map(
                       (a) => a?.name ?? a?.appCode ?? null
                     ).filter(Boolean);
                     const active = r.isActive !== false;
                     const rid = r._id || r.id;
                     const missingAppId = isAppOwner ? getMissingAppId(r) : null;
+                    const classification = r.metadata?.classification ?? null;
 
                     return (
                       <tr key={rid}>
@@ -910,70 +568,13 @@ export function ResourceManagementTab() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="space-y-1">
-                            {(r.assignedApplications ?? []).map((app) => {
-                              const appId = app._id || app.id;
-                              const cls = app.classification;
-                              return (
-                                <div key={appId} className="flex items-center gap-2">
-                                  {isHubOwner ? (
-                                    <Select
-                                      value={cls?.id ?? "none"}
-                                      onValueChange={(val) =>
-                                        classificationMutation.mutate({
-                                          resourceId: rid,
-                                          applicationId: appId,
-                                          classificationId: val === "none" ? null : val,
-                                        })
-                                      }
-                                    >
-                                      <SelectTrigger className="h-7 text-xs w-[180px]">
-                                        {cls ? (
-                                          <span className="flex items-center gap-1.5 truncate">
-                                            <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
-                                            <span className="truncate">{cls.displayName}</span>
-                                            <span className="text-[10px] text-gray-400 shrink-0">S{cls.sensitivityLevel}</span>
-                                          </span>
-                                        ) : (
-                                          <span className="text-muted-foreground">Unclassified</span>
-                                        )}
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="none">Unclassified</SelectItem>
-                                        {classifications
-                                          .sort((a, b) => a.sensitivityLevel - b.sensitivityLevel)
-                                          .map((c) => (
-                                            <SelectItem key={c.id || c._id} value={c.id || c._id}>
-                                              <span className="flex items-center gap-2">
-                                                <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sensitivityColor(c.sensitivityLevel)}`} />
-                                                {c.displayName}
-                                                <span className="text-[10px] text-gray-400">S{c.sensitivityLevel}</span>
-                                              </span>
-                                            </SelectItem>
-                                          ))}
-                                      </SelectContent>
-                                    </Select>
-                                  ) : cls ? (
-                                    <Badge
-                                      className={`text-xs flex items-center gap-1.5 ${
-                                        cls.sensitivityLevel >= 4
-                                          ? "bg-red-100 text-red-800 border-red-200"
-                                          : cls.sensitivityLevel >= 2
-                                          ? "bg-amber-100 text-amber-800 border-amber-200"
-                                          : "bg-green-100 text-green-800 border-green-200"
-                                      }`}
-                                    >
-                                      <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${sensitivityColor(cls.sensitivityLevel)}`} />
-                                      {cls.displayName}
-                                      <span className="text-[10px] opacity-70">S{cls.sensitivityLevel}</span>
-                                    </Badge>
-                                  ) : (
-                                    <span className="text-xs text-gray-400">—</span>
-                                  )}
-                                  </div>
-                              );
-                            })}
-                          </div>
+                          {classification ? (
+                            <Badge variant="outline" className="text-xs capitalize">
+                              {classification}
+                            </Badge>
+                          ) : (
+                            <span className="text-sm text-gray-400">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           {active ? (
