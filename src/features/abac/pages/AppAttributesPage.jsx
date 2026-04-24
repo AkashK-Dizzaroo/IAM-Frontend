@@ -43,18 +43,19 @@ const NAMESPACE_BADGE = {
 };
 
 const EMPTY_FORM = {
-  attribute_name:     '',
-  display_name:       '',
-  description:        '',
-  namespace:          'subject',
-  attribute_type:     'string',
-  allowed_values:     '',   // comma-separated string in UI
-  default_value:      '',
-  min_value:          '',
-  max_value:          '',
-  is_required:        false,
-  is_multi_valued:    false,
-  parentId:           '',
+  attribute_name:       '',
+  display_name:         '',
+  description:          '',
+  namespace:            'subject',
+  attribute_type:       'string',
+  allowed_values:       '',   // comma-separated string in UI
+  default_value:        '',
+  min_value:            '',
+  max_value:            '',
+  is_required:          false,
+  is_multi_valued:      false,
+  is_user_requestable:  false,
+  parentId:             '',
 };
 
 function formFromAttr(attr) {
@@ -69,9 +70,10 @@ function formFromAttr(attr) {
     default_value:   c.defaultValue != null ? String(c.defaultValue) : '',
     min_value:       c.min != null ? String(c.min) : '',
     max_value:       c.max != null ? String(c.max) : '',
-    is_required:     attr.isRequired   ?? false,
-    is_multi_valued: attr.isMultiValued ?? false,
-    parentId:        attr.parentId      ?? '',
+    is_required:          attr.isRequired        ?? false,
+    is_multi_valued:      attr.isMultiValued     ?? false,
+    is_user_requestable:  attr.isUserRequestable ?? false,
+    parentId:             attr.parentId          ?? '',
     id:              attr.id,
   };
 }
@@ -92,14 +94,15 @@ function buildPayload(form) {
     constraints.defaultValue = form.default_value.trim();
   }
   return {
-    namespace:     form.namespace,
-    key:           form.attribute_name.trim(),
-    displayName:   form.display_name.trim(),
-    description:   form.description.trim() || undefined,
-    dataType:      form.attribute_type,
-    isRequired:    form.is_required,
-    isMultiValued: form.is_multi_valued,
-    parentId:      form.parentId || null,
+    namespace:          form.namespace,
+    key:                form.attribute_name.trim(),
+    displayName:        form.display_name.trim(),
+    description:        form.description.trim() || undefined,
+    dataType:           form.attribute_type,
+    isRequired:         form.is_required,
+    isMultiValued:      form.is_multi_valued,
+    isUserRequestable:  form.is_user_requestable,
+    parentId:           form.parentId || null,
     constraints,
   };
 }
@@ -302,8 +305,8 @@ function AttributeForm({ form, setForm, mode, allAttributes = [] }) {
         )}
       </div>
 
-      {/* is_required + is_multi_valued */}
-      <div className="flex flex-col gap-3 pt-1">
+      {/* is_required + is_multi_valued + is_user_requestable */}
+      <div className="flex flex-col gap-4 pt-1">
         <div className="flex items-center gap-2">
           <Checkbox
             id="f-required"
@@ -314,6 +317,7 @@ function AttributeForm({ form, setForm, mode, allAttributes = [] }) {
             Is Required
           </Label>
         </div>
+
         <div className="flex items-center gap-2">
           <Checkbox
             id="f-multi"
@@ -327,6 +331,39 @@ function AttributeForm({ form, setForm, mode, allAttributes = [] }) {
           {isEdit && (
             <span className="text-xs text-gray-400">(cannot change after creation)</span>
           )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>
+            Filled by User during Access Request?
+          </Label>
+          <div className="flex items-center gap-6 pt-0.5">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="is_user_requestable"
+                value="true"
+                checked={form.is_user_requestable === true}
+                onChange={() => setForm({ ...form, is_user_requestable: true })}
+                className="accent-indigo-600"
+              />
+              <span className="text-sm">Yes</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="is_user_requestable"
+                value="false"
+                checked={form.is_user_requestable === false}
+                onChange={() => setForm({ ...form, is_user_requestable: false })}
+                className="accent-indigo-600"
+              />
+              <span className="text-sm">No</span>
+            </label>
+          </div>
+          <p className="text-xs text-gray-400">
+            When set to Yes, end-users will be prompted to fill this attribute when requesting access.
+          </p>
         </div>
       </div>
 
@@ -503,11 +540,12 @@ export function AppAttributesPage() {
     updateMutation.mutate({
       id: editTarget.id,
       payload: {
-        displayName: editForm.display_name.trim(),
-        description: editForm.description.trim() || undefined,
-        isRequired:  editForm.is_required,
-        parentId:    editForm.parentId || null,
-        constraints: c,
+        displayName:        editForm.display_name.trim(),
+        description:        editForm.description.trim() || undefined,
+        isRequired:         editForm.is_required,
+        isUserRequestable:  editForm.is_user_requestable,
+        parentId:           editForm.parentId || null,
+        constraints:        c,
       },
     });
   };
@@ -628,7 +666,10 @@ export function AppAttributesPage() {
                         {attr.isMultiValued && (
                           <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] w-fit">Multi</Badge>
                         )}
-                        {!attr.isRequired && !attr.isMultiValued && (
+                        {attr.isUserRequestable && (
+                          <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] w-fit">User Requestable</Badge>
+                        )}
+                        {!attr.isRequired && !attr.isMultiValued && !attr.isUserRequestable && (
                           <span className="text-gray-300 text-xs">—</span>
                         )}
                       </div>
