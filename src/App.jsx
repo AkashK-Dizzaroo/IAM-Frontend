@@ -17,6 +17,7 @@ import { HubAttributesPage } from "@/features/abac/pages/HubAttributesPage";
 import { GlobalPoliciesPage } from "@/features/abac/pages/GlobalPoliciesPage";
 import { AppAttributesPage } from "@/features/abac/pages/AppAttributesPage";
 import { AppUserAttributesPage } from "@/features/abac/pages/AppUserAttributesPage";
+import { AppUsersManagementPage } from "@/features/abac/pages/AppUsersManagementPage";
 import { AppPoliciesPage } from "@/features/abac/pages/AppPoliciesPage";
 import { PolicyTesterPage } from "@/features/abac/pages/PolicyTesterPage";
 import { CoverageGapsPage } from "@/features/abac/pages/CoverageGapsPage";
@@ -71,7 +72,8 @@ function AppRoutes() {
 
         {/* ── App scope ABAC pages ─────────────────────────────────── */}
         <Route path="app-attributes" element={<AppAttributesPage />} />
-        <Route path="app-user-attributes" element={<AppUserAttributesPage />} />
+        <Route path="app-user-attributes" element={<AppUsersManagementPage />} />
+        <Route path="app-users" element={<AppUsersManagementPage />} />
         <Route path="app-policies" element={<AppPoliciesPage />} />
         <Route path="policy-tester" element={<PolicyTesterPage />} />
         <Route path="coverage-gaps" element={<CoverageGapsPage />} />

@@ -225,7 +225,7 @@ export const DashboardPage = () => {
     },
     {
       id: "app-user-attributes",
-      label: "App User Attributes",
+      label: "App Users",
       icon: UserCog,
       path: "/app-user-attributes",
       show: (effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && isAppScope,

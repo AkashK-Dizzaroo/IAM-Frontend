@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { formatDistanceToNow } from 'date-fns';
 import { abacService } from '@/features/abac/api/abacService';
 import { userService } from '@/features/users/api/userService';
 import { useToast } from '@/hooks/use-toast';
@@ -8,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectTrigger,
@@ -25,6 +23,58 @@ import {
 } from '@/components/ui/dialog';
 import { Search, Plus, Pencil, Users, Trash2, AlertCircle } from 'lucide-react';
 import { UserForm, validateUserFormFields } from '@/features/users/components/UserForm';
+
+// ─── table cell helpers ───────────────────────────────────────────────────────
+
+function getHubAttr(user, key) {
+  const attrs = user.hubUserAttributes || user.hubAttributes || user.hubAttributeValues || [];
+  const match = attrs.find((a) => {
+    const k = a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key;
+    return k === key;
+  });
+  if (!match) return null;
+  const v = match.value;
+  if (Array.isArray(v)) return v.join(', ');
+  return v != null ? String(v) : null;
+}
+
+const USER_STATUS_STYLES = {
+  active:            'bg-green-100 text-green-700 border-green-200',
+  inactive:          'bg-gray-100 text-gray-500 border-gray-200',
+  suspended:         'bg-red-100 text-red-700 border-red-200',
+  pending_approval:  'bg-yellow-100 text-yellow-700 border-yellow-200',
+};
+
+function UserStatusBadge({ status }) {
+  const s = (status || '').toLowerCase();
+  const cls = USER_STATUS_STYLES[s] ?? 'bg-gray-100 text-gray-500 border-gray-200';
+  const label = s ? s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
+  return <Badge className={cls}>{label}</Badge>;
+}
+
+function formatLastLogin(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function isHubOwner(user) {
+  const hubRolesAttr = (user.hubUserAttributes ?? []).find((a) => {
+    const k = a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key;
+    return k === 'hub_roles';
+  });
+  if (!hubRolesAttr) return false;
+  const v = hubRolesAttr.value;
+  const roles = Array.isArray(v) ? v : typeof v === 'string' ? [v] : [];
+  return roles.includes('HUB_OWNER');
+}
+
+function getAssignedApps(user, allApps) {
+  if (isHubOwner(user)) return allApps;
+  const reqs = user.accessRequests ?? [];
+  return reqs.map((r) => r.application?.name || r.application?.appCode).filter(Boolean);
+}
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -164,6 +214,16 @@ export function AbacUsersPage() {
   });
   const attrDefs = attrDefsData?.data?.data ?? attrDefsData?.data ?? [];
 
+  const { data: appsData } = useQuery({
+    queryKey: ['abac', 'applications'],
+    queryFn: abacService.getApplications,
+    staleTime: 5 * 60_000,
+  });
+  const allAppNames = (appsData?.data?.data ?? appsData?.data ?? []).map(
+    (a) => a.name || a.appCode
+  ).filter(Boolean);
+
+
   // ── create form state (managed by UserForm via onChange) ──────────────────
   const createFormRef = useRef({ fields: {}, attrValues: {} });
 
@@ -172,7 +232,7 @@ export function AbacUsersPage() {
   }, []);
 
   // ── edit form state ───────────────────────────────────────────────────────
-  const [editFormData, setEditFormData] = useState({ displayName: '', username: '', email: '', isActive: true });
+  const [editFormData, setEditFormData] = useState({ displayName: '', username: '', email: '' });
   const [editNewAttr, setEditNewAttr] = useState({ attributeDefId: '', value: '' });
 
   const resetCreate = useCallback(() => {
@@ -190,14 +250,16 @@ export function AbacUsersPage() {
       displayName: user.displayName || '',
       username: user.username || '',
       email: user.email || '',
-      status: user.status || 'pending_approval',
     });
     setEditNewAttr({ attributeDefId: '', value: '' });
     setSubmitted(false);
     setDialogMode(user);
   };
 
-  const closeDialog = () => setDialogMode(null);
+  const closeDialog = useCallback(() => {
+    setDialogMode(null);
+    resetCreate();
+  }, [resetCreate]);
 
   const isOpen = dialogMode !== null;
   const isEditing = isOpen && dialogMode !== 'create';
@@ -231,18 +293,20 @@ export function AbacUsersPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data) => userService.createUser(data),
-    onSuccess: async (res) => {
+    mutationFn: ({ payload }) => userService.createUser(payload),
+    onSuccess: async (res, { attrValuesSnapshot, attrDefsSnapshot }) => {
+      // userService.createUser returns response.data (axios-unwrapped body):
+      // { success: true, data: { id, email, ... } }
       const newUserId = res?.data?.id ?? res?.data?.data?.id;
-      const { attrValues } = createFormRef.current;
-      const attrDef_ids = Object.keys(attrValues);
+      const attrDef_ids = Object.keys(attrValuesSnapshot);
 
       if (newUserId && attrDef_ids.length > 0) {
         const assignments = attrDef_ids
           .map((id) => {
-            const def = attrDefs.find((d) => String(d.id || d._id) === id);
+            // Use the snapshot taken at submit time so stale query data can't empty this out
+            const def = attrDefsSnapshot.find((d) => String(d.id || d._id) === id);
             if (!def) return null;
-            const raw = attrValues[id];
+            const raw = attrValuesSnapshot[id];
             if (isValueEmpty(def, raw)) return null;
             try {
               return { attribute_key: def.key, value: parseHubAttrValue(def, raw) };
@@ -251,11 +315,20 @@ export function AbacUsersPage() {
           .filter(Boolean);
 
         if (assignments.length > 0) {
-          try {
-            await Promise.all(assignments.map((a) => abacService.setHubUserAttr(newUserId, a)));
+          // allSettled so one failing attribute doesn't abandon the rest
+          const results = await Promise.allSettled(
+            assignments.map((a) => abacService.setHubUserAttr(newUserId, a))
+          );
+          const failed = results.filter((r) => r.status === 'rejected');
+          if (failed.length === 0) {
             toast({ title: `User created with ${assignments.length} attribute${assignments.length > 1 ? 's' : ''}` });
-          } catch {
-            toast({ title: 'User created, but some attributes failed to save', variant: 'destructive' });
+          } else {
+            const reasons = failed.map((r) => apiErrorDescription(r.reason)).join('; ');
+            toast({
+              title: `User created — ${failed.length} attribute${failed.length > 1 ? 's' : ''} failed to save`,
+              description: reasons,
+              variant: 'destructive',
+            });
           }
         } else {
           toast({ title: 'User created' });
@@ -292,8 +365,11 @@ export function AbacUsersPage() {
 
       if (Object.keys(coreErrors).length > 0 || Object.keys(attrErrors).length > 0) return;
 
-      // POST /api/users — handles firstName, lastName, org, address, password,
-      // and status. status ACTIVE bypasses the pending_approval flow.
+      // Find the organization value from hub attributes so the backend writes it
+      // to user metadata (same as self-registration) — not just as a hub attribute.
+      const orgDef = attrDefs.find((d) => d.key === 'organization');
+      const orgValue = orgDef ? attrValues[String(orgDef.id || orgDef._id)] : undefined;
+
       const payload = {
         firstName: fields.firstName,
         lastName: fields.lastName,
@@ -301,8 +377,15 @@ export function AbacUsersPage() {
         address: fields.address,
         password: fields.password,
         status: 'ACTIVE',
+        ...(orgValue && { organization: String(orgValue) }),
       };
-      createMutation.mutate(payload);
+      // Snapshot both attrValues and attrDefs at submit time so onSuccess always
+      // has the correct data regardless of query refetches or ref resets.
+      createMutation.mutate({
+        payload,
+        attrValuesSnapshot: { ...attrValues },
+        attrDefsSnapshot: [...attrDefs],
+      });
     } else {
       const editAttrDef = attrDefs.find((d) => String(d.id || d._id) === String(editNewAttr.attributeDefId));
       if (editAttrDef && !isValueEmpty(editAttrDef, editNewAttr.value)) {
@@ -332,22 +415,6 @@ export function AbacUsersPage() {
     try { value = parseHubAttrValue(def, editNewAttr.value); }
     catch (e) { toast({ title: 'Invalid value', description: e.message, variant: 'destructive' }); return; }
     setAttrMutation.mutate({ userId: editUserId, data: { attribute_key: def.key, value } });
-  };
-
-  // ── table helpers ─────────────────────────────────────────────────────────
-  const formatHubAttrValue = (raw) => {
-    if (raw == null) return '';
-    if (Array.isArray(raw)) return raw.join(', ');
-    if (typeof raw === 'object') return JSON.stringify(raw);
-    return String(raw);
-  };
-
-  const getUserHubAttrs = (user) => {
-    const attrs = user.hubUserAttributes || user.hubAttributes || user.hubAttributeValues || [];
-    return attrs.map((a) => {
-      const key = a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key || '?';
-      return { key, value: formatHubAttrValue(a.value) };
-    });
   };
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -390,15 +457,21 @@ export function AbacUsersPage() {
               <tr className="bg-gray-50 border-b border-gray-200 text-left">
                 <th className="px-4 py-3 font-medium text-gray-600">User</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Status</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Hub Attributes</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Created</th>
+                <th className="px-4 py-3 font-medium text-gray-600">Organization</th>
+                <th className="px-4 py-3 font-medium text-gray-600">HUB Role</th>
+                <th className="px-4 py-3 font-medium text-gray-600">Assigned Applications</th>
+                <th className="px-4 py-3 font-medium text-gray-600">Last Login</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {users.map((user) => {
-                const hubAttrs = getUserHubAttrs(user);
                 const initial = (user.displayName || user.email || '?')[0].toUpperCase();
+                const userStatus = getHubAttr(user, 'user_status');
+                const org = getHubAttr(user, 'organization');
+                const clearance = getHubAttr(user, 'hub_roles');
+                const lastLogin = user.lastLogin ?? user.last_login ?? user.metadata?.lastLoginAt ?? user.metadata?.lastLogin ?? null;
+                const assignedApps = getAssignedApps(user, allAppNames);
                 return (
                   <tr key={user.id || user._id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
@@ -411,26 +484,24 @@ export function AbacUsersPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge className={
-                        user.status === 'active' ? 'bg-green-100 text-green-700 border-green-200' :
-                        user.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                        'bg-gray-100 text-gray-500 border-gray-200'
-                      }>
-                        {user.status ? user.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—'}
-                      </Badge>
+                      <UserStatusBadge status={userStatus} />
                     </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{org ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{clearance ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {hubAttrs.slice(0, 3).map((attr, idx) => (
-                          <span key={idx} className="bg-gray-100 text-gray-700 text-xs font-mono px-2 py-0.5 rounded">{attr.key}: {attr.value}</span>
-                        ))}
-                        {hubAttrs.length > 3 && <span className="text-xs text-gray-400">+{hubAttrs.length - 3} more</span>}
-                        {hubAttrs.length === 0 && <span className="text-xs text-gray-400">—</span>}
-                      </div>
+                      {assignedApps.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {assignedApps.map((name) => (
+                            <span key={name} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">No access</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">
-                      {user.createdAt ? formatDistanceToNow(new Date(user.createdAt), { addSuffix: true }) : '—'}
-                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{formatLastLogin(lastLogin)}</td>
                     <td className="px-4 py-3">
                       <Button variant="ghost" size="sm" onClick={() => openEdit(user)}><Pencil className="h-3.5 w-3.5" /></Button>
                     </td>
@@ -486,38 +557,14 @@ export function AbacUsersPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label>Email <span className="text-red-500">*</span></Label>
-                    <Input
-                      type="email"
-                      value={editFormData.email}
-                      onChange={(e) => setEditFormData((p) => ({ ...p, email: e.target.value }))}
-                      placeholder="jane@example.com"
-                    />
-                  </div>
-                  <div className="flex items-end pb-0.5">
-                    <div className="flex items-center justify-between w-full bg-gray-50 border border-gray-200 rounded-md px-3 py-2.5">
-                      <div>
-                        <Label className="text-sm">Status</Label>
-                        <p className="text-xs text-gray-500">{editFormData.status}</p>
-                      </div>
-                      <Select
-                        value={editFormData.status}
-                        onValueChange={(val) => setEditFormData((p) => ({ ...p, status: val }))}
-                      >
-                        <SelectTrigger className="w-[140px] h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="pending_approval">Pending</SelectItem>
-                          <SelectItem value="suspended">Suspended</SelectItem>
-                          <SelectItem value="rejected">Rejected</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                <div className="space-y-1.5">
+                  <Label>Email <span className="text-red-500">*</span></Label>
+                  <Input
+                    type="email"
+                    value={editFormData.email}
+                    onChange={(e) => setEditFormData((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="jane@example.com"
+                  />
                 </div>
 
                 {/* Hub Attributes — edit mode */}
@@ -601,12 +648,20 @@ export function AbacUsersPage() {
           </div>
 
           <DialogFooter className="px-6 py-4 border-t border-gray-100 shrink-0">
-            {submitted && !isEditing && (
-              <p className="text-xs text-red-500 flex items-center gap-1 mr-auto">
-                <AlertCircle className="h-3.5 w-3.5" />
-                Please fill in all required fields before creating.
-              </p>
-            )}
+            {submitted && !isEditing && (() => {
+              const { fields, attrValues } = createFormRef.current;
+              const hasFieldErrors = Object.keys(validateUserFormFields(fields)).length > 0;
+              const hasAttrErrors = Object.keys(attrValues).some((id) => {
+                const def = attrDefs.find((d) => String(d.id || d._id) === id);
+                return def && isValueEmpty(def, attrValues[id]);
+              });
+              return (hasFieldErrors || hasAttrErrors) ? (
+                <p className="text-xs text-red-500 flex items-center gap-1 mr-auto">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Please fill in all required fields before creating.
+                </p>
+              ) : null;
+            })()}
             <Button variant="outline" onClick={closeDialog}>Cancel</Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving

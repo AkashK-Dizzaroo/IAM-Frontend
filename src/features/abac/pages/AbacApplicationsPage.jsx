@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/apiClient';
 import { abacService } from '@/features/abac/api/abacService';
@@ -57,6 +57,45 @@ export function AbacApplicationsPage() {
     combiningStrategy: 'deny_overrides',
   });
 
+  // Owner selection state
+  const [selectedOwners, setSelectedOwners] = useState([]);
+  const [ownerSearch, setOwnerSearch] = useState('');
+  const [ownerResults, setOwnerResults] = useState([]);
+  const [ownerSearchLoading, setOwnerSearchLoading] = useState(false);
+  const ownerDebounceRef = useRef(null);
+
+  const searchOwners = useCallback(async (q) => {
+    setOwnerSearchLoading(true);
+    try {
+      const res = await apiClient.get(`/users?search=${encodeURIComponent(q || '')}&limit=20`);
+      const users = res?.data?.data ?? [];
+      setOwnerResults(
+        users
+          .map((u) => ({ _id: u._id || u.id, email: u.email, firstName: u.firstName ?? '', lastName: u.lastName ?? '' }))
+          .filter((u) => !selectedOwners.some((o) => o._id === u._id))
+      );
+    } catch {
+      setOwnerResults([]);
+    } finally {
+      setOwnerSearchLoading(false);
+    }
+  }, [selectedOwners]);
+
+  useEffect(() => {
+    if (ownerDebounceRef.current) clearTimeout(ownerDebounceRef.current);
+    ownerDebounceRef.current = setTimeout(() => searchOwners(ownerSearch), 300);
+    return () => clearTimeout(ownerDebounceRef.current);
+  }, [ownerSearch, searchOwners]);
+
+  const addOwner = (user) => {
+    if (selectedOwners.some((o) => o._id === user._id)) return;
+    setSelectedOwners((prev) => [...prev, user]);
+    setOwnerSearch('');
+    setOwnerResults([]);
+  };
+
+  const removeOwner = (id) => setSelectedOwners((prev) => prev.filter((o) => o._id !== id));
+
   const { data: mongoRes, isLoading, refetch } = useQuery({
     queryKey: ['applications'],
     queryFn: () => apiClient.get('/applications'),
@@ -101,6 +140,9 @@ export function AbacApplicationsPage() {
       features: '',
       combiningStrategy: 'deny_overrides',
     });
+    setSelectedOwners([]);
+    setOwnerSearch('');
+    setOwnerResults([]);
     setPanel('create');
   };
 
@@ -118,6 +160,18 @@ export function AbacApplicationsPage() {
         : '',
       combiningStrategy: app.combiningStrategy ?? 'deny_overrides',
     });
+    setSelectedOwners(
+      Array.isArray(app.owners)
+        ? app.owners.map((o) => ({
+            _id: o._id || o.id,
+            email: o.email,
+            firstName: o.firstName || o.displayName?.split(' ')[0] || '',
+            lastName: o.lastName || o.displayName?.split(' ').slice(1).join(' ') || '',
+          }))
+        : []
+    );
+    setOwnerSearch('');
+    setOwnerResults([]);
     setPanel(app);
   };
 
@@ -188,7 +242,7 @@ export function AbacApplicationsPage() {
           .map((f) => f.trim())
           .filter(Boolean),
         combiningStrategy: form.combiningStrategy,
-        ownerIds: [],
+        ownerIds: selectedOwners.map((o) => o._id),
       });
     } else if (panel && panel !== 'create') {
       const id = panel._id || panel.id;
@@ -206,6 +260,7 @@ export function AbacApplicationsPage() {
             .map((f) => f.trim())
             .filter(Boolean),
           combiningStrategy: form.combiningStrategy,
+          ownerIds: selectedOwners.map((o) => o._id),
         },
       });
     }
@@ -495,6 +550,60 @@ export function AbacApplicationsPage() {
                       Comma-separated, e.g. Data Collection, CRF Design
                     </p>
                   </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 pt-4">
+                <h3 className="text-sm font-medium text-gray-900">App Owners</h3>
+                <p className="text-xs text-gray-500 mt-0.5 mb-3">
+                  Owners receive access request approval emails for this application.
+                </p>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Search by email or name..."
+                    value={ownerSearch}
+                    onChange={(e) => setOwnerSearch(e.target.value)}
+                    onFocus={() => { if (!ownerSearch.trim()) searchOwners(''); }}
+                  />
+                  {ownerSearchLoading && (
+                    <p className="text-xs text-gray-500">Searching...</p>
+                  )}
+                  {ownerResults.length > 0 && (
+                    <ul className="border border-gray-200 rounded-md divide-y max-h-36 overflow-y-auto">
+                      {ownerResults.map((u) => (
+                        <li
+                          key={u._id}
+                          className="px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer"
+                          onClick={() => addOwner(u)}
+                          onKeyDown={(e) => e.key === 'Enter' && addOwner(u)}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {u.email}{u.firstName || u.lastName ? ` – ${u.firstName} ${u.lastName}`.trimEnd() : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {selectedOwners.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {selectedOwners.map((o) => (
+                        <span
+                          key={o._id}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-800 text-xs border border-blue-100"
+                        >
+                          {`${o.firstName} ${o.lastName}`.trim() || o.email}
+                          <button
+                            type="button"
+                            onClick={() => removeOwner(o._id)}
+                            className="ml-1 text-blue-400 hover:text-red-500"
+                            aria-label="Remove owner"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

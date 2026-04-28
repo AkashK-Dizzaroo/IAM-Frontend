@@ -91,9 +91,24 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
         });
       }
     }
+
+    // Fall back to resource.metadata for any attribute not returned by the /attributes endpoint.
+    // metadata keys are snake_case (e.g. "resource_status"), matched against def.key.
+    if (attrDefs.length > 0 && resource?.metadata) {
+      const meta =
+        typeof resource.metadata === "string"
+          ? JSON.parse(resource.metadata)
+          : resource.metadata;
+      for (const def of attrDefs) {
+        if (common[def.id] === undefined && def.key && meta[def.key] !== undefined) {
+          common[def.id] = meta[def.key];
+        }
+      }
+    }
+
     setAttrValues(common);
     setOverrides(appOverrides);
-  }, [existingAttrsResponse]);
+  }, [existingAttrsResponse, attrDefs, resource?.metadata]);
 
   const addOverride = () => {
     const firstAppId = assignedApps[0]?._id ?? assignedApps[0]?.id ?? "";

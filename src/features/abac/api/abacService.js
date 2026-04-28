@@ -64,9 +64,15 @@ export const abacService = {
   rollbackGlobalPolicy: (id, version) =>
     apiClient.post(v1(`/global-policies/${id}/rollback/${version}`)),
 
+  // App Users (users with at least one attribute assigned for this app)
+  listAppUsers: (appKey) =>
+    apiClient.get(v1(`/apps/${appKey}/users`)),
+
   // App Attribute Definitions
   listAppAttrDefs: (appKey) =>
     apiClient.get(v1(`/apps/${appKey}/attributes`)),
+  listRequestableAppAttrDefs: (appKey) =>
+    apiClient.get(v1(`/apps/${appKey}/attributes/requestable`)),
   createAppAttrDef: (appKey, data) =>
     apiClient.post(v1(`/apps/${appKey}/attributes`), data),
   updateAppAttrDef: (appKey, id, data) =>

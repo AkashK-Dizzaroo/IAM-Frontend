@@ -95,6 +95,7 @@ export function RequestAccessModal({
     register,
     control,
     handleSubmit,
+    trigger,
     reset,
     formState: { errors },
   } = useForm({
@@ -106,20 +107,23 @@ export function RequestAccessModal({
 
   const { fields, append, remove } = useFieldArray({ control, name: "rows" });
 
-  // Fetch attribute definitions for this app
+  // Fetch only user-requestable attribute definitions for this app.
+  // Uses the /requestable endpoint (userAuth only) instead of the admin-gated /attributes route.
   const appKey = application?.key ?? application?.appKey ?? application?.appCode;
   const { data: attrDefsData, isLoading: attrDefsLoading } = useQuery({
-    queryKey: ["appAttrDefs", appKey],
-    queryFn: () => abacService.listAppAttrDefs(appKey),
+    queryKey: ["appAttrDefs", appKey, "requestable"],
+    queryFn: () => abacService.listRequestableAppAttrDefs(appKey),
     enabled: !!appKey && isOpen,
     staleTime: 60_000,
   });
 
+  // /requestable returns { success, data: [...] } — no nested .data.data
   const rawDefs = attrDefsData?.data?.data ?? attrDefsData?.data ?? [];
-  const allDefs = Array.isArray(rawDefs) ? rawDefs : [];
+  const requestableDefs = Array.isArray(rawDefs) ? rawDefs : [];
 
-  // CRUCIAL FILTER: only show attributes the admin flagged as user-requestable
-  const requestableDefs = allDefs.filter((attr) => attr.isUserRequestable === true);
+  // Attributes fetch is still in-flight — we don't yet know if Tab 2 is required
+  const attrsFetchPending = !!appKey && attrDefsLoading;
+  const hasRequestableAttrs = requestableDefs.length > 0;
 
   const handleClose = () => {
     reset();
@@ -128,7 +132,24 @@ export function RequestAccessModal({
     onClose();
   };
 
+  // Validate Tab 1 fields then advance to Tab 2
+  const handleNextToAttributes = async () => {
+    const valid = await trigger(["rows", "justification"]);
+    if (valid) setActiveTab("attributes");
+  };
+
   const submitHandler = (data) => {
+    // GUARD: attribute fetch not yet resolved — never submit in this state
+    if (attrsFetchPending) return;
+
+    // GUARD: still on Tab 1 and Tab 2 is required — treat as "Next" instead of submit.
+    // This catches any submission path that bypasses the footer button
+    // (Enter key, programmatic submit, etc.).
+    if (activeTab === "roles" && hasRequestableAttrs) {
+      setActiveTab("attributes");
+      return;
+    }
+
     // Build requestedAppAttributes from attrValues (keyed by attr key, not defId)
     const requestedAppAttributes = {};
     for (const attr of requestableDefs) {
@@ -152,9 +173,6 @@ export function RequestAccessModal({
     onSubmit(payload);
   };
 
-  const canProceedToTab2 = activeTab === "roles";
-  const hasRequestableAttrs = requestableDefs.length > 0;
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent className="max-w-2xl w-full">
@@ -168,24 +186,44 @@ export function RequestAccessModal({
           )}
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(submitHandler)} noValidate>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-1">
+        {/* Prevent Enter on selects/inputs from submitting; textarea and submit button are exempt */}
+        <form
+          onSubmit={handleSubmit(submitHandler)}
+          noValidate
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && e.target.tagName !== "TEXTAREA" && e.target.type !== "submit") {
+              e.preventDefault();
+            }
+          }}
+        >
+          {/* Tabs is purely a display component here — onValueChange is intentionally omitted
+              so Radix cannot switch tabs autonomously. All navigation goes through the footer buttons. */}
+          <Tabs value={activeTab} className="mt-1">
             <TabsList className="w-full mb-4">
-              <TabsTrigger value="roles" className="flex-1">
+              {/* pointer-events-none makes the triggers non-interactive; they are progress indicators only */}
+              <TabsTrigger value="roles" className="flex-1 pointer-events-none">
                 1 — Roles &amp; Resources
               </TabsTrigger>
-              <TabsTrigger value="attributes" className="flex-1" disabled={!hasRequestableAttrs}>
+              <TabsTrigger
+                value="attributes"
+                className="flex-1 pointer-events-none"
+                disabled={!hasRequestableAttrs}
+              >
                 2 — Application Attributes
                 {hasRequestableAttrs && (
                   <span className="ml-1.5 text-[10px] bg-indigo-100 text-indigo-700 rounded-full px-1.5 py-0.5 font-semibold">
                     {requestableDefs.length}
                   </span>
                 )}
+                {attrsFetchPending && (
+                  <Loader2 className="ml-1.5 w-3 h-3 animate-spin text-gray-400" />
+                )}
               </TabsTrigger>
             </TabsList>
 
             {/* ── Tab 1: Roles & Resources ── */}
-            <TabsContent value="roles">
+            {/* CSS-hidden (not unmounted) so RHF fields stay registered while on Tab 2 */}
+            <TabsContent value="roles" forceMount hidden={activeTab !== "roles"}>
               <div className="space-y-3 py-2">
                 {/* Column headers */}
                 <div className="flex flex-row gap-3 items-center px-1">
@@ -288,26 +326,12 @@ export function RequestAccessModal({
                     <p className="text-xs text-red-500 mt-1">{errors.justification.message}</p>
                   )}
                 </div>
-
-                {/* Shortcut to Tab 2 when attrs exist */}
-                {hasRequestableAttrs && (
-                  <p className="text-xs text-indigo-600 text-right pt-1">
-                    This application has{" "}
-                    <button
-                      type="button"
-                      className="underline font-medium"
-                      onClick={() => setActiveTab("attributes")}
-                    >
-                      {requestableDefs.length} attribute{requestableDefs.length !== 1 ? "s" : ""}
-                    </button>{" "}
-                    to fill in on Tab 2.
-                  </p>
-                )}
               </div>
             </TabsContent>
 
             {/* ── Tab 2: Application Attributes ── */}
-            <TabsContent value="attributes">
+            {/* CSS-hidden (not unmounted) so attr values are retained when going Back */}
+            <TabsContent value="attributes" forceMount hidden={activeTab !== "attributes"}>
               <div className="py-2 space-y-4 min-h-[180px]">
                 {attrDefsLoading ? (
                   <div className="flex items-center justify-center py-10 text-gray-400 gap-2">
@@ -351,10 +375,37 @@ export function RequestAccessModal({
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-              Submit Request
-            </Button>
+
+            {/* Tab 2 → Back button */}
+            {activeTab === "attributes" && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setActiveTab("roles")}
+                disabled={isSubmitting}
+              >
+                ← Back
+              </Button>
+            )}
+
+            {/* Tab 1 + attributes exist → Next; Tab 1 + no attributes → Submit; Tab 2 → Submit */}
+            {activeTab === "roles" && (hasRequestableAttrs || attrsFetchPending) ? (
+              <Button
+                type="button"
+                onClick={handleNextToAttributes}
+                disabled={isSubmitting || attrsFetchPending}
+              >
+                {attrsFetchPending
+                  ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Loading…</>
+                  : "Next: App Attributes →"
+                }
+              </Button>
+            ) : (
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+                Submit Request
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
