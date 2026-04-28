@@ -168,11 +168,11 @@ function validatePolicyForm(form) {
       const v = leaf.value;
       const isEmpty = v === '' || v === null || v === undefined ||
         (Array.isArray(v) && v.length === 0);
-      const allowsDynamicStudyAccessValue =
+      const allowsDynamicSubjectAccessValue =
         (leaf.op === 'contains' || leaf.op === 'not_contains') &&
         String(leaf.namespace || '').toLowerCase() === 'subject' &&
-        String(leaf.key || '').trim().toLowerCase() === 'study_access';
-      if (isEmpty && !allowsDynamicStudyAccessValue) {
+        ['study_access', 'resource_access'].includes(String(leaf.key || '').trim().toLowerCase());
+      if (isEmpty && !allowsDynamicSubjectAccessValue) {
         errors.push(`Condition ${num}: value is required for operator "${leaf.op}".`);
       }
     }

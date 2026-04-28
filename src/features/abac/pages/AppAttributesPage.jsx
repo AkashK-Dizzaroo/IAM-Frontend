@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
 import { useAbacScope } from '../contexts/AbacScopeContext';
@@ -40,6 +41,13 @@ const NAMESPACE_BADGE = {
   resource:    'bg-purple-50 text-purple-700 border-purple-200',
   action:      'bg-teal-50 text-teal-700 border-teal-200',
   environment: 'bg-gray-100 text-gray-600 border-gray-200',
+};
+
+const NAMESPACE_TAB_LABEL = {
+  subject: 'Subject',
+  resource: 'Resource',
+  action: 'Action',
+  environment: 'Environment',
 };
 
 const EMPTY_FORM = {
@@ -109,8 +117,13 @@ function buildPayload(form) {
 
 // ─── Form fields ─────────────────────────────────────────────────────────────
 
-function AttributeForm({ form, setForm, mode, allAttributes = [] }) {
+/**
+ * @param {{ form: object, setForm: Function, mode: 'create'|'edit', allAttributes?: object[], lockNamespace?: string | null }} props
+ * When lockNamespace is set (create flow), namespace is taken from the active tab and the selector is hidden.
+ */
+function AttributeForm({ form, setForm, mode, allAttributes = [], lockNamespace = null }) {
   const isEdit = mode === 'edit';
+  const namespaceReadOnly = Boolean(lockNamespace) && !isEdit;
 
   return (
     <div className="space-y-4">
@@ -169,22 +182,37 @@ function AttributeForm({ form, setForm, mode, allAttributes = [] }) {
         <Label>
           Namespace {!isEdit && <span className="text-red-500">*</span>}
         </Label>
-        <Select
-          value={form.namespace}
-          disabled={isEdit}
-          onValueChange={(v) => setForm({ ...form, namespace: v })}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {NAMESPACES.map((ns) => (
-              <SelectItem key={ns} value={ns}>{ns}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {isEdit && (
-          <p className="text-xs text-gray-400">Cannot be changed after creation.</p>
+        {namespaceReadOnly ? (
+          <div
+            className={`flex h-9 w-full items-center rounded-md border px-3 text-sm ${
+              NAMESPACE_BADGE[lockNamespace] ?? NAMESPACE_BADGE.environment
+            }`}
+          >
+            <span className="capitalize font-medium">
+              {NAMESPACE_TAB_LABEL[lockNamespace] ?? lockNamespace}
+            </span>
+            <span className="ml-2 text-xs text-gray-500 font-mono">({lockNamespace})</span>
+          </div>
+        ) : (
+          <Select
+            value={form.namespace}
+            disabled={isEdit}
+            onValueChange={(v) => setForm({ ...form, namespace: v })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {NAMESPACES.map((ns) => (
+                <SelectItem key={ns} value={ns}>{NAMESPACE_TAB_LABEL[ns] ?? ns}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {(isEdit || namespaceReadOnly) && (
+          <p className="text-xs text-gray-400">
+            {isEdit ? 'Cannot be changed after creation.' : 'Choose the namespace tab on the main page to switch.'}
+          </p>
         )}
       </div>
 
@@ -392,6 +420,26 @@ function AttributeForm({ form, setForm, mode, allAttributes = [] }) {
   );
 }
 
+function buildAttributeTree(baseList) {
+  const base = [...baseList].sort((a, b) => a.displayName.localeCompare(b.displayName));
+  const processed = new Set();
+  const result = [];
+
+  const addWithChildren = (parent, level) => {
+    if (processed.has(parent.id)) return;
+    processed.add(parent.id);
+    result.push({ ...parent, level });
+
+    const children = base.filter((a) => a.parentId === parent.id);
+    children.forEach((c) => addWithChildren(c, level + 1));
+  };
+
+  base.filter((a) => !a.parentId).forEach((r) => addWithChildren(r, 0));
+  base.filter((a) => !processed.has(a.id)).forEach((u) => addWithChildren(u, 0));
+
+  return result;
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function AppAttributesPage() {
@@ -408,6 +456,7 @@ export function AppAttributesPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [createForm, setCreateForm]     = useState({ ...EMPTY_FORM });
   const [editForm, setEditForm]         = useState({ ...EMPTY_FORM });
+  const [namespaceTab, setNamespaceTab] = useState('subject');
 
   const { data, isLoading } = useQuery({
     queryKey: ['abac', 'appAttributes', selectedApp?.key],
@@ -441,28 +490,28 @@ export function AppAttributesPage() {
     return set;
   }, [policiesData]);
 
-  const treeAttributes = useMemo(() => {
-    const base = [...attributes].sort((a,b) => a.displayName.localeCompare(b.displayName));
-    const processed = new Set();
-    const result = [];
-
-    const addWithChildren = (parent, level) => {
-      if (processed.has(parent.id)) return;
-      processed.add(parent.id);
-      result.push({ ...parent, level });
-      
-      const children = base.filter(a => a.parentId === parent.id);
-      children.forEach(c => addWithChildren(c, level + 1));
-    };
-
-    // First pass: non-child items (roots)
-    base.filter(a => !a.parentId).forEach(r => addWithChildren(r, 0));
-
-    // Cleanup pass: any remaining items (circular refs or missing parents)
-    base.filter(a => !processed.has(a.id)).forEach(u => addWithChildren(u, 0));
-
-    return result;
+  const countByNamespace = useMemo(() => {
+    const counts = { subject: 0, resource: 0, action: 0, environment: 0 };
+    for (const a of attributes) {
+      const ns = a.namespace;
+      if (ns && Object.prototype.hasOwnProperty.call(counts, ns)) counts[ns] += 1;
+    }
+    return counts;
   }, [attributes]);
+
+  const treesByNamespace = useMemo(() => {
+    const o = {};
+    for (const ns of NAMESPACES) {
+      o[ns] = buildAttributeTree(attributes.filter((a) => a.namespace === ns));
+    }
+    return o;
+  }, [attributes]);
+
+  // Keep "New Attribute" form aligned with the active namespace tab
+  useEffect(() => {
+    if (!showCreate) return;
+    setCreateForm((f) => ({ ...f, namespace: namespaceTab }));
+  }, [namespaceTab, showCreate]);
 
   const createMutation = useMutation({
     mutationFn: (payload) => abacService.createAppAttrDef(selectedApp?.key, payload),
@@ -567,7 +616,7 @@ export function AppAttributesPage() {
         </div>
         <Button
           onClick={() => {
-            setCreateForm({ ...EMPTY_FORM });
+            setCreateForm({ ...EMPTY_FORM, namespace: namespaceTab });
             setShowCreate(true);
           }}
         >
@@ -575,143 +624,65 @@ export function AppAttributesPage() {
         </Button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
-            <tr>
-              <th className="px-3 py-2.5 font-medium w-[22%]">Display Name</th>
-              <th className="px-3 py-2.5 font-medium w-[18%]">Attribute Name</th>
-              <th className="px-3 py-2.5 font-medium w-[10%]">Namespace</th>
-              <th className="px-3 py-2.5 font-medium w-[8%]">Type</th>
-              <th className="px-3 py-2.5 font-medium w-[18%]">Allowed Values</th>
-              <th className="px-3 py-2.5 font-medium w-[10%]">Default</th>
-              <th className="px-3 py-2.5 font-medium w-[8%]">Flags</th>
-              <th className="px-3 py-2.5 font-medium w-[6%] text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {isLoading ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">Loading…</td>
-              </tr>
-            ) : treeAttributes.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
-                  <p className="font-medium">No attributes defined yet.</p>
-                  <p className="text-xs mt-1">Click <strong>+ New Attribute</strong> to get started.</p>
-                </td>
-              </tr>
-            ) : (
-              treeAttributes.map((attr) => {
-                const c = attr.constraints ?? {};
-                const indent = attr.level * 24;
-                return (
-                  <tr key={attr.id} className="hover:bg-gray-50 group">
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-start gap-2" style={{ paddingLeft: `${indent}px` }}>
-                        {attr.level > 0 && (
-                          <span className="text-gray-300 mt-1 shrink-0">└</span>
-                        )}
-                        <div className="min-w-0">
-                          <p className="font-medium text-gray-900 truncate">{attr.displayName}</p>
-                          {attr.description && (
-                            <p className="text-xs text-gray-400 mt-0.5 truncate">{attr.description}</p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-xs text-gray-500">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="truncate">{attr.key}</span>
-                        {referencedKeys.has(`${attr.namespace}.${attr.key}`) && (
-                          <span className="text-[10px] text-green-700 font-sans font-medium">● in active policy</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded border capitalize ${NAMESPACE_BADGE[attr.namespace] ?? NAMESPACE_BADGE.environment}`}>
-                        {attr.namespace}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <Badge variant="outline" className="capitalize text-xs">{attr.dataType}</Badge>
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">
-                      {c.allowedValues?.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {c.allowedValues.slice(0, 3).map((v) => (
-                            <span key={v} className="bg-gray-100 rounded px-1.5 py-0.5 font-mono">{v}</span>
-                          ))}
-                          {c.allowedValues.length > 3 && (
-                            <span className="text-gray-400">+{c.allowedValues.length - 3}</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">
-                      {c.defaultValue != null ? (
-                        <span className="font-mono bg-gray-100 rounded px-1.5 py-0.5">{String(c.defaultValue)}</span>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex flex-col gap-1">
-                        {attr.isRequired && (
-                          <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] w-fit">Required</Badge>
-                        )}
-                        {attr.isMultiValued && (
-                          <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] w-fit">Multi</Badge>
-                        )}
-                        {attr.isUserRequestable && (
-                          <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] w-fit">User Requestable</Badge>
-                        )}
-                        {!attr.isRequired && !attr.isMultiValued && !attr.isUserRequestable && (
-                          <span className="text-gray-300 text-xs">—</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          title="Edit attribute"
-                          onClick={() => openEdit(attr)}
-                        >
-                          <Pencil size={14} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Delete attribute"
-                          onClick={() => setDeleteTarget(attr)}
-                        >
-                          <Trash2 size={14} />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Tabs
+        value={namespaceTab}
+        onValueChange={setNamespaceTab}
+        className="w-full"
+      >
+        <TabsList
+          className="grid w-full h-auto p-1 gap-1 sm:grid-cols-2 lg:grid-cols-4 bg-gray-100/80"
+          aria-label="Attribute namespace"
+        >
+          {NAMESPACES.map((ns) => (
+            <TabsTrigger
+              key={ns}
+              value={ns}
+              className="flex items-center justify-center gap-1.5 py-2.5 text-sm data-[state=active]:shadow-sm"
+            >
+              <span className="font-medium">{NAMESPACE_TAB_LABEL[ns] ?? ns}</span>
+              <span
+                className={`min-w-[1.25rem] rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${
+                  namespaceTab === ns
+                    ? 'bg-primary/15 text-primary'
+                    : 'bg-gray-200/80 text-gray-600'
+                }`}
+              >
+                {countByNamespace[ns] ?? 0}
+              </span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {NAMESPACES.map((ns) => (
+          <TabsContent key={ns} value={ns} className="mt-0 pt-4 focus-visible:outline-none">
+            <NamespaceAttributesTable
+              isLoading={isLoading}
+              treeAttributes={treesByNamespace[ns] ?? []}
+              referencedKeys={referencedKeys}
+              namespaceKey={ns}
+              onEdit={openEdit}
+              onDelete={setDeleteTarget}
+            />
+          </TabsContent>
+        ))}
+      </Tabs>
 
       {/* ── Create Dialog ── */}
       <Dialog open={showCreate} onOpenChange={(o) => { if (!o) setShowCreate(false); }}>
         <DialogContent className="max-w-lg flex flex-col max-h-[90vh]">
           <DialogHeader className="shrink-0">
-            <DialogTitle>New Attribute — {selectedApp.name}</DialogTitle>
+            <DialogTitle>
+              New {NAMESPACE_TAB_LABEL[namespaceTab] ?? namespaceTab} attribute — {selectedApp.name}
+            </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto pr-1">
-            <AttributeForm form={createForm} setForm={setCreateForm} mode="create" allAttributes={attributes} />
+            <AttributeForm
+              form={createForm}
+              setForm={setCreateForm}
+              mode="create"
+              allAttributes={attributes}
+              lockNamespace={namespaceTab}
+            />
           </div>
           <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2 shrink-0">
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
@@ -789,6 +760,152 @@ export function AppAttributesPage() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function NamespaceAttributesTable({
+  isLoading,
+  treeAttributes,
+  referencedKeys,
+  namespaceKey,
+  onEdit,
+  onDelete,
+}) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+          <tr>
+            <th className="px-3 py-2.5 font-medium w-[22%]">Display Name</th>
+            <th className="px-3 py-2.5 font-medium w-[18%]">Attribute Name</th>
+            <th className="px-3 py-2.5 font-medium w-[10%]">Namespace</th>
+            <th className="px-3 py-2.5 font-medium w-[8%]">Type</th>
+            <th className="px-3 py-2.5 font-medium w-[18%]">Allowed Values</th>
+            <th className="px-3 py-2.5 font-medium w-[10%]">Default</th>
+            <th className="px-3 py-2.5 font-medium w-[8%]">Flags</th>
+            <th className="px-3 py-2.5 font-medium w-[6%] text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {isLoading ? (
+            <tr>
+              <td colSpan={8} className="px-4 py-8 text-center text-gray-500">Loading…</td>
+            </tr>
+          ) : treeAttributes.length === 0 ? (
+            <tr>
+              <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
+                <p className="font-medium">No {NAMESPACE_TAB_LABEL[namespaceKey] ?? namespaceKey} attributes yet.</p>
+                <p className="text-xs mt-1">
+                  Use <strong>+ New Attribute</strong> while this tab is selected to add attributes in the{' '}
+                  <span className="font-mono">{namespaceKey}</span> namespace.
+                </p>
+              </td>
+            </tr>
+          ) : (
+            treeAttributes.map((attr) => {
+              const c = attr.constraints ?? {};
+              const indent = attr.level * 24;
+              return (
+                <tr key={attr.id} className="hover:bg-gray-50 group">
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-start gap-2" style={{ paddingLeft: `${indent}px` }}>
+                      {attr.level > 0 && (
+                        <span className="text-gray-300 mt-1 shrink-0">└</span>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{attr.displayName}</p>
+                        {attr.description && (
+                          <p className="text-xs text-gray-400 mt-0.5 truncate">{attr.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-xs text-gray-500">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="truncate">{attr.key}</span>
+                      {referencedKeys.has(`${attr.namespace}.${attr.key}`) && (
+                        <span className="text-[10px] text-green-700 font-sans font-medium">● in active policy</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span
+                      className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded border capitalize ${
+                        NAMESPACE_BADGE[attr.namespace] ?? NAMESPACE_BADGE.environment
+                      }`}
+                    >
+                      {attr.namespace}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Badge variant="outline" className="capitalize text-xs">{attr.dataType}</Badge>
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600">
+                    {c.allowedValues?.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {c.allowedValues.slice(0, 3).map((v) => (
+                          <span key={v} className="bg-gray-100 rounded px-1.5 py-0.5 font-mono">{v}</span>
+                        ))}
+                        {c.allowedValues.length > 3 && (
+                          <span className="text-gray-400">+{c.allowedValues.length - 3}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-gray-600">
+                    {c.defaultValue != null ? (
+                      <span className="font-mono bg-gray-100 rounded px-1.5 py-0.5">{String(c.defaultValue)}</span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex flex-col gap-1">
+                      {attr.isRequired && (
+                        <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] w-fit">Required</Badge>
+                      )}
+                      {attr.isMultiValued && (
+                        <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] w-fit">Multi</Badge>
+                      )}
+                      {attr.isUserRequestable && (
+                        <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] w-fit">User Requestable</Badge>
+                      )}
+                      {!attr.isRequired && !attr.isMultiValued && !attr.isUserRequestable && (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        title="Edit attribute"
+                        onClick={() => onEdit(attr)}
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        title="Delete attribute"
+                        onClick={() => onDelete(attr)}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
