@@ -63,33 +63,12 @@ export function AuthProvider({ children }) {
     if (!user) return DEFAULT_EFFECTIVE_ROLES;
 
     const hubRoles = user?.hubRoles ?? [];
-    const assignments = [];
-
     const isHubOwner = hubRoles.includes("HUB_OWNER");
     const isITSupport = hubRoles.includes("IT_SUPPORT");
 
-    const getRoleCode = (a) => {
-      const role = a?.role;
-      if (!role || typeof role !== "object") return null;
-      return role.roleCode ?? role.code ?? null;
-    };
-
-    const getAppId = (a) => {
-      const app = a?.application;
-      if (!app) return null;
-      if (typeof app === "object") return String(app._id ?? app.id ?? "");
-      return String(app);
-    };
-
-    const appOwnerOf = assignments
-      .filter((a) => getRoleCode(a) === "APP_OWNER" && a.isActive !== false)
-      .map((a) => getAppId(a))
-      .filter(Boolean);
-
-    const appManagerOf = assignments
-      .filter((a) => getRoleCode(a) === "APP_MANAGER" && a.isActive !== false)
-      .map((a) => getAppId(a))
-      .filter(Boolean);
+    // Derived from application_owners table — returned by /auth/verify as ownedAppIds
+    const appOwnerOf = Array.isArray(user.ownedAppIds) ? user.ownedAppIds : [];
+    const appManagerOf = [];
 
     const isAppOwner = appOwnerOf.length > 0;
     const isAppManager = appManagerOf.length > 0;

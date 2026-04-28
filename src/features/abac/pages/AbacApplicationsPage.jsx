@@ -367,7 +367,7 @@ export function AbacApplicationsPage() {
                 <th className="px-4 py-3 font-medium text-gray-600">
                   Combining strategy
                 </th>
-                <th className="px-4 py-3 font-medium text-gray-600">Base URL</th>
+                <th className="px-4 py-3 font-medium text-gray-600">Owners</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
@@ -401,12 +401,24 @@ export function AbacApplicationsPage() {
                     {strategyBadge(app.combiningStrategy)}
                   </td>
                   <td className="px-4 py-3 max-w-[220px]">
-                    <span
-                      className="font-mono text-xs text-gray-500 truncate block"
-                      title={app.baseUrl}
-                    >
-                      {app.baseUrl || '—'}
-                    </span>
+                    {Array.isArray(app.owners) && app.owners.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {app.owners.map((o) => {
+                          const name = (o.displayName || `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim()) || o.email;
+                          return (
+                            <span
+                              key={o._id || o.id}
+                              title={o.email}
+                              className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs border border-blue-100"
+                            >
+                              {name}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {isHubOwner && (

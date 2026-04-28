@@ -116,31 +116,25 @@ export const DashboardPage = () => {
     enabled: effectiveRoles.isHubOwner || effectiveRoles.isAppOwner,
     staleTime: 5 * 60 * 1000,
   });
-  const apps = normalizeApplicationsList(appsData);
+  const allApps = normalizeApplicationsList(appsData);
 
+  // App Owners only see the apps they own; Hub Owners see all apps
+  const apps = effectiveRoles.isHubOwner
+    ? allApps
+    : allApps.filter((a) => effectiveRoles.appOwnerOf.includes(a.id));
+
+  // Auto-select when an App Owner (non-Hub-Owner) has exactly one owned app
   useEffect(() => {
     if (
       effectiveRoles.isAppOwner &&
       !effectiveRoles.isHubOwner &&
-      apps.length > 0 &&
+      apps.length === 1 &&
       !selectedAppKey
     ) {
-      const ownedKeys =
-        effectiveRoles.appOwnerOf
-          ?.map((appId) => {
-            const match = apps.find(
-              (a) => a.id === appId || a.mongoId === appId
-            );
-            return match?.key;
-          })
-          .filter(Boolean) ?? [];
-
-      if (ownedKeys.length === 1) {
-        const app = apps.find((a) => a.key === ownedKeys[0]);
-        if (app) selectApp(app.key, app.name ?? app.key);
-      }
+      const app = apps[0];
+      selectApp(app.key, app.name ?? app.key, app.id);
     }
-  }, [apps, effectiveRoles.isAppOwner, effectiveRoles.appOwnerOf]);
+  }, [apps, effectiveRoles.isAppOwner, effectiveRoles.isHubOwner, selectedAppKey]);
 
   if (loading || !rolesReady) {
     return (
@@ -286,7 +280,8 @@ export const DashboardPage = () => {
         />
       ));
 
-  const showAdmin = effectiveRoles.isHubOwner || effectiveRoles.isITSupport;
+  // Show the Administration section if any admin nav item would be visible
+  const showAdmin = effectiveRoles.isHubOwner || effectiveRoles.isAppOwner;
   const showGlobal = effectiveRoles.isHubOwner && isGlobalScope;
   const showApp = (effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && isAppScope;
   const showAppSelector = effectiveRoles.isHubOwner || effectiveRoles.isAppOwner;
@@ -404,7 +399,7 @@ export const DashboardPage = () => {
                           navigate("/users");
                         } else {
                           const app = apps.find((a) => a.key === val);
-                          selectApp(val, app?.name ?? val);
+                          selectApp(val, app?.name ?? val, app?.id ?? null);
                           navigate("/app-policies");
                         }
                       }}

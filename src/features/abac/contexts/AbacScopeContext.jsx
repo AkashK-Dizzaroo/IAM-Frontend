@@ -13,10 +13,10 @@ function readStorage() {
   }
 }
 
-function writeStorage(key, name) {
+function writeStorage(key, name, id = null) {
   try {
     if (key) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ key, name }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ key, name, id }));
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -31,19 +31,22 @@ export function AbacScopeProvider({ children }) {
   const [scope, setScope] = useState(saved ? 'app' : 'global');
   const [selectedAppKey, setSelectedAppKey] = useState(saved?.key ?? null);
   const [selectedAppName, setSelectedAppName] = useState(saved?.name ?? null);
+  const [selectedAppId, setSelectedAppId] = useState(saved?.id ?? null);
 
-  const selectApp = (key, name) => {
+  const selectApp = (key, name, id = null) => {
     setSelectedAppKey(key);
     setSelectedAppName(name);
+    setSelectedAppId(id);
     setScope('app');
-    writeStorage(key, name);
+    writeStorage(key, name, id);
   };
 
   const selectGlobal = () => {
     setScope('global');
     setSelectedAppKey(null);
     setSelectedAppName(null);
-    writeStorage(null, null);
+    setSelectedAppId(null);
+    writeStorage(null, null, null);
   };
 
   return (
@@ -51,6 +54,7 @@ export function AbacScopeProvider({ children }) {
       scope,
       selectedAppKey,
       selectedAppName,
+      selectedAppId,
       selectApp,
       selectGlobal,
     }}>
