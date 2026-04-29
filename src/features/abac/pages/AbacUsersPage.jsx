@@ -73,7 +73,13 @@ function isHubOwner(user) {
 function getAssignedApps(user, allApps) {
   if (isHubOwner(user)) return allApps;
   const reqs = user.accessRequests ?? [];
-  return reqs.map((r) => r.application?.name || r.application?.appCode).filter(Boolean);
+  const owned = user.applicationOwners ?? [];
+  
+  const reqNames = reqs.map((r) => r.application?.name || r.application?.appCode).filter(Boolean);
+  const ownedNames = owned.map((o) => o.application?.name || o.application?.appCode).filter(Boolean);
+  
+  // Combine and deduplicate
+  return Array.from(new Set([...reqNames, ...ownedNames]));
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────

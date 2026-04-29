@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectTrigger,
@@ -25,6 +26,13 @@ import { Plus, Pencil, Trash2, X } from 'lucide-react';
 
 const DATA_TYPES = ['string', 'number', 'boolean', 'enum', 'list', 'datetime'];
 const NAMESPACES = ['subject', 'resource', 'action', 'environment'];
+
+const NAMESPACE_TAB_LABEL = {
+  subject: 'Subject',
+  resource: 'Resource',
+  action: 'Action',
+  environment: 'Environment',
+};
 
 const NAMESPACE_BADGE = {
   subject:     'bg-blue-50 text-blue-700 border-blue-200',
@@ -57,6 +65,7 @@ export function HubAttributesPage() {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [enumInput, setEnumInput] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [namespaceTab, setNamespaceTab] = useState('subject');
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['abac', 'hubAttrDefs'],
@@ -86,6 +95,22 @@ export function HubAttributesPage() {
     return set;
   }, [globalPoliciesData]);
 
+  const countByNamespace = useMemo(() => {
+    const counts = { subject: 0, resource: 0, action: 0, environment: 0 };
+    for (const a of defs) {
+      if (a.namespace && Object.prototype.hasOwnProperty.call(counts, a.namespace)) counts[a.namespace] += 1;
+    }
+    return counts;
+  }, [defs]);
+
+  const defsByNamespace = useMemo(() => {
+    const o = {};
+    for (const ns of NAMESPACES) {
+      o[ns] = defs.filter((d) => d.namespace === ns);
+    }
+    return o;
+  }, [defs]);
+
   const resetForm = useCallback(() => {
     setFormData(EMPTY_FORM);
     setEnumInput('');
@@ -93,6 +118,7 @@ export function HubAttributesPage() {
 
   const openCreate = () => {
     resetForm();
+    setFormData({ ...EMPTY_FORM, namespace: namespaceTab });
     setDialogMode('create');
   };
 
@@ -214,21 +240,19 @@ export function HubAttributesPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="max-w-5xl mx-auto space-y-6 p-6">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">Hub Attributes</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Define the identity attribute schema for all users
-            </p>
-          </div>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            New Attribute
-          </Button>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Hub Attributes</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Define the identity attribute schema shared across all applications.
+          </p>
         </div>
+        <Button onClick={openCreate}>
+          <Plus className="h-4 w-4" />
+          New Attribute
+        </Button>
       </div>
 
       {/* Loading */}
@@ -240,133 +264,161 @@ export function HubAttributesPage() {
         </div>
       )}
 
-      {/* Table */}
-      {!isLoading && defs.length > 0 && (
-        <div className="border border-gray-200 rounded-lg overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-left uppercase text-xs text-gray-500">
-                <th className="px-3 py-2.5 font-medium w-[22%]">Key</th>
-                <th className="px-3 py-2.5 font-medium w-[20%]">Display Name</th>
-                <th className="px-3 py-2.5 font-medium w-[10%]">Namespace</th>
-                <th className="px-3 py-2.5 font-medium w-[9%]">Data Type</th>
-                <th className="px-3 py-2.5 font-medium w-[22%]">Constraints</th>
-                <th className="px-3 py-2.5 font-medium w-[7%]">Flags</th>
-                <th className="px-3 py-2.5 font-medium w-[10%] text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {defs.map((def) => {
-                const id = def.id || def._id;
-                const isDeleting = deleteConfirmId === id;
-                const isPolicyReferenced = referencedKeys.has(`${def.namespace}.${def.key}`);
-                return (
-                  <tr key={id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2.5 font-mono text-xs text-gray-900">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="truncate">{def.key}</span>
-                        {isPolicyReferenced && (
-                          <span className="text-[10px] text-green-700 font-sans font-medium">● in active policy</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-gray-700 truncate">
-                      {def.displayName || '—'}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded border capitalize ${NAMESPACE_BADGE[def.namespace] ?? NAMESPACE_BADGE.environment}`}>
-                        {def.namespace ?? '—'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <Badge className={DATA_TYPE_COLORS[def.dataType] || 'bg-gray-100 text-gray-700'}>
-                        {def.dataType}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-500 truncate max-w-0">
-                      {formatConstraints(def)}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {def.isRequired ? (
-                        <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] w-fit">Required</Badge>
-                      ) : (
-                        <span className="text-gray-300 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      {isDeleting ? (
-                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          {isPolicyReferenced && (
-                            <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
-                              ⚠ used in policy
-                            </span>
-                          )}
-                          <span className="text-xs text-red-600">Confirm?</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => setDeleteConfirmId(null)}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => deleteMutation.mutate(id)}
-                            disabled={deleteMutation.isPending}
-                          >
-                            {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                            title="Edit attribute"
-                            onClick={() => openEdit(def)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
-                            title="Delete attribute"
-                            onClick={() => setDeleteConfirmId(id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* Namespace Tabs */}
+      {!isLoading && (
+        <Tabs value={namespaceTab} onValueChange={setNamespaceTab} className="w-full">
+          <TabsList
+            className="grid w-full h-auto p-1 gap-1 sm:grid-cols-2 lg:grid-cols-4 bg-gray-100/80"
+            aria-label="Attribute namespace"
+          >
+            {NAMESPACES.map((ns) => (
+              <TabsTrigger
+                key={ns}
+                value={ns}
+                className="flex items-center justify-center gap-1.5 py-2.5 text-sm data-[state=active]:shadow-sm"
+              >
+                <span className="font-medium">{NAMESPACE_TAB_LABEL[ns]}</span>
+                <span
+                  className={`min-w-[1.25rem] rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${
+                    namespaceTab === ns
+                      ? 'bg-primary/15 text-primary'
+                      : 'bg-gray-200/80 text-gray-600'
+                  }`}
+                >
+                  {countByNamespace[ns] ?? 0}
+                </span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-      {/* Empty state */}
-      {!isLoading && defs.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="rounded-full bg-gray-100 p-4 mb-4">
-            <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
-            </svg>
-          </div>
-          <h3 className="text-base font-medium text-gray-900 mb-1">No attributes defined</h3>
-          <p className="text-sm text-gray-500 mb-4">Define Hub identity attributes for your users</p>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            New Attribute
-          </Button>
-        </div>
+          {NAMESPACES.map((ns) => {
+            const nsDefs = defsByNamespace[ns] ?? [];
+            return (
+              <TabsContent key={ns} value={ns} className="mt-0 pt-4 focus-visible:outline-none">
+                {nsDefs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center border border-gray-200 rounded-lg bg-white">
+                    <div className="rounded-full bg-gray-100 p-4 mb-4">
+                      <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-base font-medium text-gray-900 mb-1">
+                      No {NAMESPACE_TAB_LABEL[ns]} attributes yet
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Use <strong>+ New Attribute</strong> to add attributes in the{' '}
+                      <span className="font-mono">{ns}</span> namespace.
+                    </p>
+                    <Button onClick={openCreate}>
+                      <Plus className="h-4 w-4" />
+                      New Attribute
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+                        <tr>
+                          <th className="px-3 py-2.5 font-medium w-[25%]">Display Name / Key</th>
+                          <th className="px-3 py-2.5 font-medium w-[10%]">Type</th>
+                          <th className="px-3 py-2.5 font-medium">Constraints</th>
+                          <th className="px-3 py-2.5 font-medium w-[9%]">Flags</th>
+                          <th className="px-3 py-2.5 font-medium w-[8%] text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {nsDefs.map((def) => {
+                          const id = def.id || def._id;
+                          const isDeleting = deleteConfirmId === id;
+                          const isPolicyReferenced = referencedKeys.has(`${def.namespace}.${def.key}`);
+                          return (
+                            <tr key={id} className="hover:bg-gray-50 group">
+                              <td className="px-3 py-2.5">
+                                <p className="font-medium text-gray-900 truncate">{def.displayName || def.key}</p>
+                                <div className="flex flex-col gap-0.5 mt-0.5">
+                                  <span className="font-mono text-xs text-gray-400 truncate">{def.key}</span>
+                                  {isPolicyReferenced && (
+                                    <span className="text-[10px] text-green-700 font-medium">● in active policy</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <Badge className={`${DATA_TYPE_COLORS[def.dataType] || 'bg-gray-100 text-gray-700'} capitalize text-xs`}>
+                                  {def.dataType}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2.5 text-xs text-gray-500">
+                                {formatConstraints(def)}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                {def.isRequired ? (
+                                  <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] w-fit">Required</Badge>
+                                ) : (
+                                  <span className="text-gray-300 text-xs">—</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5 text-right">
+                                {isDeleting ? (
+                                  <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                    {isPolicyReferenced && (
+                                      <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                                        ⚠ used in policy
+                                      </span>
+                                    )}
+                                    <span className="text-xs text-red-600">Confirm?</span>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={() => setDeleteConfirmId(null)}
+                                    >
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={() => deleteMutation.mutate(id)}
+                                      disabled={deleteMutation.isPending}
+                                    >
+                                      {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                      title="Edit attribute"
+                                      onClick={() => openEdit(def)}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                      title="Delete attribute"
+                                      onClick={() => setDeleteConfirmId(id)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </TabsContent>
+            );
+          })}
+        </Tabs>
       )}
 
       {/* Centered Dialog */}

@@ -773,28 +773,26 @@ function NamespaceAttributesTable({
   onDelete,
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <table className="w-full text-left text-sm">
         <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
           <tr>
-            <th className="px-3 py-2.5 font-medium w-[22%]">Display Name</th>
-            <th className="px-3 py-2.5 font-medium w-[18%]">Attribute Name</th>
-            <th className="px-3 py-2.5 font-medium w-[10%]">Namespace</th>
-            <th className="px-3 py-2.5 font-medium w-[8%]">Type</th>
-            <th className="px-3 py-2.5 font-medium w-[18%]">Allowed Values</th>
-            <th className="px-3 py-2.5 font-medium w-[10%]">Default</th>
-            <th className="px-3 py-2.5 font-medium w-[8%]">Flags</th>
-            <th className="px-3 py-2.5 font-medium w-[6%] text-right">Actions</th>
+            <th className="px-3 py-2.5 font-medium w-[30%]">Display Name / Key</th>
+            <th className="px-3 py-2.5 font-medium w-[9%]">Type</th>
+            <th className="px-3 py-2.5 font-medium w-[22%]">Allowed Values</th>
+            <th className="px-3 py-2.5 font-medium w-[12%]">Default</th>
+            <th className="px-3 py-2.5 font-medium w-[19%]">Flags</th>
+            <th className="px-3 py-2.5 font-medium w-[8%] text-right">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {isLoading ? (
             <tr>
-              <td colSpan={8} className="px-4 py-8 text-center text-gray-500">Loading…</td>
+              <td colSpan={6} className="px-4 py-8 text-center text-gray-500">Loading…</td>
             </tr>
           ) : treeAttributes.length === 0 ? (
             <tr>
-              <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
+              <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
                 <p className="font-medium">No {NAMESPACE_TAB_LABEL[namespaceKey] ?? namespaceKey} attributes yet.</p>
                 <p className="text-xs mt-1">
                   Use <strong>+ New Attribute</strong> while this tab is selected to add attributes in the{' '}
@@ -805,38 +803,27 @@ function NamespaceAttributesTable({
           ) : (
             treeAttributes.map((attr) => {
               const c = attr.constraints ?? {};
-              const indent = attr.level * 24;
+              const indent = attr.level * 20;
               return (
                 <tr key={attr.id} className="hover:bg-gray-50 group">
                   <td className="px-3 py-2.5">
-                    <div className="flex items-start gap-2" style={{ paddingLeft: `${indent}px` }}>
+                    <div className="flex items-start gap-1.5" style={{ paddingLeft: `${indent}px` }}>
                       {attr.level > 0 && (
-                        <span className="text-gray-300 mt-1 shrink-0">└</span>
+                        <span className="text-gray-300 mt-1 shrink-0 text-xs">└</span>
                       )}
                       <div className="min-w-0">
                         <p className="font-medium text-gray-900 truncate">{attr.displayName}</p>
-                        {attr.description && (
-                          <p className="text-xs text-gray-400 mt-0.5 truncate">{attr.description}</p>
-                        )}
+                        <div className="flex flex-col gap-0.5 mt-0.5">
+                          <span className="font-mono text-xs text-gray-400 truncate">{attr.key}</span>
+                          {attr.description && (
+                            <p className="text-xs text-gray-400 truncate">{attr.description}</p>
+                          )}
+                          {referencedKeys.has(`${attr.namespace}.${attr.key}`) && (
+                            <span className="text-[10px] text-green-700 font-medium">● in active policy</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-gray-500">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="truncate">{attr.key}</span>
-                      {referencedKeys.has(`${attr.namespace}.${attr.key}`) && (
-                        <span className="text-[10px] text-green-700 font-sans font-medium">● in active policy</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span
-                      className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded border capitalize ${
-                        NAMESPACE_BADGE[attr.namespace] ?? NAMESPACE_BADGE.environment
-                      }`}
-                    >
-                      {attr.namespace}
-                    </span>
                   </td>
                   <td className="px-3 py-2.5">
                     <Badge variant="outline" className="capitalize text-xs">{attr.dataType}</Badge>
@@ -863,15 +850,15 @@ function NamespaceAttributesTable({
                     )}
                   </td>
                   <td className="px-3 py-2.5">
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-wrap gap-1">
                       {attr.isRequired && (
-                        <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] w-fit">Required</Badge>
+                        <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px]">Required</Badge>
                       )}
                       {attr.isMultiValued && (
-                        <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] w-fit">Multi</Badge>
+                        <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px]">Multi</Badge>
                       )}
                       {attr.isUserRequestable && (
-                        <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] w-fit">User Requestable</Badge>
+                        <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">Requestable</Badge>
                       )}
                       {!attr.isRequired && !attr.isMultiValued && !attr.isUserRequestable && (
                         <span className="text-gray-300 text-xs">—</span>

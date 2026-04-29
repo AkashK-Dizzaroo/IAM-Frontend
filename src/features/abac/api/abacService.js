@@ -68,6 +68,10 @@ export const abacService = {
   listAppUsers: (appKey) =>
     apiClient.get(v1(`/apps/${appKey}/users`)),
 
+  // Admin: directly assign a user to an app with resource access + attributes
+  assignAppUser: (appKey, data) =>
+    apiClient.post(v1(`/apps/${appKey}/users/assign`), data),
+
   // App Attribute Definitions
   listAppAttrDefs: (appKey) =>
     apiClient.get(v1(`/apps/${appKey}/attributes`)),

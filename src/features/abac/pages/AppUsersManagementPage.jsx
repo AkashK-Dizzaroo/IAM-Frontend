@@ -5,8 +5,9 @@ import { resourceService } from '@/features/resources';
 import { useAbacScope } from '../contexts/AbacScopeContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Pencil, Users } from 'lucide-react';
+import { Search, Pencil, Users, UserPlus } from 'lucide-react';
 import { AppUserAttributesPanel } from './AppUserAttributesPanel';
+import { AssignUserDialog } from './AssignUserDialog';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,7 @@ export function AppUsersManagementPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -107,7 +109,9 @@ export function AppUsersManagementPage() {
     staleTime: 5 * 60_000,
   });
   const attrDefs = attrDefsData?.data?.data ?? attrDefsData?.data ?? [];
-  const totalDefs = attrDefs.length;
+  const totalDefs = attrDefs.filter(
+    (d) => d.namespace !== 'action' && !(/(_role|^role)$/i.test(d.key) && d.dataType === 'enum')
+  ).length;
 
   // Fetch the application record to get its id for the resource query
   const { data: applicationsData } = useQuery({
@@ -177,6 +181,13 @@ export function AppUsersManagementPage() {
             Manage users and their app-specific attributes
           </p>
         </div>
+        <Button
+          onClick={() => setAssignDialogOpen(true)}
+          className="flex items-center gap-1.5"
+        >
+          <UserPlus className="h-4 w-4" />
+          Assign Users
+        </Button>
       </div>
 
       {/* Search */}
@@ -309,6 +320,15 @@ export function AppUsersManagementPage() {
         open={!!selectedUser}
         onClose={() => setSelectedUser(null)}
         onAttributeChanged={refetchUsers}
+      />
+
+      {/* Assign user dialog */}
+      <AssignUserDialog
+        open={assignDialogOpen}
+        onClose={() => setAssignDialogOpen(false)}
+        appKey={selectedAppKey}
+        appId={selectedApplication?.id}
+        attrDefs={attrDefs}
       />
     </div>
   );
