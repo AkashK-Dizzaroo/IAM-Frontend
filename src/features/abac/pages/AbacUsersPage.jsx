@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { abacService } from '@/features/abac/api/abacService';
 import { userService } from '@/features/users/api/userService';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -59,26 +61,39 @@ function formatLastLogin(value) {
   return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-function isHubOwner(user) {
+const GLOBAL_ROLES = ['HUB_OWNER'];
+
+function getHubRolesList(user) {
   const hubRolesAttr = (user.hubUserAttributes ?? []).find((a) => {
     const k = a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key;
     return k === 'hub_roles';
   });
-  if (!hubRolesAttr) return false;
+  if (!hubRolesAttr) return [];
   const v = hubRolesAttr.value;
-  const roles = Array.isArray(v) ? v : typeof v === 'string' ? [v] : [];
-  return roles.includes('HUB_OWNER');
+  return Array.isArray(v) ? v : typeof v === 'string' && v ? [v] : [];
+}
+
+function isHubOwner(user) {
+  return getHubRolesList(user).includes('HUB_OWNER');
+}
+
+// Returns { globalRoles: string[], appOwnerEntries: { name, appCode }[] }
+function getUserRoleSummary(user) {
+  const roles = getHubRolesList(user);
+  const globalRoles = roles.filter((r) => GLOBAL_ROLES.includes(r));
+  const appOwnerEntries = (user.applicationOwners ?? []).map((o) => ({
+    name: o.application?.name || o.application?.appCode || '?',
+    appCode: o.application?.appCode,
+  }));
+  return { globalRoles, appOwnerEntries };
 }
 
 function getAssignedApps(user, allApps) {
   if (isHubOwner(user)) return allApps;
   const reqs = user.accessRequests ?? [];
   const owned = user.applicationOwners ?? [];
-  
   const reqNames = reqs.map((r) => r.application?.name || r.application?.appCode).filter(Boolean);
   const ownedNames = owned.map((o) => o.application?.name || o.application?.appCode).filter(Boolean);
-  
-  // Combine and deduplicate
   return Array.from(new Set([...reqNames, ...ownedNames]));
 }
 
@@ -194,10 +209,13 @@ function EditAttrValueInput({ def, value, onChange }) {
 
 export function AbacUsersPage() {
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [dialogMode, setDialogMode] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -355,6 +373,22 @@ export function AbacUsersPage() {
     onError: (err) => toast({ title: 'Error', description: apiErrorDescription(err), variant: 'destructive' }),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id) => userService.deleteUser(id),
+    onSuccess: () => {
+      toast({ title: 'User deleted' });
+      setShowDeleteDialog(false);
+      setUserToDelete(null);
+      refetch();
+    },
+    onError: (err) => toast({ title: 'Error', description: apiErrorDescription(err), variant: 'destructive' }),
+  });
+
+  const handleDelete = () => {
+    if (!userToDelete) return;
+    deleteMutation.mutate(userToDelete.id || userToDelete._id);
+  };
+
   const handleSave = () => {
     if (!isEditing) {
       setSubmitted(true);
@@ -475,7 +509,7 @@ export function AbacUsersPage() {
                 const initial = (user.displayName || user.email || '?')[0].toUpperCase();
                 const userStatus = getHubAttr(user, 'user_status');
                 const org = getHubAttr(user, 'organization');
-                const clearance = getHubAttr(user, 'hub_roles');
+                const { globalRoles, appOwnerEntries } = getUserRoleSummary(user);
                 const lastLogin = user.lastLogin ?? user.last_login ?? user.metadata?.lastLoginAt ?? user.metadata?.lastLogin ?? null;
                 const assignedApps = getAssignedApps(user, allAppNames);
                 return (
@@ -493,7 +527,25 @@ export function AbacUsersPage() {
                       <UserStatusBadge status={userStatus} />
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">{org ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{clearance ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      {globalRoles.length === 0 && appOwnerEntries.length === 0 ? (
+                        <span className="text-xs text-gray-400 italic">USER</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {globalRoles.map((r) => (
+                            <span key={r} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                              {r.replace(/_/g, ' ')}
+                            </span>
+                          ))}
+                          {appOwnerEntries.map((e) => (
+                            <span key={e.appCode ?? e.name} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                              APP OWNER
+                              <span className="ml-1 text-amber-500 font-normal">({e.name})</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       {assignedApps.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
@@ -509,7 +561,21 @@ export function AbacUsersPage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{formatLastLogin(lastLogin)}</td>
                     <td className="px-4 py-3">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(user)}><Pencil className="h-3.5 w-3.5" /></Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(user)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        {currentUser?.id !== (user.id || user._id) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="hover:bg-red-50 hover:text-red-600"
+                            onClick={() => { setUserToDelete(user); setShowDeleteDialog(true); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -519,7 +585,33 @@ export function AbacUsersPage() {
         </div>
       )}
 
-      {/* ── Dialog ── */}
+      {/* ── Delete Confirmation Dialog ── */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{' '}
+              <strong>{userToDelete?.displayName || userToDelete?.email}</strong>{' '}
+              ({userToDelete?.email})? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit/Create Dialog ── */}
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
         <DialogContent className="max-w-2xl w-full max-h-[85vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 py-5 border-b border-gray-100 shrink-0">

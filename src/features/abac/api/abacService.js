@@ -72,6 +72,10 @@ export const abacService = {
   assignAppUser: (appKey, data) =>
     apiClient.post(v1(`/apps/${appKey}/users/assign`), data),
 
+  // Remove a user from an app (deletes all their app-scoped attributes)
+  removeAppUser: (appKey, userId) =>
+    apiClient.delete(v1(`/apps/${appKey}/users/${userId}`)),
+
   // App Attribute Definitions
   listAppAttrDefs: (appKey) =>
     apiClient.get(v1(`/apps/${appKey}/attributes`)),

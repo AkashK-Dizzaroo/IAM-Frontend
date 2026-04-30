@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { userService } from "../api/userService";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import {
   Users,
   Plus,
@@ -52,6 +53,8 @@ export const UserManagementTable = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { user: currentUser } = useAuth();
 
   const fetchUsers = async () => {
     try {
@@ -95,6 +98,7 @@ export const UserManagementTable = () => {
 
   const handleDelete = async () => {
     if (!userToDelete) return;
+    setIsDeleting(true);
     try {
       await userService.deleteUser(userToDelete._id || userToDelete.id);
       toast({ title: "Success", description: "User deleted successfully" });
@@ -107,6 +111,8 @@ export const UserManagementTable = () => {
         description: error.message || "Failed to delete user",
         variant: "destructive",
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -312,16 +318,19 @@ export const UserManagementTable = () => {
                               >
                                 <Edit className="w-4 h-4" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setUserToDelete(user);
-                                  setShowDeleteDialog(true);
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4 text-red-600" />
-                              </Button>
+                              {currentUser?.id !== (user._id || user.id) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="hover:bg-red-50 hover:text-red-600"
+                                  onClick={() => {
+                                    setUserToDelete(user);
+                                    setShowDeleteDialog(true);
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-600" />
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -378,16 +387,16 @@ export const UserManagementTable = () => {
           <DialogHeader>
             <DialogTitle>Delete User</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete {getUserName(userToDelete)}? This
-              action cannot be undone.
+              Are you sure you want to delete <strong>{getUserName(userToDelete)}</strong>{" "}
+              ({userToDelete?.email})? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? "Deleting..." : "Delete"}
             </Button>
           </div>
         </DialogContent>

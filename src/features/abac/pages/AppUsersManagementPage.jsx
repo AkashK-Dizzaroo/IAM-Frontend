@@ -1,11 +1,21 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { abacService } from '@/features/abac/api/abacService';
 import { resourceService } from '@/features/resources';
 import { useAbacScope } from '../contexts/AbacScopeContext';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Pencil, Users, UserPlus } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Search, Pencil, Trash2, Users, UserPlus } from 'lucide-react';
 import { AppUserAttributesPanel } from './AppUserAttributesPanel';
 import { AssignUserDialog } from './AssignUserDialog';
 
@@ -82,10 +92,14 @@ function ResourceAccessCell({ pairs, resourceMap }) {
 
 export function AppUsersManagementPage() {
   const { selectedAppKey, selectedAppName } = useAbacScope();
+  const { user: currentUser } = useAuth();
+  const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -149,6 +163,20 @@ export function AppUsersManagementPage() {
     }
     return map;
   }, [resourcesData]);
+
+  const deleteMutation = useMutation({
+    mutationFn: (userId) => abacService.removeAppUser(selectedAppKey, userId),
+    onSuccess: () => {
+      toast({ title: 'User removed from application' });
+      setShowDeleteDialog(false);
+      setUserToDelete(null);
+      refetchUsers();
+    },
+    onError: (err) => {
+      const msg = err?.response?.data?.error ?? err?.message ?? 'Failed to remove user';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    },
+  });
 
   const filteredUsers = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
@@ -294,15 +322,26 @@ export function AppUsersManagementPage() {
                     </td>
 
                     <td className="px-4 py-3 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                        onClick={() => setSelectedUser(user)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        <span className="ml-1.5 text-xs">Edit</span>
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          onClick={() => setSelectedUser(user)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        {currentUser?.id !== (user.id || user._id) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 hover:bg-red-50 hover:text-red-600"
+                            onClick={() => { setUserToDelete(user); setShowDeleteDialog(true); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -311,6 +350,33 @@ export function AppUsersManagementPage() {
           </table>
         </div>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove User from Application</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove{' '}
+              <strong>{userToDelete?.displayName || userToDelete?.email}</strong>{' '}
+              from <strong>{selectedAppName || selectedAppKey}</strong>? This will delete all their
+              app-specific attributes. Their hub account will not be affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteMutation.mutate(userToDelete?.id || userToDelete?._id)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? 'Removing...' : 'Remove'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit attributes dialog */}
       <AppUserAttributesPanel
