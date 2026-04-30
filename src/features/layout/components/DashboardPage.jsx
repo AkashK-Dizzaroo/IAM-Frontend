@@ -85,7 +85,7 @@ const NavItem = ({ tab, isActive, onClick, sidebarCollapsed }) => {
 
 export const DashboardPage = () => {
   const { user, logout, effectiveRoles, loading, rolesReady } = useAuth();
-  const { scope, selectedAppKey, selectedAppName, selectApp, selectGlobal } =
+  const { scope, selectedAppKey, selectedAppName, selectedAppId, selectApp, selectGlobal } =
     useAbacScope();
   const navigate = useNavigate();
   const location = useLocation();
@@ -215,42 +215,42 @@ export const DashboardPage = () => {
       label: "App Attributes",
       icon: Layers,
       path: "/app-attributes",
-      show: (effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && isAppScope,
+      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
     },
     {
       id: "app-user-attributes",
       label: "App Users",
       icon: UserCog,
       path: "/app-user-attributes",
-      show: (effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && isAppScope,
+      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
     },
     {
       id: "app-policies",
       label: "App Policies",
       icon: FileText,
       path: "/app-policies",
-      show: (effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && isAppScope,
+      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
     },
     {
       id: "policy-tester",
       label: "Policy Tester",
       icon: FlaskConical,
       path: "/policy-tester",
-      show: (effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && isAppScope,
+      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
     },
     {
       id: "audit",
       label: "Audit Trail",
       icon: BarChart2,
       path: "/audit",
-      show: (effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && isAppScope,
+      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
     },
     {
       id: "coverage-gaps",
       label: "Coverage Gaps",
       icon: AlertTriangle,
       path: "/coverage-gaps",
-      show: (effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && isAppScope,
+      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
     },
   ];
 

@@ -281,112 +281,53 @@ function SmartAttrRow({ attr, attrDefs, onChange, onRemove, keyPlaceholder = 'ke
 // ---------------------------------------------------------------------------
 
 function ActionSection({ form, setForm, actionDefs }) {
-  // Simple mode: action is a string (e.g. "view")
-  // If actionDefs has a "type" attr with allowedValues, show those as chips + free-text
-  const typeDef = actionDefs.find((d) => d.key === 'type');
-  const typeAllowed = typeDef?.constraints?.allowedValues ?? [];
-
   return (
     <div className="space-y-3 pt-4 border-t border-gray-100">
       <div className="flex items-center justify-between">
-        <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</Label>
-        <div className="flex items-center bg-gray-100 rounded p-0.5 gap-0.5">
-          <button
-            onClick={() => setForm((f) => ({ ...f, actionMode: 'simple' }))}
-            className={`text-[10px] font-semibold px-2 py-0.5 rounded transition-colors ${
-              form.actionMode === 'simple' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Simple
-          </button>
-          <button
-            onClick={() => setForm((f) => ({ ...f, actionMode: 'advanced' }))}
-            className={`text-[10px] font-semibold px-2 py-0.5 rounded transition-colors ${
-              form.actionMode === 'advanced' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Object
-          </button>
-        </div>
+        <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Action Attributes</Label>
+        {actionDefs.length > 0 && (
+          <span className="text-[10px] text-gray-400">
+            {actionDefs.length} attr{actionDefs.length !== 1 ? 's' : ''} defined
+          </span>
+        )}
       </div>
 
-      {form.actionMode === 'simple' ? (
-        <div className="space-y-2">
-          {typeAllowed.length > 0 ? (
-            <>
-              {/* Quick-select chips from "type" allowed values */}
-              <div className="flex flex-wrap gap-1.5">
-                {typeAllowed.map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, action: v }))}
-                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors font-mono ${
-                      form.action === v
-                        ? 'bg-primary/10 border-primary/30 text-primary font-semibold'
-                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-              <Input
-                placeholder="or type a custom action…"
-                value={form.action}
-                onChange={(e) => setForm((f) => ({ ...f, action: e.target.value }))}
-                className="font-mono text-sm"
-              />
-            </>
-          ) : (
-            <Input
-              placeholder="e.g. view, edit, delete"
-              value={form.action}
-              onChange={(e) => setForm((f) => ({ ...f, action: e.target.value }))}
-            />
-          )}
-          {typeAllowed.length === 0 && actionDefs.length === 0 && (
-            <p className="text-[11px] text-amber-600">
-              No action attributes defined — add them in App Attributes (namespace: action) for smart suggestions.
-            </p>
-          )}
-        </div>
-      ) : (
-        /* Object mode — schema-driven rows */
-        <div className="space-y-2">
-          {form.actionAttrs.map((attr, i) => (
-            <SmartAttrRow
-              key={`act-${i}`}
-              attr={attr}
-              attrDefs={actionDefs}
-              onChange={(updated) => {
-                const list = [...form.actionAttrs];
-                list[i] = updated;
-                setForm((f) => ({ ...f, actionAttrs: list }));
-              }}
-              onRemove={() => {
-                setForm((f) => ({
-                  ...f,
-                  actionAttrs: f.actionAttrs.filter((_, idx) => idx !== i),
-                }));
-              }}
-              keyPlaceholder="key"
-              valuePlaceholder="value"
-            />
-          ))}
-          <button
-            onClick={() => setForm((f) => ({ ...f, actionAttrs: [...f.actionAttrs, { key: '', value: '' }] }))}
-            className="text-xs font-medium text-primary hover:text-primary/80 flex items-center gap-1"
-          >
-            + Add
-          </button>
-          {actionDefs.length === 0 && (
-            <p className="text-[11px] text-amber-600">
-              No action attributes defined — add them in App Attributes (namespace: action) for smart inputs.
-            </p>
-          )}
-        </div>
-      )}
+      <div className="space-y-2">
+        {form.actionAttrs.map((attr, i) => (
+          <SmartAttrRow
+            key={`act-${i}`}
+            attr={attr}
+            attrDefs={actionDefs}
+            onChange={(updated) => {
+              const list = [...form.actionAttrs];
+              list[i] = updated;
+              setForm((f) => ({ ...f, actionAttrs: list }));
+            }}
+            onRemove={() => {
+              setForm((f) => ({
+                ...f,
+                actionAttrs: f.actionAttrs.filter((_, idx) => idx !== i),
+              }));
+            }}
+            keyPlaceholder="action.key"
+            valuePlaceholder="value"
+          />
+        ))}
+        <button
+          onClick={() => setForm((f) => ({ ...f, actionAttrs: [...f.actionAttrs, { key: '', value: '' }] }))}
+          className="text-xs font-medium text-primary hover:text-primary/80 flex items-center gap-1"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Add Action Attribute
+        </button>
+        {actionDefs.length === 0 && (
+          <p className="text-[11px] text-amber-600">
+            No action attributes defined — add them in App Attributes (namespace: action) for smart inputs.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -449,8 +390,6 @@ export function PolicyTesterPage() {
   const [form, setForm] = useState({
     subjectId:        '',
     selectedUser:     null,   // full user object from search picker
-    actionMode:       'simple',
-    action:           '',
     actionAttrs:      [{ key: '', value: '' }],
     resourceAttrs:    [{ key: '', value: '' }],
     environmentAttrs: [{ key: '', value: '' }],
@@ -539,9 +478,7 @@ export function PolicyTesterPage() {
     try {
       const resObj = arrayToObject(form.resourceAttrs);
       const envObj = arrayToObject(form.environmentAttrs);
-      const actionValue = form.actionMode === 'advanced'
-        ? arrayToObject(form.actionAttrs)
-        : form.action.trim();
+      const actionValue = arrayToObject(form.actionAttrs);
 
       const payload = {
         subject_id: form.subjectId.trim(),

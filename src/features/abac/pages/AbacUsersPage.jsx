@@ -61,7 +61,7 @@ function formatLastLogin(value) {
   return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-const GLOBAL_ROLES = ['HUB_OWNER'];
+const GLOBAL_ROLES = ['HUB_OWNER', 'APP_OWNER', 'USER'];
 
 function getHubRolesList(user) {
   const hubRolesAttr = (user.hubUserAttributes ?? []).find((a) => {
@@ -77,24 +77,34 @@ function isHubOwner(user) {
   return getHubRolesList(user).includes('HUB_OWNER');
 }
 
-// Returns { globalRoles: string[], appOwnerEntries: { name, appCode }[] }
+// Returns { globalRoles: string[], isAppOwner: boolean }
 function getUserRoleSummary(user) {
   const roles = getHubRolesList(user);
-  const globalRoles = roles.filter((r) => GLOBAL_ROLES.includes(r));
-  const appOwnerEntries = (user.applicationOwners ?? []).map((o) => ({
-    name: o.application?.name || o.application?.appCode || '?',
-    appCode: o.application?.appCode,
-  }));
-  return { globalRoles, appOwnerEntries };
+  let globalRoles = roles.filter((r) => GLOBAL_ROLES.includes(r));
+  
+  // Filter out USER if APP_OWNER or HUB_OWNER is present to reduce UI clutter
+  if (globalRoles.includes('APP_OWNER') || globalRoles.includes('HUB_OWNER')) {
+    globalRoles = globalRoles.filter(r => r !== 'USER');
+  }
+  
+  const isAppOwner = (user.applicationOwners ?? []).length > 0;
+  return { globalRoles, isAppOwner };
 }
 
 function getAssignedApps(user, allApps) {
-  if (isHubOwner(user)) return allApps;
+  if (isHubOwner(user)) return allApps.map(a => ({ name: a, isOwner: true }));
+  
   const reqs = user.accessRequests ?? [];
   const owned = user.applicationOwners ?? [];
+  
+  const ownedNames = new Set(owned.map((o) => o.application?.name || o.application?.appCode).filter(Boolean));
   const reqNames = reqs.map((r) => r.application?.name || r.application?.appCode).filter(Boolean);
-  const ownedNames = owned.map((o) => o.application?.name || o.application?.appCode).filter(Boolean);
-  return Array.from(new Set([...reqNames, ...ownedNames]));
+  
+  const allNames = Array.from(new Set([...reqNames, ...ownedNames]));
+  return allNames.map(name => ({
+    name,
+    isOwner: ownedNames.has(name)
+  }));
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -509,7 +519,7 @@ export function AbacUsersPage() {
                 const initial = (user.displayName || user.email || '?')[0].toUpperCase();
                 const userStatus = getHubAttr(user, 'user_status');
                 const org = getHubAttr(user, 'organization');
-                const { globalRoles, appOwnerEntries } = getUserRoleSummary(user);
+                const { globalRoles, isAppOwner } = getUserRoleSummary(user);
                 const lastLogin = user.lastLogin ?? user.last_login ?? user.metadata?.lastLoginAt ?? user.metadata?.lastLogin ?? null;
                 const assignedApps = getAssignedApps(user, allAppNames);
                 return (
@@ -528,30 +538,36 @@ export function AbacUsersPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">{org ?? '—'}</td>
                     <td className="px-4 py-3">
-                      {globalRoles.length === 0 && appOwnerEntries.length === 0 ? (
-                        <span className="text-xs text-gray-400 italic">USER</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {globalRoles.map((r) => (
-                            <span key={r} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                      <div className="flex flex-wrap gap-1">
+                        {globalRoles.map((r) => {
+                          let cls = 'bg-gray-100 text-gray-700 border-gray-200'; // Default: USER
+                          if (r === 'HUB_OWNER') cls = 'bg-purple-100 text-purple-800 border-purple-200';
+                          if (r === 'APP_OWNER') cls = 'bg-amber-50 text-amber-800 border-amber-200';
+
+                          return (
+                            <span key={r} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
                               {r.replace(/_/g, ' ')}
                             </span>
-                          ))}
-                          {appOwnerEntries.map((e) => (
-                            <span key={e.appCode ?? e.name} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
-                              APP OWNER
-                              <span className="ml-1 text-amber-500 font-normal">({e.name})</span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                          );
+                        })}
+                        {globalRoles.length === 0 && (
+                          <span className="text-xs text-gray-400 italic">No roles</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {assignedApps.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
-                          {assignedApps.map((name) => (
-                            <span key={name} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                              {name}
+                          {assignedApps.map((app) => (
+                            <span 
+                              key={app.name} 
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
+                                app.isOwner 
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                                  : 'bg-gray-100 text-gray-700 border-gray-200'
+                              }`}
+                            >
+                              {app.name}
                             </span>
                           ))}
                         </div>
