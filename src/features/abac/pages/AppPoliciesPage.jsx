@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
 import { useAbacScope } from '../contexts/AbacScopeContext';
@@ -329,25 +330,68 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
 
       {/* 2. Attribute key — dropdown when attrs exist, text fallback with hint when empty */}
       {filteredAttrs.length > 0 ? (
-        <select
+        <Select
           disabled={disabled}
-          value={condition.key}
-          onChange={e => onChange('key', e.target.value)}
-          className="
-            flex-1 min-w-0 text-xs border border-gray-200
-            rounded px-2 py-1.5 font-mono
-            bg-white text-gray-900
-            focus:outline-none focus:ring-1
-            focus:ring-primary/30 focus:border-primary
-          "
+          value={condition.key || ''}
+          onValueChange={val => onChange('key', val)}
         >
-          <option value="">Select attribute...</option>
-          {filteredAttrs.map(attr => (
-            <option key={attr.key} value={attr.key}>
-              {attr.displayName || attr.key}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="flex-1 min-w-0 h-[30px] text-xs font-mono border-gray-200 focus:ring-primary/30">
+            <SelectValue placeholder="Select attribute..." />
+          </SelectTrigger>
+          <SelectContent>
+            {(() => {
+              const buildTree = (list) => {
+                const sorted = [...list].sort((a, b) =>
+                  (a.displayName || a.key).localeCompare(b.displayName || b.key)
+                );
+                const processed = new Set();
+                const result = [];
+                const addWithChildren = (node, level) => {
+                  if (processed.has(node.id)) return;
+                  processed.add(node.id);
+                  result.push({ ...node, level });
+                  sorted.filter(c => c.parentId === node.id).forEach(c => addWithChildren(c, level + 1));
+                };
+                sorted.filter(a => !a.parentId).forEach(r => addWithChildren(r, 0));
+                sorted.filter(a => !processed.has(a.id)).forEach(u => addWithChildren(u, 0));
+                return result;
+              };
+
+              const renderItem = (attr) => (
+                <SelectItem
+                  key={attr.key}
+                  value={attr.key}
+                  textValue={attr.displayName || attr.key}
+                  className="text-xs font-mono"
+                  style={{ paddingLeft: `${0.5 + attr.level * 1.25}rem` }}
+                >
+                  {attr.level > 0 && <span className="text-gray-400 mr-1">&#x2514;</span>}
+                  {attr.displayName || attr.key}
+                </SelectItem>
+              );
+
+              const hubAttrs = filteredAttrs.filter(a => a._source === 'hub');
+              const appAttrs = filteredAttrs.filter(a => a._source !== 'hub');
+
+              if (hubAttrs.length > 0 && appAttrs.length > 0) {
+                return (
+                  <>
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] text-gray-400 uppercase tracking-wider">Hub Attributes</SelectLabel>
+                      {buildTree(hubAttrs).map(renderItem)}
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] text-gray-400 uppercase tracking-wider">App Attributes</SelectLabel>
+                      {buildTree(appAttrs).map(renderItem)}
+                    </SelectGroup>
+                  </>
+                );
+              }
+              return buildTree(filteredAttrs).map(renderItem);
+            })()}
+          </SelectContent>
+        </Select>
       ) : (
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
           <input
@@ -1541,8 +1585,8 @@ function AppPoliciesContent({ appKey, appName }) {
     staleTime: 60_000,
   });
 
-  const hubDefs = hubAttrsData?.data?.data ?? hubAttrsData?.data ?? [];
-  const appDefs = appAttrsData?.data?.data ?? appAttrsData?.data ?? [];
+  const hubDefs = (hubAttrsData?.data?.data ?? hubAttrsData?.data ?? []).map(a => ({ ...a, _source: 'hub' }));
+  const appDefs = (appAttrsData?.data?.data ?? appAttrsData?.data ?? []).map(a => ({ ...a, _source: 'app' }));
   const attributeDefs = [...hubDefs, ...appDefs];
 
   const { data: versionsData } = useQuery({

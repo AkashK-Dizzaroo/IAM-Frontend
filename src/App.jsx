@@ -25,6 +25,7 @@ import { AuditPage } from "@/features/audit";
 import { ResourceManagementPage } from "@/features/resources";
 import { AbacApplicationsPage } from "@/features/abac/pages/AbacApplicationsPage";
 import { AccessRequestsPage } from "@/features/access-requests/pages/AccessRequestsPage";
+import { FacilitiesPage } from "@/features/layout/pages/FacilitiesPage";
 
 function AppRoutes() {
   const { loading, user, effectiveRoles } = useAuth();
@@ -64,6 +65,7 @@ function AppRoutes() {
         <Route path="applications" element={<AbacApplicationsPage />} />
         <Route path="account-approvals" element={<AccountRequestsPage />} />
         <Route path="access-approvals" element={<AccessRequestsPage />} />
+        <Route path="facilities" element={<FacilitiesPage />} />
         <Route path="audit" element={<AuditPage />} />
 
         {/* ── Global scope ABAC pages ──────────────────────────────── */}

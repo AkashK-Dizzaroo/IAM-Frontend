@@ -407,11 +407,16 @@ function AttributeForm({ form, setForm, mode, allAttributes = [], lockNamespace 
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__none__">No parent</SelectItem>
-            {allAttributes
-              .filter(a => a.id !== form.id && a.namespace === form.namespace)
-              .map(a => (
-                <SelectItem key={a.id} value={a.id}>{a.displayName} ({a.key})</SelectItem>
-              ))}
+            {buildAttributeTree(
+              allAttributes.filter(a => a.id !== form.id && a.namespace === form.namespace)
+            ).map(a => (
+              <SelectItem key={a.id} value={a.id}>
+                <span style={{ paddingLeft: a.level * 16 }} className="flex items-center gap-1">
+                  {a.level > 0 && <span className="text-gray-400 select-none">{'└'}</span>}
+                  {a.displayName} <span className="text-gray-400 text-xs">({a.key})</span>
+                </span>
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <p className="text-[11px] text-gray-400">Defining a parent creates a logical grouping in the UI.</p>

@@ -24,6 +24,7 @@ import {
   Tag,
   UserCog,
   ClipboardList,
+  Building2,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -205,6 +206,13 @@ export const DashboardPage = () => {
       label: "Applications",
       icon: AppWindow,
       path: "/applications",
+      show: effectiveRoles.isHubOwner,
+    },
+    {
+      id: "facilities",
+      label: "Facilities",
+      icon: Building2,
+      path: "/facilities",
       show: effectiveRoles.isHubOwner,
     },
   ];
