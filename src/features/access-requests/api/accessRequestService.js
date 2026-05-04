@@ -74,10 +74,11 @@ class AccessRequestService {
     }
   }
 
-  async approveAccessRequest(id, reviewerComments = "", attributes = {}) {
+  async approveAccessRequest(id, reviewerComments = "", attributes = {}, approvalScope = undefined) {
     try {
       const response = await this.api.patch(`/access-requests/${id}/approve`, {
         reviewerComments,
+        ...(approvalScope ? { approvalScope } : {}),
         ...attributes,
       });
       return response.data;

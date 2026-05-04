@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { accessRequestService } from '../api/accessRequestService';
 import { useToast } from '@/hooks/use-toast';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,78 +31,232 @@ const fmt = (v) => {
 
 const STATUS_FILTERS = ['all', 'pending', 'approved', 'rejected', 'cancelled'];
 
+function InfoRow({ label, children }) {
+  return (
+    <div className="flex">
+      <span className="font-semibold w-36 text-gray-500 uppercase text-[10px] self-center shrink-0">{label}</span>
+      <span className="text-gray-900 text-sm">{children}</span>
+    </div>
+  );
+}
+
+function formatAttrValue(value) {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) return value.join(', ');
+  return String(value);
+}
+
 // ── Review modal ──────────────────────────────────────────────────────────────
 
 function ReviewModal({ request, action, onConfirm, onCancel, loading }) {
   const [notes, setNotes] = useState('');
+  const [activeTab, setActiveTab] = useState('app_attributes');
 
   const isApprove = action === 'approve';
+  const appAttributes = request.pendingAppAttributes ?? null;
+  const hasAppAttrs = appAttributes && Object.keys(appAttributes).length > 0;
+  const hasPendingAttrs = hasAppAttrs && Object.values(appAttributes).some(m => m.status === 'PENDING_APPROVAL');
+
+  // For reject: simple single-panel layout (no tabs needed)
+  if (!isApprove) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 p-6 space-y-4">
+          <h3 className="text-lg font-semibold text-red-700">Reject Access Request</h3>
+          <div className="bg-gray-50 border rounded-lg p-4 space-y-2.5">
+            <InfoRow label="Requester">
+              <span className="font-medium">
+                {[request.requester?.firstName, request.requester?.lastName].filter(Boolean).join(' ') || request.requester?.email || '—'}
+              </span>
+            </InfoRow>
+            <InfoRow label="Application">{request.application?.name || request.application?.appCode || '—'}</InfoRow>
+            <InfoRow label="Resource">
+              {request.requestedResource
+                ? (request.requestedResource.name || request.requestedResource.resourceExternalId)
+                : <span className="text-gray-400 italic">Global Access</span>}
+            </InfoRow>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">Reason for rejection (optional)</label>
+            <textarea
+              className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400"
+              rows={2}
+              placeholder="Reason for rejection…"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel} disabled={loading}>Cancel</button>
+            <button
+              className="px-4 py-2 text-sm rounded-lg text-white font-medium bg-red-600 hover:bg-red-700 flex items-center gap-2 disabled:opacity-60"
+              onClick={() => onConfirm(notes, {}, null)}
+              disabled={loading}
+            >
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              Reject
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Approve: two-tab layout
+  const requesterName = [request.requester?.firstName, request.requester?.lastName].filter(Boolean).join(' ') || request.requester?.email || '—';
+  const requestedRole = request.requestedAttributes?.role || request.requestedAttributes?.requestedRole;
+  const resource = request.requestedResource;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 p-6 space-y-4">
-        <h3 className={`text-lg font-semibold ${isApprove ? 'text-green-700' : 'text-red-700'}`}>
-          {isApprove ? 'Approve Access Request' : 'Reject Access Request'}
-        </h3>
-
-        <div className="bg-gray-50 border rounded-lg p-4 space-y-2.5 text-sm">
-          <div className="flex">
-            <span className="font-semibold w-32 text-gray-500 uppercase text-[10px] self-center">Requester</span>
-            <span className="text-gray-900 font-medium">
-              {[request.requester?.firstName, request.requester?.lastName].filter(Boolean).join(' ') || request.requester?.email || '—'}
-            </span>
-          </div>
-          <div className="flex">
-            <span className="font-semibold w-32 text-gray-500 uppercase text-[10px] self-center">Application</span>
-            <span className="text-gray-900">{request.application?.name || request.application?.appCode || '—'}</span>
-          </div>
-          <div className="flex">
-            <span className="font-semibold w-32 text-gray-500 uppercase text-[10px] self-center">Resource</span>
-            <span className="text-gray-900">
-              {request.requestedResource 
-                ? (request.requestedResource.name || request.requestedResource.resourceExternalId) 
-                : <span className="text-gray-400 italic">Global Access</span>
-              }
-            </span>
-          </div>
-          <div className="flex">
-            <span className="font-semibold w-32 text-gray-500 uppercase text-[10px] self-center">Requested Role</span>
-            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded font-mono text-xs font-semibold">
-              {request.requestedAttributes?.role || request.requestedAttributes?.requestedRole || '—'}
-            </span>
-          </div>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 p-6 space-y-4">
+        <div>
+          <h3 className="text-lg font-semibold text-green-700">Approve Access Request</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {requesterName} · {request.application?.name || request.application?.appCode || '—'}
+          </p>
         </div>
 
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="w-full">
+            <TabsTrigger value="app_attributes" className="flex-1">
+              Application Attributes
+              {hasAppAttrs && (
+                <span className="ml-1.5 text-[10px] bg-indigo-100 text-indigo-700 rounded-full px-1.5 py-0.5 font-semibold">
+                  {Object.keys(appAttributes).length}
+                </span>
+              )}
+              {hasPendingAttrs && (
+                <span className="ml-1 text-[10px] bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5 font-semibold">pending</span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="resource" className="flex-1">Resource Details</TabsTrigger>
+          </TabsList>
 
-        <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
-          <textarea
-            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            rows={2}
-            placeholder={isApprove ? 'Any notes for the requester…' : 'Reason for rejection…'}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </div>
+          {/* ── Tab 1: Application Attributes ── */}
+          <TabsContent value="app_attributes" className="mt-4 min-h-[160px]">
+            {hasAppAttrs ? (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500 mb-3">
+                  App-specific attributes submitted by the user. Approving will promote any pending ones to active.
+                </p>
+                <div className="bg-gray-50 border rounded-lg p-4 space-y-2.5">
+                  {Object.entries(appAttributes).map(([key, meta]) => {
+                    const isPending = meta.status === 'PENDING_APPROVAL';
+                    const isApproved = meta.status === 'APPROVED';
+                    return (
+                      <div key={key} className="flex items-center gap-3">
+                        <span className="w-36 text-[10px] uppercase font-semibold text-gray-500 shrink-0">
+                          {meta.displayName || key}
+                          <span className="ml-1 font-mono font-normal text-gray-400">({meta.dataType})</span>
+                        </span>
+                        <span className="flex-1 text-sm text-gray-900 font-medium">{formatAttrValue(meta.value)}</span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
+                          isPending  ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                          isApproved ? 'bg-green-50 text-green-700 border-green-200' :
+                                       'bg-gray-100 text-gray-500 border-gray-200'
+                        }`}>
+                          {isPending ? 'Pending' : isApproved ? 'Approved' : meta.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {hasPendingAttrs && (
+                  <>
+                    <div className="space-y-1 pt-2">
+                      <label className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
+                      <textarea
+                        className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        rows={2}
+                        placeholder="Any notes for the requester…"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel} disabled={loading}>Cancel</button>
+                      <button
+                        className="px-4 py-2 text-sm rounded-lg text-white font-medium bg-green-600 hover:bg-green-700 flex items-center gap-2 disabled:opacity-60"
+                        onClick={() => onConfirm(notes, {}, 'app_attributes')}
+                        disabled={loading}
+                      >
+                        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                        <CheckCircle className="w-4 h-4" />
+                        Approve Application Request
+                      </button>
+                    </div>
+                  </>
+                )}
+                {!hasPendingAttrs && (
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel}>Close</button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-10 text-gray-400">
+                <p className="text-sm">No app-specific attributes for this request.</p>
+                <p className="text-xs mt-1">The user did not submit any app-specific attributes.</p>
+              </div>
+            )}
+          </TabsContent>
 
-        <div className="flex justify-end gap-3 pt-2">
-          <button
-            className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
-            onClick={onCancel}
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          <button
-            className={`px-4 py-2 text-sm rounded-lg text-white font-medium flex items-center gap-2 disabled:opacity-60
-              ${isApprove ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
-            onClick={() => onConfirm(notes)}
-            disabled={loading}
-          >
-            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {isApprove ? 'Approve' : 'Reject'}
-          </button>
-        </div>
+          {/* ── Tab 2: Resource Details ── */}
+          <TabsContent value="resource" className="mt-4 min-h-[160px]">
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500 mb-3">
+                Role and resource details from the request. Approving will sync these to the user's app attributes and mark the request as approved.
+              </p>
+              <div className="bg-gray-50 border rounded-lg p-4 space-y-2.5">
+                <InfoRow label="Requester">
+                  <span className="font-medium">{requesterName}</span>
+                </InfoRow>
+                <InfoRow label="Application">
+                  {request.application?.name || request.application?.appCode || '—'}
+                </InfoRow>
+                <InfoRow label="Requested Role">
+                  {requestedRole
+                    ? <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded font-mono text-xs font-semibold">{requestedRole}</span>
+                    : <span className="text-gray-400 italic">—</span>}
+                </InfoRow>
+                <InfoRow label="Resource">
+                  {resource
+                    ? <span>{resource.name || resource.resourceExternalId}{resource.level ? ` (L${resource.level})` : ''}</span>
+                    : <span className="text-gray-400 italic">Global Access</span>}
+                </InfoRow>
+                {request.requestedAttributes?.justification && (
+                  <InfoRow label="Justification">
+                    <span className="text-gray-600">{request.requestedAttributes.justification}</span>
+                  </InfoRow>
+                )}
+              </div>
+              <div className="space-y-1 pt-2">
+                <label className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
+                <textarea
+                  className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  rows={2}
+                  placeholder="Any notes for the requester…"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel} disabled={loading}>Cancel</button>
+                <button
+                  className="px-4 py-2 text-sm rounded-lg text-white font-medium bg-green-600 hover:bg-green-700 flex items-center gap-2 disabled:opacity-60"
+                  onClick={() => onConfirm(notes, {}, 'resource')}
+                  disabled={loading}
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <CheckCircle className="w-4 h-4" />
+                  Approve Resource Request
+                </button>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
@@ -135,9 +290,15 @@ export const AccessRequestsPage = () => {
   }, {});
 
   const approveMutation = useMutation({
-    mutationFn: ({ id, notes, attributes }) => accessRequestService.approveAccessRequest(id, notes, attributes),
-    onSuccess: () => {
-      toast({ title: 'Request approved' });
+    mutationFn: ({ id, notes, attributes, approvalScope }) =>
+      accessRequestService.approveAccessRequest(id, notes, attributes, approvalScope),
+    onSuccess: (_, vars) => {
+      const scopeLabel = vars.approvalScope === 'app_attributes'
+        ? 'Application attributes approved'
+        : vars.approvalScope === 'resource'
+        ? 'Resource request approved'
+        : 'Request approved';
+      toast({ title: scopeLabel });
       queryClient.invalidateQueries({ queryKey: ['access-requests'] });
       setModal(null);
     },
@@ -156,11 +317,11 @@ export const AccessRequestsPage = () => {
 
   const actionLoading = approveMutation.isPending || rejectMutation.isPending;
 
-  const handleConfirm = (notes, attributes = {}) => {
+  const handleConfirm = (notes, attributes = {}, approvalScope = undefined) => {
     if (!modal) return;
     const { request, action } = modal;
     if (action === 'approve') {
-      approveMutation.mutate({ id: request.id, notes, attributes });
+      approveMutation.mutate({ id: request.id, notes, attributes, approvalScope });
     } else {
       rejectMutation.mutate({ id: request.id, notes });
     }
