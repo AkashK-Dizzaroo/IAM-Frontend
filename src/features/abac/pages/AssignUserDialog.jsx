@@ -21,29 +21,43 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Search, Plus, Trash2, Loader2, UserPlus, ChevronRight } from 'lucide-react';
+import { Search, Plus, Trash2, Loader2, UserPlus, ChevronRight, X } from 'lucide-react';
 
-// ─── user search combobox ─────────────────────────────────────────────────────
+// ─── user dropdown with search ────────────────────────────────────────────────
 
-function UserSearchCombobox({ selectedUser, onSelect }) {
+function UserDropdown({ selectedUser, onSelect, open: dialogOpen }) {
   const [query, setQuery] = useState('');
-  const [open, setOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const containerRef = useRef(null);
 
+  // Load all active users upfront; filter client-side
   const { data, isFetching } = useQuery({
-    queryKey: ['abac', 'users', 'search', query],
-    queryFn: () => abacService.listUsers({ search: query, limit: 20, status: 'active' }),
-    enabled: query.length >= 1,
-    staleTime: 30_000,
+    queryKey: ['abac', 'users', 'all-active'],
+    queryFn: () => abacService.listUsers({ limit: 500, status: 'active' }),
+    enabled: !!dialogOpen,
+    staleTime: 60_000,
   });
-  const users = data?.data?.data ?? data?.data ?? [];
+  const allUsers = useMemo(() => {
+    const raw = data?.data?.data ?? data?.data ?? [];
+    return Array.isArray(raw) ? raw : [];
+  }, [data]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allUsers;
+    return allUsers.filter(
+      (u) =>
+        (u.displayName || '').toLowerCase().includes(q) ||
+        (u.username || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q)
+    );
+  }, [allUsers, query]);
 
   useEffect(() => {
     function handleClick(e) {
-      if (!dropdownRef.current?.contains(e.target) && !inputRef.current?.contains(e.target)) {
-        setOpen(false);
-      }
+      if (!containerRef.current?.contains(e.target)) setDropdownOpen(false);
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -52,54 +66,72 @@ function UserSearchCombobox({ selectedUser, onSelect }) {
   const handleSelect = (user) => {
     onSelect(user);
     setQuery('');
-    setOpen(false);
+    setDropdownOpen(false);
   };
 
-  return (
-    <div className="relative">
-      {selectedUser ? (
-        <div className="flex items-center justify-between gap-2 border border-gray-200 rounded-md px-3 py-2 bg-gray-50">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
-              {(selectedUser.displayName || selectedUser.email || '?')[0].toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {selectedUser.displayName || selectedUser.username}
-              </p>
-              <p className="text-xs text-gray-500 truncate">{selectedUser.email}</p>
-            </div>
+  if (selectedUser) {
+    return (
+      <div className="flex items-center justify-between gap-2 border border-gray-200 rounded-md px-3 py-2 bg-gray-50">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
+            {(selectedUser.displayName || selectedUser.email || '?')[0].toUpperCase()}
           </div>
-          <Button
-            type="button" variant="ghost" size="sm"
-            className="h-7 px-2 text-xs text-gray-400 hover:text-red-500 shrink-0"
-            onClick={() => onSelect(null)}
-          >
-            Change
-          </Button>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">
+              {selectedUser.displayName || selectedUser.username}
+            </p>
+            <p className="text-xs text-gray-500 truncate">{selectedUser.email}</p>
+          </div>
         </div>
-      ) : (
-        <>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              ref={inputRef}
-              placeholder="Search by name or email…"
-              value={query}
-              onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-              onFocus={() => query.length >= 1 && setOpen(true)}
-              className="pl-9"
-            />
-            {isFetching && (
-              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
-            )}
+        <Button
+          type="button" variant="ghost" size="sm"
+          className="h-7 px-2 text-xs text-gray-400 hover:text-red-500 shrink-0"
+          onClick={() => onSelect(null)}
+        >
+          Change
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      {/* Trigger button — looks like a select */}
+      <button
+        type="button"
+        onClick={() => { setDropdownOpen((o) => !o); setTimeout(() => inputRef.current?.focus(), 50); }}
+        className="w-full flex items-center justify-between gap-2 border border-gray-200 rounded-md px-3 py-2 bg-white text-sm text-left hover:border-gray-300 transition-colors"
+      >
+        <span className="text-gray-400">Select a user…</span>
+        <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${dropdownOpen ? 'rotate-90' : ''}`} />
+      </button>
+
+      {dropdownOpen && (
+        <div
+          ref={dropdownRef}
+          className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg"
+        >
+          {/* Search inside dropdown */}
+          <div className="p-2 border-b border-gray-100">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name or email…"
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+              />
+              {isFetching && (
+                <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-gray-400" />
+              )}
+            </div>
           </div>
-          {open && users.length > 0 && (
-            <div
-              ref={dropdownRef}
-              className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto"
-            >
-              {users.map((u) => (
+
+          {/* User list */}
+          <div className="max-h-52 overflow-y-auto">
+            {filtered.length > 0 ? (
+              filtered.map((u) => (
                 <button
                   key={u.id}
                   type="button"
@@ -116,23 +148,20 @@ function UserSearchCombobox({ selectedUser, onSelect }) {
                     <p className="text-xs text-gray-500 truncate">{u.email}</p>
                   </div>
                 </button>
-              ))}
-            </div>
-          )}
-          {open && query.length >= 1 && !isFetching && users.length === 0 && (
-            <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-3 text-sm text-gray-400">
-              No users found for &ldquo;{query}&rdquo;
-            </div>
-          )}
-        </>
+              ))
+            ) : (
+              <p className="px-4 py-3 text-sm text-gray-400">
+                {isFetching ? 'Loading…' : 'No users found.'}
+              </p>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
 // ─── resource tree picker ─────────────────────────────────────────────────────
-// Builds a tree from flat resource list (L2 parents + L3 children) and renders
-// it as a nested selectable structure matching the ResourceAccessDisplay style.
 
 function buildResourceTree(resources) {
   const byId = {};
@@ -186,7 +215,6 @@ function ResourceTreeSelect({ resources, selectedResourceId, onSelect }) {
           style={{ marginLeft: depth * 16 }}
           onClick={() => onSelect(isSelected ? '' : id)}
         >
-          {/* Expand toggle */}
           {hasChildren ? (
             <button
               type="button"
@@ -200,14 +228,11 @@ function ResourceTreeSelect({ resources, selectedResourceId, onSelect }) {
           ) : (
             <span className="w-4 shrink-0" />
           )}
-
-          {/* Selection indicator */}
           <span
             className={`h-3 w-3 rounded-full shrink-0 border-2 transition-colors ${
               isSelected ? 'bg-primary border-primary' : 'border-gray-300 group-hover:border-primary/50'
             }`}
           />
-
           <span className={`text-sm truncate ${isSelected ? 'font-medium text-primary' : 'text-gray-800'}`}>
             {node.name}
           </span>
@@ -217,11 +242,8 @@ function ResourceTreeSelect({ resources, selectedResourceId, onSelect }) {
             </span>
           )}
         </div>
-
         {hasChildren && isExpanded && (
-          <div>
-            {node.children.map((child) => renderNode(child, depth + 1))}
-          </div>
+          <div>{node.children.map((child) => renderNode(child, depth + 1))}</div>
         )}
       </div>
     );
@@ -270,7 +292,7 @@ function AttrInput({ def, value, onChange }) {
       type={def.dataType === 'number' ? 'number' : 'text'}
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
-      placeholder={`Enter ${def.displayName}…`}
+      placeholder={`Enter ${def.displayName || def.key}…`}
     />
   );
 }
@@ -282,7 +304,6 @@ function ResourceRoleRow({ index, row, resources, roleOptions, onChange, onRemov
   const rowRef = useRef(null);
   const selectedResource = resources.find((r) => (r.id ?? r._id) === row.resourceId);
 
-  // Close tree when clicking outside the row
   useEffect(() => {
     function handleClick(e) {
       if (!rowRef.current?.contains(e.target)) setTreeOpen(false);
@@ -293,9 +314,7 @@ function ResourceRoleRow({ index, row, resources, roleOptions, onChange, onRemov
 
   return (
     <div ref={rowRef} className="space-y-1.5">
-      {/* Resource trigger + Role dropdown + Remove — same row */}
       <div className="flex items-center gap-2">
-        {/* Resource picker trigger */}
         <button
           type="button"
           onClick={() => setTreeOpen((o) => !o)}
@@ -322,7 +341,6 @@ function ResourceRoleRow({ index, row, resources, roleOptions, onChange, onRemov
           />
         </button>
 
-        {/* Role dropdown — values sourced from action-namespace attr def allowedValues */}
         <div className="w-44 shrink-0">
           <Select value={row.role || ''} onValueChange={(v) => onChange(index, { role: v })}>
             <SelectTrigger className={`bg-white ${!row.role ? 'text-gray-400' : ''}`}>
@@ -339,7 +357,6 @@ function ResourceRoleRow({ index, row, resources, roleOptions, onChange, onRemov
           </Select>
         </div>
 
-        {/* Remove button */}
         <button
           type="button"
           disabled={!canRemove}
@@ -350,7 +367,6 @@ function ResourceRoleRow({ index, row, resources, roleOptions, onChange, onRemov
         </button>
       </div>
 
-      {/* Tree panel — drops inline below the row when open */}
       {treeOpen && (
         <ResourceTreeSelect
           resources={resources}
@@ -373,16 +389,30 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const [rows, setRows] = useState([{ ...EMPTY_ROW }]);
   const [attrValues, setAttrValues] = useState({});
+  // Tracks which optional attribute def IDs the admin has chosen to add
+  const [addedOptionalDefIds, setAddedOptionalDefIds] = useState([]);
+  const [optionalPickerOpen, setOptionalPickerOpen] = useState(false);
+  const optionalPickerRef = useRef(null);
 
   useEffect(() => {
     if (!open) {
       setSelectedUser(null);
       setRows([{ ...EMPTY_ROW }]);
       setAttrValues({});
+      setAddedOptionalDefIds([]);
+      setOptionalPickerOpen(false);
     }
   }, [open]);
 
-  // Resources for this app
+  // Close the optional attribute picker when clicking outside
+  useEffect(() => {
+    function handleClick(e) {
+      if (!optionalPickerRef.current?.contains(e.target)) setOptionalPickerOpen(false);
+    }
+    if (optionalPickerOpen) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [optionalPickerOpen]);
+
   const { data: resourcesData } = useQuery({
     queryKey: ['abac', 'studyResources', appKey, appId],
     queryFn: () => resourceService.getResources({ applicationId: appId, limit: 1000, isActive: 'true' }),
@@ -394,9 +424,6 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
     return Array.isArray(raw) ? raw : [];
   }, [resourcesData]);
 
-  // Role options — find the first attr def whose key ends with _role and has allowedValues
-  // (e.g. tmf_role enum with ['study_monitor', 'principal_investigator', …]).
-  // This covers both action-namespace and subject-namespace role defs.
   const roleDef = useMemo(
     () => attrDefs.find(
       (d) => /(_role|^role)$/i.test(d.key) && Array.isArray(d.constraints?.allowedValues) && d.constraints.allowedValues.length > 0
@@ -405,9 +432,8 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
   );
   const roleOptions = roleDef?.constraints?.allowedValues ?? [];
 
-  // Additional attributes: exclude resource/study access (handled by rows),
-  // action namespace, and whichever def is powering the role dropdown above.
-  const otherDefs = useMemo(
+  // Base pool: exclude resource/study access keys, action namespace, and the role def
+  const baseAttrDefs = useMemo(
     () => attrDefs.filter(
       (d) =>
         d.namespace !== 'action' &&
@@ -416,6 +442,44 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
     ),
     [attrDefs, roleDef]
   );
+
+  // Always-visible: isRequired OR isUserRequestable
+  const mandatoryDefs = useMemo(
+    () => baseAttrDefs.filter((d) => d.isRequired || d.isUserRequestable),
+    [baseAttrDefs]
+  );
+
+  // Optional pool: everything else
+  const optionalPool = useMemo(
+    () => baseAttrDefs.filter((d) => !d.isRequired && !d.isUserRequestable),
+    [baseAttrDefs]
+  );
+
+  // The optional defs the admin has explicitly added
+  const addedOptionalDefs = useMemo(
+    () => addedOptionalDefIds.map((id) => optionalPool.find((d) => d.id === id)).filter(Boolean),
+    [addedOptionalDefIds, optionalPool]
+  );
+
+  // Remaining optional defs not yet added (for the picker dropdown)
+  const availableToAdd = useMemo(
+    () => optionalPool.filter((d) => !addedOptionalDefIds.includes(d.id)),
+    [optionalPool, addedOptionalDefIds]
+  );
+
+  const addOptionalDef = (defId) => {
+    setAddedOptionalDefIds((prev) => [...prev, defId]);
+    setOptionalPickerOpen(false);
+  };
+
+  const removeOptionalDef = (defId) => {
+    setAddedOptionalDefIds((prev) => prev.filter((id) => id !== defId));
+    setAttrValues((prev) => {
+      const next = { ...prev };
+      delete next[defId];
+      return next;
+    });
+  };
 
   const updateRow = (idx, patch) =>
     setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -444,11 +508,11 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
     e.preventDefault();
     if (!selectedUser) return;
 
-    // Only include rows that have both resource and role selected
     const validAssignments = rows.filter((r) => r.resourceId && r.role);
 
+    const allVisibleDefs = [...mandatoryDefs, ...addedOptionalDefs];
     const attributePayload = {};
-    for (const def of otherDefs) {
+    for (const def of allVisibleDefs) {
       const val = attrValues[def.id];
       if (val !== undefined && val !== '' && val !== null) {
         attributePayload[def.key] = val;
@@ -462,7 +526,6 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
     });
   };
 
-  // At least one row must have a resource + role selected, or there are attributes to assign
   const hasValidRow = rows.some((r) => r.resourceId && r.role);
   const hasAttributes = Object.values(attrValues).some((v) => v !== undefined && v !== '' && v !== null);
   const canSubmit = !!selectedUser && (hasValidRow || hasAttributes) && !mutation.isPending;
@@ -488,7 +551,7 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
               <Label className="text-sm font-medium">
                 User <span className="text-red-500">*</span>
               </Label>
-              <UserSearchCombobox selectedUser={selectedUser} onSelect={setSelectedUser} />
+              <UserDropdown selectedUser={selectedUser} onSelect={setSelectedUser} open={open} />
             </div>
 
             {/* ── Resource + Role assignments ── */}
@@ -500,7 +563,6 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
                 </p>
               </div>
 
-              {/* Column headers */}
               <div className="flex items-center gap-2 px-0.5">
                 <span className="flex-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">Resource</span>
                 <span className="w-44 shrink-0 text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -535,7 +597,7 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
             </div>
 
             {/* ── Additional attributes ── */}
-            {otherDefs.length > 0 && (
+            {(mandatoryDefs.length > 0 || optionalPool.length > 0) && (
               <div className="space-y-3">
                 <div>
                   <Label className="text-sm font-medium">Additional Attributes</Label>
@@ -543,10 +605,12 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
                     Application-specific attributes for this user.
                   </p>
                 </div>
-                {otherDefs.map((def) => (
+
+                {/* Required / user-requestable attributes — always shown */}
+                {mandatoryDefs.map((def) => (
                   <div key={def.id} className="space-y-1">
                     <Label htmlFor={`asgn-attr-${def.id}`} className="text-sm">
-                      {def.displayName}
+                      {def.displayName || def.key}
                       {def.isRequired && <span className="text-red-500 ml-1">*</span>}
                       <span className="ml-1.5 text-[10px] font-mono text-gray-400">
                         ({def.dataType})
@@ -562,6 +626,69 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
                     />
                   </div>
                 ))}
+
+                {/* Admin-added optional attributes */}
+                {addedOptionalDefs.map((def) => (
+                  <div key={def.id} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor={`asgn-attr-${def.id}`} className="text-sm">
+                        {def.displayName || def.key}
+                        <span className="ml-1.5 text-[10px] font-mono text-gray-400">
+                          ({def.dataType})
+                        </span>
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => removeOptionalDef(def.id)}
+                        className="p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {def.description && (
+                      <p className="text-xs text-gray-400">{def.description}</p>
+                    )}
+                    <AttrInput
+                      def={def}
+                      value={attrValues[def.id]}
+                      onChange={(val) => setAttrValues((prev) => ({ ...prev, [def.id]: val }))}
+                    />
+                  </div>
+                ))}
+
+                {/* + Add attribute button with dropdown picker */}
+                {availableToAdd.length > 0 && (
+                  <div ref={optionalPickerRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOptionalPickerOpen((o) => !o)}
+                      className="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium py-1 px-1 rounded transition-colors hover:bg-indigo-50"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add attribute
+                    </button>
+
+                    {optionalPickerOpen && (
+                      <div className="absolute z-50 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                        {availableToAdd.map((def) => (
+                          <button
+                            key={def.id}
+                            type="button"
+                            className="w-full flex items-start gap-2 px-3 py-2 hover:bg-gray-50 text-left transition-colors"
+                            onMouseDown={(e) => { e.preventDefault(); addOptionalDef(def.id); }}
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {def.displayName || def.key}
+                              </p>
+                              <p className="text-xs text-gray-400 font-mono">{def.dataType}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
