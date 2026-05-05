@@ -87,10 +87,11 @@ function MultiValueDropdown({ allowedValues = [], selectedValues = [], onChange,
             const value = String(v);
             const checked = selected.includes(value);
             return (
-              <button
+              <div
                 key={value}
-                type="button"
-                className="w-full flex items-center justify-between rounded px-2 py-1.5 text-xs hover:bg-gray-50"
+                role="option"
+                aria-selected={checked}
+                className="w-full flex items-center justify-between rounded px-2 py-1.5 text-xs hover:bg-gray-50 cursor-pointer"
                 onClick={() => toggleValue(value, !checked)}
               >
                 <div className="flex items-center gap-2">
@@ -102,7 +103,7 @@ function MultiValueDropdown({ allowedValues = [], selectedValues = [], onChange,
                   <span>{value}</span>
                 </div>
                 {checked && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
+              </div>
             );
           })}
         </div>

@@ -25,6 +25,7 @@ import {
   UserCog,
   ClipboardList,
   Building2,
+  Boxes,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -260,6 +261,13 @@ export const DashboardPage = () => {
       path: "/coverage-gaps",
       show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
     },
+    {
+      id: "app-resources",
+      label: "App Resources",
+      icon: Boxes,
+      path: "/app-resources",
+      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
+    },
   ];
 
   const navResources = [
@@ -293,7 +301,7 @@ export const DashboardPage = () => {
   const showGlobal = effectiveRoles.isHubOwner && isGlobalScope;
   const showApp = (effectiveRoles.isHubOwner || effectiveRoles.isAppOwner) && isAppScope;
   const showAppSelector = effectiveRoles.isHubOwner || effectiveRoles.isAppOwner;
-  const showResources = effectiveRoles.isHubOwner || effectiveRoles.isAppOwner;
+  const showResources = effectiveRoles.isHubOwner && isGlobalScope;
 
   const handleBackToHub = () => {
     window.location.href = getValidHubUrl() + "/hub";

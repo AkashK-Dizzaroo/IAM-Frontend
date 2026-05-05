@@ -101,6 +101,7 @@ export function ResourceRegistrationModal({
     description,
     setDescription,
     isL2Locked,
+    isL2Loading,
     isValid,
     reset,
     buildPayload,
@@ -341,7 +342,9 @@ export function ResourceRegistrationModal({
                 {isL2Locked ? (
                   <div className="flex items-center gap-2 h-9 px-3 py-2 rounded-md border border-input bg-muted/50 text-muted-foreground cursor-not-allowed">
                     <Lock className="h-4 w-4 shrink-0" />
-                    <span>Unassigned (Enforced by Application Logic)</span>
+                    <span>
+                      {isL2Loading ? "Fetching application configuration..." : "Unassigned (Enforced by Application Logic)"}
+                    </span>
                   </div>
                 ) : (
                   <L2ContainerSelect
@@ -677,9 +680,9 @@ export function ResourceRegistrationModal({
             </Button>
             <Button
               type="submit"
-              disabled={!isValid || createMutation.isPending}
+              disabled={!isValid || createMutation.isPending || isL2Loading}
             >
-              {createMutation.isPending ? "Creating..." : "Create Resource"}
+              {createMutation.isPending ? "Creating..." : isL2Loading ? "Initializing..." : "Create Resource"}
             </Button>
           </div>
         </form>

@@ -77,6 +77,7 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
   }, [open, resource]);
 
   useEffect(() => {
+    if (!open || !resource) return;
     const rows = existingAttrsResponse?.data ?? [];
     const common = {};
     const appOverrides = [];
@@ -108,7 +109,7 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
 
     setAttrValues(common);
     setOverrides(appOverrides);
-  }, [existingAttrsResponse, attrDefs, resource?.metadata]);
+  }, [open, existingAttrsResponse, attrDefs, resource]);
 
   const addOverride = () => {
     const firstAppId = assignedApps[0]?._id ?? assignedApps[0]?.id ?? "";

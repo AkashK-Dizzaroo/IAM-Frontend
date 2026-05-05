@@ -38,7 +38,7 @@ export function useResourceForm() {
   );
 
   const firstAppId = selectedL1Apps[0]?._id ?? selectedL1Apps[0]?.id;
-  const { data: l2ResourcesWhenLocked = [] } = useQuery({
+  const { data: l2ResourcesWhenLocked = [], isLoading: isQueryLoading } = useQuery({
     queryKey: ["l2-resources-locked", firstAppId],
     queryFn: async () => {
       const res = await resourceService.getResources({
@@ -62,12 +62,13 @@ export function useResourceForm() {
       return;
     }
     const firstApp = selectedL1Apps[0];
-    const appCode = firstApp?.appCode ?? "";
+    const appCode = (firstApp?.appCode ?? "").toUpperCase();
     const unassigned = l2ResourcesWhenLocked.find(
       (r) =>
         r.isUnassignedNode === true ||
+        r.isUnassignedNode === 1 ||
         (r.resourceExternalId &&
-          r.resourceExternalId === `HUB-UNASSIGNED-${appCode}`)
+          r.resourceExternalId.toUpperCase() === `HUB-UNASSIGNED-${appCode}`)
     );
     if (unassigned) {
       setSelectedL2(unassigned);
@@ -76,7 +77,7 @@ export function useResourceForm() {
 
   useEffect(() => {
     if (!isL2Locked && selectedL2) {
-      const isUnassigned = selectedL2?.isUnassignedNode === true;
+      const isUnassigned = selectedL2?.isUnassignedNode === true || selectedL2?.isUnassignedNode === 1;
       if (isUnassigned) {
         setSelectedL2(null);
       }
@@ -93,15 +94,25 @@ export function useResourceForm() {
     if (level === 2) setSelectedL2(null);
   }, []);
 
+  const isL2Loading = creationLevel === 3 && isL2Locked && isQueryLoading;
+  const isL2Missing = creationLevel === 3 && isL2Locked && !isQueryLoading && !selectedL2;
+
   const isValid = useMemo(() => {
     const hasL1 = selectedL1Apps.length > 0;
     const hasName = String(resourceName ?? "").trim().length > 0;
     if (creationLevel === 2) {
       return hasL1 && hasName;
     }
-    const hasL2 = selectedL2 != null && (selectedL2._id ?? selectedL2);
-    return hasL1 && !!hasL2 && hasName;
+    // Even when L2 is locked, we still need the actual Unassigned node ID for the payload
+    const hasL2 = selectedL2 != null && !!(selectedL2._id ?? selectedL2.id ?? selectedL2);
+    return hasL1 && hasL2 && hasName;
   }, [creationLevel, selectedL1Apps, selectedL2, resourceName]);
+
+  useEffect(() => {
+    if (isL2Locked && creationLevel === 2) {
+      setCreationLevel(3);
+    }
+  }, [isL2Locked, creationLevel]);
 
   const reset = useCallback(() => {
     setCreationLevel(3);
@@ -114,11 +125,17 @@ export function useResourceForm() {
   const buildPayload = useCallback(() => {
     const meta = {};
     if (description.trim()) meta.description = description.trim();
+
+    // parentResource should be an ID string or null
+    let parentResource = null;
+    if (creationLevel === 3) {
+      parentResource = selectedL2?._id ?? selectedL2?.id ?? selectedL2;
+    }
+
     return {
       name: String(resourceName ?? "").trim(),
       level: creationLevel,
-      parentResource:
-        creationLevel === 2 ? null : (selectedL2?._id ?? selectedL2),
+      parentResource,
       assignedApplications: selectedL1Apps.map((app) => app._id ?? app.id),
       isActive: true,
       metadata: meta,
@@ -137,6 +154,8 @@ export function useResourceForm() {
     description,
     setDescription,
     isL2Locked,
+    isL2Loading,
+    isL2Missing,
     isValid,
     reset,
     buildPayload,

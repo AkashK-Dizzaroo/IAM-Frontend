@@ -12,7 +12,7 @@ class ApplicationService {
 
   async getApplicationById(id) {
     try {
-      const response = await apiClient.get(`/applications/${id}`);
+      const response = await apiClient.get(`/applications/by-id/${id}`);
       return response.data;
     } catch (error) {
       throw this.handleError(error);

@@ -22,7 +22,7 @@ import { AppPoliciesPage } from "@/features/abac/pages/AppPoliciesPage";
 import { PolicyTesterPage } from "@/features/abac/pages/PolicyTesterPage";
 import { CoverageGapsPage } from "@/features/abac/pages/CoverageGapsPage";
 import { AuditPage } from "@/features/audit";
-import { ResourceManagementPage } from "@/features/resources";
+import { ResourceManagementPage, AppResourcesPage } from "@/features/resources";
 import { AbacApplicationsPage } from "@/features/abac/pages/AbacApplicationsPage";
 import { AccessRequestsPage } from "@/features/access-requests/pages/AccessRequestsPage";
 import { FacilitiesPage } from "@/features/layout/pages/FacilitiesPage";
@@ -61,6 +61,7 @@ function AppRoutes() {
         {/* ── Active routes ──────────────────────────────────────────── */}
         <Route path="my-profile" element={<MyProfilePage />} />
         <Route path="resources" element={<ResourceManagementPage />} />
+        <Route path="app-resources" element={<AppResourcesPage />} />
         <Route path="users" element={<AbacUsersPage />} />
         <Route path="applications" element={<AbacApplicationsPage />} />
         <Route path="account-approvals" element={<AccountRequestsPage />} />

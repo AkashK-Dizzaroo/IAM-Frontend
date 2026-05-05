@@ -96,6 +96,15 @@ class ResourceService {
     }
   }
 
+  async unlinkResourceFromApp(resourceId, applicationId) {
+    try {
+      const response = await apiClient.delete(`/resources/${resourceId}/applications/${applicationId}`);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
   async setClassification(resourceId, applicationId, classificationId) {
     try {
       const response = await apiClient.patch(
