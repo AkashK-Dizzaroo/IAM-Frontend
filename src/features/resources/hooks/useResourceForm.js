@@ -100,13 +100,22 @@ export function useResourceForm() {
   const isValid = useMemo(() => {
     const hasL1 = selectedL1Apps.length > 0;
     const hasName = String(resourceName ?? "").trim().length > 0;
+    
     if (creationLevel === 2) {
       return hasL1 && hasName;
     }
+    
+    // When L2 is locked (app doesn't support L2), the backend auto-assigns the
+    // HUB-UNASSIGNED container — no manual L2 selection needed.
+    if (isL2Locked) {
+      return hasL1 && hasName;
+    }
+    
     // Even when L2 is locked, we still need the actual Unassigned node ID for the payload
+    // This comment applies to the case when isL2Locked is false but we're creating L3
     const hasL2 = selectedL2 != null && !!(selectedL2._id ?? selectedL2.id ?? selectedL2);
     return hasL1 && hasL2 && hasName;
-  }, [creationLevel, selectedL1Apps, selectedL2, resourceName]);
+  }, [creationLevel, selectedL1Apps, selectedL2, resourceName, isL2Locked]);
 
   useEffect(() => {
     if (isL2Locked && creationLevel === 2) {
@@ -128,8 +137,19 @@ export function useResourceForm() {
 
     // parentResource should be an ID string or null
     let parentResource = null;
-    if (creationLevel === 3) {
-      parentResource = selectedL2?._id ?? selectedL2?.id ?? selectedL2;
+    
+    if (creationLevel === 2) {
+      // Level 2 resources have no parent
+      parentResource = null;
+    } else if (creationLevel === 3) {
+      // For Level 3 resources:
+      // When L2 is locked, the backend auto-assigns the HUB-UNASSIGNED parent
+      // When not locked, use the manually selected L2 (or null if none selected)
+      if (isL2Locked) {
+        parentResource = selectedL2?._id ?? selectedL2 ?? null;
+      } else {
+        parentResource = selectedL2?._id ?? selectedL2?.id ?? selectedL2;
+      }
     }
 
     return {
@@ -140,7 +160,7 @@ export function useResourceForm() {
       isActive: true,
       metadata: meta,
     };
-  }, [creationLevel, selectedL1Apps, selectedL2, resourceName, description]);
+  }, [creationLevel, selectedL1Apps, selectedL2, resourceName, description, isL2Locked]);
 
   return {
     creationLevel,

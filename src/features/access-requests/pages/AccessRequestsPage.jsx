@@ -49,14 +49,15 @@ function formatAttrValue(value) {
 
 // ── Review modal ──────────────────────────────────────────────────────────────
 
-function ReviewModal({ request, action, onConfirm, onCancel, loading }) {
-  const [notes, setNotes] = useState('');
-  const [activeTab, setActiveTab] = useState('app_attributes');
+function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab = 'app_attributes', preservedNotes = '' }) {
+  const [notes, setNotes] = useState(preservedNotes);
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   const isApprove = action === 'approve';
   const appAttributes = request.pendingAppAttributes ?? null;
   const hasAppAttrs = appAttributes && Object.keys(appAttributes).length > 0;
   const hasPendingAttrs = hasAppAttrs && Object.values(appAttributes).some(m => m.status === 'PENDING_APPROVAL');
+  const resourceApproved = Boolean(request.requestedAttributes?._iamApprovalProgress?.resourceApprovedAt);
 
   // For reject: simple single-panel layout (no tabs needed)
   if (!isApprove) {
@@ -131,7 +132,12 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading }) {
                 <span className="ml-1 text-[10px] bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5 font-semibold">pending</span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="resource" className="flex-1">Resource Details</TabsTrigger>
+            <TabsTrigger value="resource" className="flex-1">
+              Resource Details
+              {resourceApproved && (
+                <span className="ml-1 text-[10px] bg-green-100 text-green-700 rounded-full px-1.5 py-0.5 font-semibold">approved</span>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Tab 1: Application Attributes ── */}
@@ -232,28 +238,55 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading }) {
                   </InfoRow>
                 )}
               </div>
-              <div className="space-y-1 pt-2">
-                <label className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
-                <textarea
-                  className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  rows={2}
-                  placeholder="Any notes for the requester…"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel} disabled={loading}>Cancel</button>
-                <button
-                  className="px-4 py-2 text-sm rounded-lg text-white font-medium bg-green-600 hover:bg-green-700 flex items-center gap-2 disabled:opacity-60"
-                  onClick={() => onConfirm(notes, {}, 'resource')}
-                  disabled={loading}
-                >
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <CheckCircle className="w-4 h-4" />
-                  Approve Resource Request
-                </button>
-              </div>
+              {resourceApproved ? (
+                /* Resource step already done — show status, no action button */
+                <div className="pt-2 space-y-3">
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200">
+                    <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+                    <span className="text-sm font-medium text-green-700">Resource access approved</span>
+                    {request.requestedAttributes?._iamApprovalProgress?.resourceApprovedAt && (
+                      <span className="ml-auto text-xs text-green-500">
+                        {new Date(request.requestedAttributes._iamApprovalProgress.resourceApprovedAt)
+                          .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                  {hasPendingAttrs && (
+                    <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+                      Application attributes are still pending approval. Switch to the Application Attributes tab to complete the request.
+                    </p>
+                  )}
+                  <div className="flex justify-end pt-1">
+                    <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel}>Close</button>
+                  </div>
+                </div>
+              ) : (
+                /* Resource step pending — show notes + approve button */
+                <>
+                  <div className="space-y-1 pt-2">
+                    <label className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
+                    <textarea
+                      className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      rows={2}
+                      placeholder="Any notes for the requester…"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel} disabled={loading}>Cancel</button>
+                    <button
+                      className="px-4 py-2 text-sm rounded-lg text-white font-medium bg-green-600 hover:bg-green-700 flex items-center gap-2 disabled:opacity-60"
+                      onClick={() => onConfirm(notes, {}, 'resource')}
+                      disabled={loading}
+                    >
+                      {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                      <CheckCircle className="w-4 h-4" />
+                      Approve Resource Request
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </TabsContent>
         </Tabs>
@@ -292,15 +325,45 @@ export const AccessRequestsPage = () => {
   const approveMutation = useMutation({
     mutationFn: ({ id, notes, attributes, approvalScope }) =>
       accessRequestService.approveAccessRequest(id, notes, attributes, approvalScope),
-    onSuccess: (_, vars) => {
-      const scopeLabel = vars.approvalScope === 'app_attributes'
-        ? 'Application attributes approved'
-        : vars.approvalScope === 'resource'
-        ? 'Resource request approved'
-        : 'Request approved';
-      toast({ title: scopeLabel });
+    onSuccess: (payload, vars) => {
+      const row = payload?.data;
+      const stillPending = row?.status === 'pending';
+
+      let title = 'Request approved';
+      if (vars.approvalScope === 'app_attributes') {
+        title = stillPending
+          ? 'Application attributes approved — now approve the resource step'
+          : 'Application attributes approved';
+      } else if (vars.approvalScope === 'resource') {
+        title = stillPending
+          ? 'Resource step saved — approve application attributes to finish'
+          : 'Resource request approved';
+      }
+
+      toast({ title });
       queryClient.invalidateQueries({ queryKey: ['access-requests'] });
-      setModal(null);
+
+      // Keep modal open and switch to the next pending tab so the reviewer
+      // doesn't have to re-open the modal from the table.
+      if (stillPending && vars.approvalScope === 'app_attributes' && row) {
+        // App attrs done → still needs resource step
+        setModal((prev) => ({
+          ...prev,
+          request: row,
+          initialTab: 'resource',
+          preservedNotes: vars.notes ?? '',
+        }));
+      } else if (stillPending && vars.approvalScope === 'resource' && row) {
+        // Resource done → still needs app_attributes step
+        setModal((prev) => ({
+          ...prev,
+          request: row,
+          initialTab: 'app_attributes',
+          preservedNotes: vars.notes ?? '',
+        }));
+      } else {
+        setModal(null);
+      }
     },
     onError: (err) => toast({ title: 'Approve failed', description: err?.message, variant: 'destructive' }),
   });
@@ -509,11 +572,14 @@ export const AccessRequestsPage = () => {
       {/* Review modal */}
       {modal && (
         <ReviewModal
+          key={`${modal.request?.id}-${modal.initialTab ?? 'app_attributes'}`}
           request={modal.request}
           action={modal.action}
           onConfirm={handleConfirm}
           onCancel={() => setModal(null)}
           loading={actionLoading}
+          initialTab={modal.initialTab ?? 'app_attributes'}
+          preservedNotes={modal.preservedNotes ?? ''}
         />
       )}
     </div>
