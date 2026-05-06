@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -674,7 +674,7 @@ export function AppAttributesPage() {
 
       {/* ── Create Dialog ── */}
       <Dialog open={showCreate} onOpenChange={(o) => { if (!o) setShowCreate(false); }}>
-        <DialogContent className="max-w-lg flex flex-col max-h-[90vh]">
+        <DialogContent className="max-w-2xl flex flex-col max-h-[90vh]">
           <DialogHeader className="shrink-0">
             <DialogTitle>
               New {NAMESPACE_TAB_LABEL[namespaceTab] ?? namespaceTab} attribute — {selectedApp.name}
@@ -707,7 +707,7 @@ export function AppAttributesPage() {
 
       {/* ── Edit Dialog ── */}
       <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }}>
-        <DialogContent className="max-w-lg flex flex-col max-h-[90vh]">
+        <DialogContent className="max-w-2xl flex flex-col max-h-[90vh]">
           <DialogHeader className="shrink-0">
             <DialogTitle>
               Edit Attribute — <span className="font-mono text-sm">{editTarget?.key}</span>
@@ -769,6 +769,176 @@ export function AppAttributesPage() {
   );
 }
 
+/**
+ * Converts the flat sorted array produced by `buildAttributeTree` (which has `.level` and `.parentId`)
+ * into a proper nested tree of `{ ...attr, children: [] }` objects.
+ * Root nodes are those with no `parentId`. Each node's `children` array contains its direct children
+ * in the same relative order they appeared in the flat list.
+ *
+ * @param {Array<object>} flatList - Flat sorted array from `buildAttributeTree`, each item has `.id` and `.parentId`.
+ * @returns {Array<object>} Nested root nodes, each with a `children` array.
+ */
+function buildNestedTree(flatList) {
+  const nodeMap = new Map();
+  flatList.forEach((attr) => {
+    nodeMap.set(attr.id, { ...attr, children: [] });
+  });
+  const roots = [];
+  flatList.forEach((attr) => {
+    const node = nodeMap.get(attr.id);
+    if (attr.parentId && nodeMap.has(attr.parentId)) {
+      nodeMap.get(attr.parentId).children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+  return roots;
+}
+
+/**
+ * A single row in the attribute tree view.
+ * Renders a chevron button (or spacer) for expand/collapse, followed by attribute details
+ * and hover-revealed action buttons. Recursively renders child nodes when expanded.
+ *
+ * @param {{ node: object, level: number, expandedIds: Set<string>, onToggle: Function, referencedKeys: Set<string>, onEdit: Function, onDelete: Function }} props
+ */
+function AttributeTreeNode({ node, level, expandedIds, onToggle, referencedKeys, onEdit, onDelete }) {
+  const hasChildren = node.children && node.children.length > 0;
+  const isExpanded = expandedIds.has(node.id);
+  const c = node.constraints ?? {};
+
+  return (
+    <>
+      <div
+        className="flex items-center py-2 hover:bg-gray-50 border-b border-gray-100 transition-colors"
+        style={{ paddingLeft: `${level * 24 + 12}px` }}
+      >
+        {/* Chevron / spacer */}
+        <div className="flex items-center w-6 justify-center shrink-0 mr-2">
+          {hasChildren ? (
+            <button
+              onClick={() => onToggle(node.id)}
+              className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+              aria-label={isExpanded ? 'Collapse' : 'Expand'}
+            >
+              {isExpanded
+                ? <ChevronDown className="w-4 h-4 text-gray-500" />
+                : <ChevronRight className="w-4 h-4 text-gray-500" />}
+            </button>
+          ) : (
+            <div className="w-4 h-4" />
+          )}
+        </div>
+
+        {/* Display name + key — grows to fill available space */}
+        <div className="flex-1 min-w-0 pr-3">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-medium text-gray-900 text-sm truncate">{node.displayName}</span>
+            <span className="font-mono text-[11px] text-gray-400 bg-gray-100 rounded px-1 py-0.5 leading-none shrink-0">{node.key}</span>
+          </div>
+          {node.description && (
+            <p className="text-xs text-gray-400 truncate mt-0.5">{node.description}</p>
+          )}
+          {referencedKeys.has(`${node.namespace}.${node.key}`) && (
+            <span className="text-[10px] text-green-700 font-medium">● in active policy</span>
+          )}
+        </div>
+
+        {/* Type badge */}
+        <div className="w-[80px] shrink-0">
+          <Badge variant="outline" className="capitalize text-xs">{node.dataType}</Badge>
+        </div>
+
+        {/* Allowed values / default */}
+        <div className="w-[180px] shrink-0 text-xs text-gray-600">
+          {c.allowedValues?.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {c.allowedValues.slice(0, 3).map((v) => (
+                <span key={v} className="bg-gray-100 rounded px-1.5 py-0.5 font-mono">{v}</span>
+              ))}
+              {c.allowedValues.length > 3 && (
+                <span className="text-gray-400">+{c.allowedValues.length - 3}</span>
+              )}
+            </div>
+          ) : c.defaultValue != null ? (
+            <span className="font-mono bg-gray-100 rounded px-1.5 py-0.5">{String(c.defaultValue)}</span>
+          ) : (
+            <span className="text-gray-300">—</span>
+          )}
+        </div>
+
+        {/* Flags */}
+        <div className="w-[160px] shrink-0">
+          <div className="flex flex-wrap gap-1">
+            {node.isRequired && (
+              <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px]">Required</Badge>
+            )}
+            {node.isMultiValued && (
+              <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px]">Multi</Badge>
+            )}
+            {node.isUserRequestable && (
+              <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">Requestable</Badge>
+            )}
+            {!node.isRequired && !node.isMultiValued && !node.isUserRequestable && (
+              <span className="text-gray-300 text-xs">—</span>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-1 w-[72px] shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+            title="Edit attribute"
+            onClick={() => onEdit(node)}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+            title="Delete attribute"
+            onClick={() => onDelete(node)}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Render children when expanded */}
+      {isExpanded && hasChildren && (
+        <div>
+          {node.children.map((child) => (
+            <AttributeTreeNode
+              key={child.id}
+              node={child}
+              level={level + 1}
+              expandedIds={expandedIds}
+              onToggle={onToggle}
+              referencedKeys={referencedKeys}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Replaces the old flat-table `NamespaceAttributesTable`.
+ * Accepts the same props interface: `{ isLoading, treeAttributes, referencedKeys, namespaceKey, onEdit, onDelete }`.
+ *
+ * `treeAttributes` is the flat sorted array produced by `buildAttributeTree`. This component
+ * converts it to a nested structure internally via `buildNestedTree`, then renders an interactive
+ * expand/collapse tree using `AttributeTreeNode`. Root nodes start expanded by default.
+ *
+ * @param {{ isLoading: boolean, treeAttributes: Array, referencedKeys: Set<string>, namespaceKey: string, onEdit: Function, onDelete: Function }} props
+ */
 function NamespaceAttributesTable({
   isLoading,
   treeAttributes,
@@ -777,127 +947,67 @@ function NamespaceAttributesTable({
   onEdit,
   onDelete,
 }) {
+  const nestedRoots = useMemo(() => buildNestedTree(treeAttributes), [treeAttributes]);
+
+  // Root nodes start expanded by default
+  const [expandedIds, setExpandedIds] = useState(() => {
+    return new Set(nestedRoots.map((r) => r.id));
+  });
+
+  // Re-sync expanded set when the namespace tab changes (new roots arrive)
+  const rootIds = nestedRoots.map((r) => r.id).join(',');
+  useEffect(() => {
+    setExpandedIds(new Set(nestedRoots.map((r) => r.id)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootIds]);
+
+  const toggleExpand = (id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
-          <tr>
-            <th className="px-3 py-2.5 font-medium w-[30%]">Display Name / Key</th>
-            <th className="px-3 py-2.5 font-medium w-[9%]">Type</th>
-            <th className="px-3 py-2.5 font-medium w-[22%]">Allowed Values</th>
-            <th className="px-3 py-2.5 font-medium w-[12%]">Default</th>
-            <th className="px-3 py-2.5 font-medium w-[19%]">Flags</th>
-            <th className="px-3 py-2.5 font-medium w-[8%] text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {isLoading ? (
-            <tr>
-              <td colSpan={6} className="px-4 py-8 text-center text-gray-500">Loading…</td>
-            </tr>
-          ) : treeAttributes.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
-                <p className="font-medium">No {NAMESPACE_TAB_LABEL[namespaceKey] ?? namespaceKey} attributes yet.</p>
-                <p className="text-xs mt-1">
-                  Use <strong>+ New Attribute</strong> while this tab is selected to add attributes in the{' '}
-                  <span className="font-mono">{namespaceKey}</span> namespace.
-                </p>
-              </td>
-            </tr>
-          ) : (
-            treeAttributes.map((attr) => {
-              const c = attr.constraints ?? {};
-              const indent = attr.level * 20;
-              return (
-                <tr key={attr.id} className="hover:bg-gray-50 group">
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-start gap-1.5" style={{ paddingLeft: `${indent}px` }}>
-                      {attr.level > 0 && (
-                        <span className="text-gray-300 mt-1 shrink-0 text-xs">└</span>
-                      )}
-                      <div className="min-w-0">
-                        <p className="font-medium text-gray-900 truncate">{attr.displayName}</p>
-                        <div className="flex flex-col gap-0.5 mt-0.5">
-                          <span className="font-mono text-xs text-gray-400 truncate">{attr.key}</span>
-                          {attr.description && (
-                            <p className="text-xs text-gray-400 truncate">{attr.description}</p>
-                          )}
-                          {referencedKeys.has(`${attr.namespace}.${attr.key}`) && (
-                            <span className="text-[10px] text-green-700 font-medium">● in active policy</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <Badge variant="outline" className="capitalize text-xs">{attr.dataType}</Badge>
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-gray-600">
-                    {c.allowedValues?.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {c.allowedValues.slice(0, 3).map((v) => (
-                          <span key={v} className="bg-gray-100 rounded px-1.5 py-0.5 font-mono">{v}</span>
-                        ))}
-                        {c.allowedValues.length > 3 && (
-                          <span className="text-gray-400">+{c.allowedValues.length - 3}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-gray-600">
-                    {c.defaultValue != null ? (
-                      <span className="font-mono bg-gray-100 rounded px-1.5 py-0.5">{String(c.defaultValue)}</span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex flex-wrap gap-1">
-                      {attr.isRequired && (
-                        <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px]">Required</Badge>
-                      )}
-                      {attr.isMultiValued && (
-                        <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px]">Multi</Badge>
-                      )}
-                      {attr.isUserRequestable && (
-                        <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">Requestable</Badge>
-                      )}
-                      {!attr.isRequired && !attr.isMultiValued && !attr.isUserRequestable && (
-                        <span className="text-gray-300 text-xs">—</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                        title="Edit attribute"
-                        onClick={() => onEdit(attr)}
-                      >
-                        <Pencil size={14} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                        title="Delete attribute"
-                        onClick={() => onDelete(attr)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
+      {/* Column header row */}
+      <div className="flex items-center py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+        {/* indent + chevron placeholder + name col */}
+        <div className="flex-1">Display Name / Key</div>
+        <div className="w-[80px] shrink-0">Type</div>
+        <div className="w-[180px] shrink-0">Values / Default</div>
+        <div className="w-[160px] shrink-0">Flags</div>
+        <div className="w-[72px] shrink-0 text-right">Actions</div>
+      </div>
+
+      {isLoading ? (
+        <div className="px-4 py-8 text-center text-gray-500 text-sm">Loading…</div>
+      ) : treeAttributes.length === 0 ? (
+        <div className="px-4 py-10 text-center text-gray-400">
+          <p className="font-medium">No {NAMESPACE_TAB_LABEL[namespaceKey] ?? namespaceKey} attributes yet.</p>
+          <p className="text-xs mt-1">
+            Use <strong>+ New Attribute</strong> while this tab is selected to add attributes in the{' '}
+            <span className="font-mono">{namespaceKey}</span> namespace.
+          </p>
+        </div>
+      ) : (
+        <div>
+          {nestedRoots.map((root) => (
+            <AttributeTreeNode
+              key={root.id}
+              node={root}
+              level={0}
+              expandedIds={expandedIds}
+              onToggle={toggleExpand}
+              referencedKeys={referencedKeys}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
