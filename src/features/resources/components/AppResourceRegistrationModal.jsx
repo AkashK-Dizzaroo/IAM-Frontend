@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { resourceService } from "../api/resourceService";
 import { useResourceForm } from "../hooks/useResourceForm";
-import { APP_LEVEL_TYPES } from "../config/resourceTypeConfig";
 import {
   Dialog,
   DialogContent,
@@ -43,32 +42,17 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
     description,
     setDescription,
     isL2Locked,
-    isL2Loading,
-    isL2Missing,
     isValid,
     reset,
     buildPayload,
+    initForApp,
   } = useResourceForm();
 
-  // Keep the single app in sync whenever it changes (key off ID to avoid new-object-reference re-fires)
   const appId = application?._id ?? application?.id;
 
-  // Default to L3 for no-L2 apps (unassigned node auto-select handles the parent),
-  // L2 for apps that support containers.
   useEffect(() => {
-    if (open && application) {
-      const code = (application.appCode ?? "").toUpperCase();
-      const config = APP_LEVEL_TYPES[code];
-      const supportsL2 = config ? Array.isArray(config[2]) && config[2].length > 0 : application.supportsLevel2 === true;
-      setCreationLevel(supportsL2 ? 2 : 3);
-    }
+    if (open && application) initForApp(application);
   }, [open, appId]);
-
-  useEffect(() => {
-    if (application) {
-      setSelectedL1Apps([application]);
-    }
-  }, [appId]);
 
   const { data: attrDefsResponse } = useQuery({
     queryKey: ["resource-attribute-definitions"],
@@ -226,13 +210,9 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
               <div>
                 <Label className="text-sm font-medium mb-1 block">Parent Container (Level 2) *</Label>
                 {isL2Locked ? (
-                  <div className={`flex items-center gap-2 h-9 px-3 py-2 rounded-md border ${isL2Missing ? "border-destructive bg-destructive/10 text-destructive" : "border-input bg-muted/50 text-muted-foreground"} cursor-not-allowed`}>
+                  <div className="flex items-center gap-2 h-9 px-3 py-2 rounded-md border border-input bg-muted/50 text-muted-foreground cursor-not-allowed">
                     <Lock className="h-4 w-4 shrink-0" />
-                    <span>
-                      {isL2Loading ? "Fetching application configuration..." : 
-                       isL2Missing ? "Error: Application 'Unassigned' container not found" :
-                       "Unassigned (Enforced by Application Logic)"}
-                    </span>
+                    <span>Unassigned (Auto-assigned by Application Logic)</span>
                   </div>
                 ) : (
                   <L2ContainerSelect
@@ -376,8 +356,8 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={handleClose}>Cancel</Button>
-            <Button type="submit" disabled={!isValid || createMutation.isPending || isL2Loading || isL2Missing}>
-              {createMutation.isPending ? "Creating..." : (isL2Loading || isL2Missing) ? "Check Configuration" : "Create Resource"}
+            <Button type="submit" disabled={!isValid || createMutation.isPending}>
+              {createMutation.isPending ? "Creating..." : "Create Resource"}
             </Button>
           </div>
         </form>

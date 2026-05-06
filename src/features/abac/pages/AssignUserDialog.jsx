@@ -299,7 +299,7 @@ function AttrInput({ def, value, onChange }) {
 
 // ─── resource + role row ──────────────────────────────────────────────────────
 
-function ResourceRoleRow({ index, row, resources, roleOptions, onChange, onRemove, canRemove }) {
+function ResourceRoleRow({ index, row, resources, roleOptions, onChange, onRemove, canRemove, isDuplicateWarning }) {
   const [treeOpen, setTreeOpen] = useState(false);
   const rowRef = useRef(null);
   const selectedResource = resources.find((r) => (r.id ?? r._id) === row.resourceId);
@@ -314,6 +314,11 @@ function ResourceRoleRow({ index, row, resources, roleOptions, onChange, onRemov
 
   return (
     <div ref={rowRef} className="space-y-1.5">
+      {isDuplicateWarning && (
+        <p className="text-xs text-red-500 font-medium px-0.5">
+          This resource + role combination already exists in another row.
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -389,6 +394,7 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const [rows, setRows] = useState([{ ...EMPTY_ROW }]);
   const [attrValues, setAttrValues] = useState({});
+  const [duplicateWarningIdx, setDuplicateWarningIdx] = useState(null);
   // Tracks which optional attribute def IDs the admin has chosen to add
   const [addedOptionalDefIds, setAddedOptionalDefIds] = useState([]);
   const [optionalPickerOpen, setOptionalPickerOpen] = useState(false);
@@ -401,6 +407,7 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
       setAttrValues({});
       setAddedOptionalDefIds([]);
       setOptionalPickerOpen(false);
+      setDuplicateWarningIdx(null);
     }
   }, [open]);
 
@@ -421,7 +428,7 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
   });
   const resources = useMemo(() => {
     const raw = resourcesData?.data ?? resourcesData?.resources ?? [];
-    return Array.isArray(raw) ? raw : [];
+    return Array.isArray(raw) ? raw.filter((r) => r.isUnassignedNode !== true) : [];
   }, [resourcesData]);
 
   const roleDef = useMemo(
@@ -481,8 +488,22 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
     });
   };
 
-  const updateRow = (idx, patch) =>
+  const updateRow = (idx, patch) => {
+    const current = rows[idx];
+    const updated = { ...current, ...patch };
+    if (updated.resourceId && updated.role) {
+      const isDuplicate = rows.some(
+        (r, i) => i !== idx && r.resourceId === updated.resourceId && r.role === updated.role
+      );
+      if (isDuplicate) {
+        setDuplicateWarningIdx(idx);
+        setTimeout(() => setDuplicateWarningIdx(null), 2500);
+        return;
+      }
+    }
+    setDuplicateWarningIdx(null);
     setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  };
   const removeRow = (idx) => setRows((prev) => prev.filter((_, i) => i !== idx));
   const addRow = () => setRows((prev) => [...prev, { ...EMPTY_ROW }]);
 
@@ -508,7 +529,14 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
     e.preventDefault();
     if (!selectedUser) return;
 
-    const validAssignments = rows.filter((r) => r.resourceId && r.role);
+    const seen = new Set();
+    const validAssignments = rows.filter((r) => {
+      if (!r.resourceId || !r.role) return false;
+      const key = `${r.resourceId}:${r.role}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     const allVisibleDefs = [...mandatoryDefs, ...addedOptionalDefs];
     const attributePayload = {};
@@ -582,6 +610,7 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
                     onChange={updateRow}
                     onRemove={removeRow}
                     canRemove={rows.length > 1}
+                    isDuplicateWarning={duplicateWarningIdx === idx}
                   />
                 ))}
               </div>

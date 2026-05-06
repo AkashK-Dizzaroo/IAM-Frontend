@@ -57,15 +57,16 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
     return new Set(raw.map((r) => r._id ?? r.id));
   }, [linkedResponse]);
 
-  // Build tree: L2 nodes with L3 children, filtering out already-linked items
-  // An L2 is shown if it is unlinked OR has unlinked L3 children
+  // Build tree: L2 nodes with L3 children, filtering out already-linked items.
+  // L3s whose parent was the unassigned node (not present in allResources) surface as root-level leaves.
   const treeData = useMemo(() => {
     const term = search.trim().toLowerCase();
 
     const l2s = allResources.filter((r) => r.level === 2);
     const l3s = allResources.filter((r) => r.level === 3);
+    const l2IdSet = new Set(l2s.map((r) => (r._id ?? r.id).toString()));
 
-    return l2s
+    const l2Nodes = l2s
       .map((l2) => {
         const l2Id = (l2._id ?? l2.id).toString();
         const isL2Linked = linkedIds.has(l2._id ?? l2.id);
@@ -76,24 +77,33 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
             return parentId === l2Id;
           })
           .filter((l3) => {
-            const linked = linkedIds.has(l3._id ?? l3.id);
-            if (linked) return false;
+            if (linkedIds.has(l3._id ?? l3.id)) return false;
             if (!term) return true;
             const uid = l3.resourceExternalId ?? l3.externalId ?? "";
             return l3.name?.toLowerCase().includes(term) || uid.toLowerCase().includes(term);
           });
 
-        // Show this L2 if:
-        // - it's unlinked and matches search (or no search)
-        // - OR it has unlinked L3 children (so user can drill in)
         const l2MatchesSearch = !term || (l2.name?.toLowerCase().includes(term) || (l2.resourceExternalId ?? l2.externalId ?? "").toLowerCase().includes(term));
         const showL2 = (!isL2Linked && l2MatchesSearch) || children.length > 0;
 
         if (!showL2) return null;
         return { ...l2, treeId: `l2-${l2Id}`, isLinked: isL2Linked, children };
       })
-      .filter(Boolean)
-      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+      .filter(Boolean);
+
+    // L3s whose parent was the unassigned node — no matching L2 in the list.
+    const orphanedL3s = l3s
+      .filter((l3) => {
+        if (linkedIds.has(l3._id ?? l3.id)) return false;
+        const parentId = (l3.parentResource?._id ?? l3.parentResource?.id ?? l3.parentId)?.toString();
+        if (parentId && l2IdSet.has(parentId)) return false;
+        if (!term) return true;
+        const uid = l3.resourceExternalId ?? l3.externalId ?? "";
+        return l3.name?.toLowerCase().includes(term) || uid.toLowerCase().includes(term);
+      })
+      .map((l3) => ({ ...l3, treeId: `l3-${l3._id ?? l3.id}`, isLinked: false, children: [] }));
+
+    return [...l2Nodes, ...orphanedL3s].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
   }, [allResources, linkedIds, search]);
 
   const totalUnlinked = useMemo(() => {
@@ -112,9 +122,11 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
     mutationFn: async ({ resource }) => {
       await resourceService.addApplicationToResource(resource._id ?? resource.id, applicationId);
 
-      // If it's an L3 with a parent L2, auto-link the parent too so the tree renders correctly
-      const parentId = resource.parentResource?._id ?? resource.parentResource?.id ?? resource.parentId;
-      if (resource.level === 3 && parentId) {
+      // If it's an L3 with a real (non-unassigned) L2 parent, auto-link the parent too.
+      const parentResource = resource.parentResource;
+      const parentId = parentResource?._id ?? parentResource?.id ?? resource.parentId;
+      const parentIsUnassigned = parentResource?.isUnassignedNode === true || parentResource?.isUnassignedNode === 1;
+      if (resource.level === 3 && parentId && !parentIsUnassigned) {
         try {
           await resourceService.addApplicationToResource(parentId, applicationId);
         } catch {
@@ -123,7 +135,8 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
       }
     },
     onSuccess: (_, { resource }) => {
-      const parentLinked = resource.level === 3 && (resource.parentResource?._id ?? resource.parentResource?.id ?? resource.parentId);
+      const parentIsUnassigned = resource.parentResource?.isUnassignedNode === true || resource.parentResource?.isUnassignedNode === 1;
+      const parentLinked = resource.level === 3 && !parentIsUnassigned && (resource.parentResource?._id ?? resource.parentResource?.id ?? resource.parentId);
       toast({
         title: "Linked",
         description: parentLinked

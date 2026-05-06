@@ -89,15 +89,28 @@ export function AppResourcesTab({ application }) {
   const treeData = useMemo(() => {
     const l2s = resources.filter((r) => r.level === 2);
     const l3s = resources.filter((r) => r.level === 3);
+    const l2IdSet = new Set(l2s.map((r) => (r._id ?? r.id).toString()));
 
-    return l2s.map((l2) => {
+    const l2Nodes = l2s.map((l2) => {
       const l2Id = (l2._id ?? l2.id).toString();
-      const children = l3s.filter((l3) => {
-        const parentId = (l3.parentResource?._id ?? l3.parentResource?.id ?? l3.parentId)?.toString();
-        return parentId === l2Id;
-      }).map((l3) => ({ ...l3, treeId: `l2-${l2Id}-l3-${l3._id ?? l3.id}` }));
+      const children = l3s
+        .filter((l3) => {
+          const parentId = (l3.parentResource?._id ?? l3.parentResource?.id ?? l3.parentId)?.toString();
+          return parentId === l2Id;
+        })
+        .map((l3) => ({ ...l3, treeId: `l2-${l2Id}-l3-${l3._id ?? l3.id}` }));
       return { ...l2, treeId: `l2-${l2Id}`, children };
-    }).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    });
+
+    // L3s whose parent was the unassigned node (not in l2IdSet) render as root-level leaves.
+    const orphanedL3s = l3s
+      .filter((l3) => {
+        const parentId = (l3.parentResource?._id ?? l3.parentResource?.id ?? l3.parentId)?.toString();
+        return !parentId || !l2IdSet.has(parentId);
+      })
+      .map((l3) => ({ ...l3, treeId: `l3-${l3._id ?? l3.id}`, children: [] }));
+
+    return [...l2Nodes, ...orphanedL3s].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
   }, [resources]);
 
   const toggleExpand = (id) => {
@@ -113,8 +126,12 @@ export function AppResourcesTab({ application }) {
   function getHierarchyLabel(r) {
     const appName = application?.name ?? application?.appCode ?? "—";
     if (r.level === 2) return `${appName} > ${r.name ?? "—"}`;
-    if (r.level === 3 && r.parentResource) {
-      return `${appName} > ${r.parentResource.name ?? "—"} > ${r.name ?? "—"}`;
+    if (r.level === 3) {
+      const parent = r.parentResource;
+      if (parent && !parent.isUnassignedNode) {
+        return `${appName} > ${parent.name ?? "—"} > ${r.name ?? "—"}`;
+      }
+      return `${appName} > ${r.name ?? "—"}`;
     }
     return `${appName} > ${r.name ?? "—"}`;
   }

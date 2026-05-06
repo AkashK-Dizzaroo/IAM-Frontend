@@ -516,7 +516,7 @@ export function AppUserAttributesPage() {
     const options = [];
     const seen = new Set();
 
-    const rows = resourcesData?.data ?? resourcesData?.resources ?? [];
+    const rows = (resourcesData?.data ?? resourcesData?.resources ?? []).filter((r) => r.isUnassignedNode !== true);
     for (const r of Array.isArray(rows) ? rows : []) {
       const studyId = String(
         r.resourceExternalId ?? r.externalId ?? r.studyId ?? ''

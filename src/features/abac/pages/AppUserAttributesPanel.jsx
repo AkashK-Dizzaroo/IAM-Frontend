@@ -284,7 +284,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
   });
   const resources = useMemo(() => {
     const raw = resourcesData?.data ?? resourcesData?.resources ?? [];
-    return Array.isArray(raw) ? raw : [];
+    return Array.isArray(raw) ? raw.filter((r) => r.isUnassignedNode !== true) : [];
   }, [resourcesData]);
 
   const { data: userAttrsData, isLoading: loadingAttrs } = useQuery({

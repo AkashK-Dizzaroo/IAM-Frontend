@@ -86,12 +86,13 @@ export function ResourceManagementTab() {
 
   function getResourceHierarchy(r) {
     const appName = r.assignedApplications?.[0]?.name ?? r.assignedApplications?.[0]?.appCode ?? "—";
-    if (r.level === 2) {
+    if (r.level === 2) return `${appName} > ${r.name ?? "—"}`;
+    if (r.level === 3) {
+      const parent = r.parentResource;
+      if (parent && !parent.isUnassignedNode) {
+        return `${appName} > ${parent.name ?? "—"} > ${r.name ?? "—"}`;
+      }
       return `${appName} > ${r.name ?? "—"}`;
-    }
-    if (r.level === 3 && r.parentResource) {
-      const parentName = r.parentResource?.name ?? "—";
-      return `${appName} > ${parentName} > ${r.name ?? "—"}`;
     }
     return `${appName} > ${r.name ?? "—"}`;
   }
