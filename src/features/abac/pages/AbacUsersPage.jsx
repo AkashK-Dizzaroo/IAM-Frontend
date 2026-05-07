@@ -87,16 +87,16 @@ function getUserRoleSummary(user) {
     globalRoles = globalRoles.filter(r => r !== 'USER');
   }
   
-  const isAppOwner = (user.applicationOwners ?? []).length > 0;
+  const isAppOwner = (user.applicationMembers ?? []).length > 0;
   return { globalRoles, isAppOwner };
 }
 
 function getAssignedApps(user, allApps) {
   if (isHubOwner(user)) return allApps.map(a => ({ name: a, isOwner: true }));
-  
+
   const reqs = user.accessRequests ?? [];
-  const owned = user.applicationOwners ?? [];
-  
+  const owned = user.applicationMembers ?? [];
+
   const ownedNames = new Set(owned.map((o) => o.application?.name || o.application?.appCode).filter(Boolean));
   const reqNames = reqs.map((r) => r.application?.name || r.application?.appCode).filter(Boolean);
   
@@ -246,7 +246,9 @@ export function AbacUsersPage() {
     queryFn: abacService.listHubAttrDefs,
     staleTime: 5 * 60_000,
   });
-  const attrDefs = attrDefsData?.data?.data ?? attrDefsData?.data ?? [];
+  const attrDefs = (attrDefsData?.data?.data ?? attrDefsData?.data ?? []).filter(
+    (d) => d.key !== 'hub_roles'
+  );
 
   const { data: appsData } = useQuery({
     queryKey: ['abac', 'applications'],
@@ -323,6 +325,19 @@ export function AbacUsersPage() {
   const deleteAttrMutation = useMutation({
     mutationFn: ({ userId, attributeKey }) => abacService.deleteHubUserAttr(userId, attributeKey),
     onSuccess: () => { toast({ title: 'Attribute removed' }); refetchUserAttrs(); refetch(); },
+    onError: (err) => toast({ title: 'Error', description: apiErrorDescription(err), variant: 'destructive' }),
+  });
+
+  const grantHubOwnerMutation = useMutation({
+    mutationFn: ({ userId, currentRoles }) => {
+      const updated = Array.from(new Set([...currentRoles, 'HUB_OWNER', 'USER']));
+      return abacService.setHubUserAttr(userId, { attribute_key: 'hub_roles', value: updated });
+    },
+    onSuccess: () => {
+      toast({ title: 'Hub Owner granted' });
+      refetchUserAttrs();
+      refetch();
+    },
     onError: (err) => toast({ title: 'Error', description: apiErrorDescription(err), variant: 'destructive' }),
   });
 
@@ -688,7 +703,24 @@ export function AbacUsersPage() {
                       <h3 className="text-sm font-semibold text-gray-900">Hub Attributes</h3>
                       <p className="text-xs text-gray-500 mt-0.5">Assign or remove identity attribute values for this user.</p>
                     </div>
-                    <Badge variant="outline" className="text-xs text-gray-500">{userAttrs.length} assigned</Badge>
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const hubRolesAttr = userAttrs.find((a) => (a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key) === 'hub_roles');
+                        const currentRoles = Array.isArray(hubRolesAttr?.value) ? hubRolesAttr.value : typeof hubRolesAttr?.value === 'string' && hubRolesAttr.value ? [hubRolesAttr.value] : [];
+                        const isAlreadyHubOwner = currentRoles.includes('HUB_OWNER');
+                        return !isAlreadyHubOwner ? (
+                          <Button
+                            variant="outline" size="sm"
+                            className="text-xs h-7 border-amber-300 text-amber-700 hover:bg-amber-50"
+                            disabled={grantHubOwnerMutation.isPending}
+                            onClick={() => grantHubOwnerMutation.mutate({ userId: editUserId, currentRoles })}
+                          >
+                            {grantHubOwnerMutation.isPending ? 'Granting…' : 'Assign Hub Owner'}
+                          </Button>
+                        ) : null;
+                      })()}
+                      <Badge variant="outline" className="text-xs text-gray-500">{userAttrs.length} assigned</Badge>
+                    </div>
                   </div>
 
                   {userAttrs.length > 0 && (
@@ -701,13 +733,16 @@ export function AbacUsersPage() {
                               <Badge variant="outline" className="shrink-0 font-mono text-xs">{key}</Badge>
                               <span className="text-sm font-mono text-gray-700 truncate">{String(attr.value ?? '')}</span>
                             </div>
-                            <Button
-                              variant="ghost" size="sm"
-                              className="text-gray-400 hover:text-red-500 shrink-0 h-7 w-7 p-0"
-                              onClick={() => deleteAttrMutation.mutate({ userId: editUserId, attributeKey: key })}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {key !== 'hub_roles' && (
+                              <Button
+                                variant="ghost" size="sm"
+                                className="text-gray-400 hover:text-red-500 shrink-0 h-7 w-7 p-0"
+                                onClick={() => deleteAttrMutation.mutate({ userId: editUserId, attributeKey: key })}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {key === 'hub_roles' && <div className="shrink-0 h-7 w-7" />}
                           </div>
                         );
                       })}

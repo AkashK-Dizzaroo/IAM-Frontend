@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/features/auth";
 import { resourceService } from "../api/resourceService";
-import { applicationService } from "@/features/applications";
 import {
   Dialog,
   DialogContent,
@@ -16,33 +14,19 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import { Plus, X } from "lucide-react";
-import { ApplicationMultiSelect } from "./ApplicationMultiSelect";
 
 const MAX_DESCRIPTION = 500;
 
 export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
-  const { effectiveRoles } = useAuth();
-  const isHubOwner = effectiveRoles?.isHubOwner;
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [assignedApps, setAssignedApps] = useState([]);
-  const [isActive, setIsActive] = useState(true);
   const [nameError, setNameError] = useState("");
   const [attrValues, setAttrValues] = useState({});
-  // App-specific overrides: [{ appId, attributeDefId, value }]
   const [overrides, setOverrides] = useState([]);
-
-  const { data: applicationsResponse } = useQuery({
-    queryKey: ["applications-edit-modal"],
-    queryFn: () => applicationService.getApplications(),
-    enabled: open,
-  });
 
   const { data: attrDefsResponse } = useQuery({
     queryKey: ["resource-attribute-definitions"],
@@ -59,8 +43,6 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
     enabled: open && !!resourceId,
   });
 
-  const applications = applicationsResponse?.data ?? applicationsResponse ?? [];
-
   useEffect(() => {
     if (open && resource) {
       setName(resource.name ?? "");
@@ -70,8 +52,6 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
           ? meta.get("description") ?? ""
           : meta?.description ?? "";
       setDescription(desc);
-      setAssignedApps(resource.assignedApplications ?? []);
-      setIsActive(resource.isActive !== false);
       setNameError("");
     }
   }, [open, resource]);
@@ -112,9 +92,8 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
   }, [open, existingAttrsResponse, attrDefs, resource]);
 
   const addOverride = () => {
-    const firstAppId = assignedApps[0]?._id ?? assignedApps[0]?.id ?? "";
     const firstDefId = attrDefs[0]?.id ?? "";
-    setOverrides((prev) => [...prev, { appId: firstAppId, attributeDefId: firstDefId, value: "" }]);
+    setOverrides((prev) => [...prev, { appId: "", attributeDefId: firstDefId, value: "" }]);
   };
 
   const updateOverride = (index, patch) =>
@@ -128,8 +107,6 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
       await resourceService.updateResource(resourceId, {
         name: name.trim(),
         description,
-        assignedApplications: assignedApps.map((a) => a._id ?? a.id ?? a),
-        isActive,
       });
       const commonEntries = attrDefs
         .filter((def) => attrValues[def.id] !== undefined && attrValues[def.id] !== "")
@@ -216,55 +193,6 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
               {description.length}/{MAX_DESCRIPTION}
             </p>
           </div>
-
-          {isHubOwner ? (
-            <div>
-              <Label className="text-sm font-medium mb-1 block">
-                Assigned Applications
-              </Label>
-              <ApplicationMultiSelect
-                applications={applications}
-                selectedApps={assignedApps}
-                onSelectionChange={setAssignedApps}
-                placeholder="Select applications..."
-                disabled={isPending}
-              />
-            </div>
-          ) : (
-            <div>
-              <Label className="text-sm font-medium mb-1 block">
-                Assigned Applications
-              </Label>
-              <div className="flex flex-wrap gap-1 border rounded-md px-3 py-2 bg-muted/50">
-                {assignedApps.length > 0 ? (
-                  assignedApps.map((app) => (
-                    <Badge key={app._id ?? app.id ?? app} variant="secondary" className="text-xs">
-                      {app.name ?? app.appCode ?? "—"}
-                    </Badge>
-                  ))
-                ) : (
-                  <span className="text-sm text-muted-foreground">No applications</span>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center gap-3">
-            <Switch
-              id="edit-active"
-              checked={isActive}
-              onCheckedChange={setIsActive}
-              disabled={isPending}
-            />
-            <Label htmlFor="edit-active" className="text-sm font-medium">
-              Active
-            </Label>
-            {!isActive && (
-              <span className="text-xs text-amber-600">
-                Deactivating hides this resource from assignments
-              </span>
-            )}
-          </div>
         </div>
 
           {attrDefs.length > 0 && (
@@ -335,8 +263,8 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
                 ))}
               </div>
 
-              {/* App-specific overrides — shown when resource has multiple applications */}
-              {assignedApps.length > 1 && (
+              {/* App-specific overrides */}
+              {overrides.length > 0 && (
                 <div className="space-y-3 pt-3 border-t border-gray-100">
                   <div>
                     <p className="text-xs font-medium text-gray-600">
@@ -348,102 +276,80 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
                     </p>
                   </div>
 
-                  {overrides.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic">No overrides configured.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {overrides.map((override, i) => {
-                        const def = attrDefs.find((d) => d.id === override.attributeDefId);
-                        return (
-                          <div key={i} className="flex items-start gap-2 p-3 rounded-md border border-gray-100 bg-gray-50">
-                            <div className="flex-1 grid grid-cols-3 gap-2">
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">Application</p>
+                  <div className="space-y-2">
+                    {overrides.map((override, i) => {
+                      const def = attrDefs.find((d) => d.id === override.attributeDefId);
+                      return (
+                        <div key={i} className="flex items-start gap-2 p-3 rounded-md border border-gray-100 bg-gray-50">
+                          <div className="flex-1 grid grid-cols-2 gap-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Attribute</p>
+                              <select
+                                className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                                value={override.attributeDefId}
+                                onChange={(e) => updateOverride(i, { attributeDefId: e.target.value, value: "" })}
+                                disabled={isPending}
+                              >
+                                {attrDefs.map((d) => (
+                                  <option key={d.id} value={d.id}>{d.displayName}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Value</p>
+                              {def?.dataType === "boolean" ? (
                                 <select
                                   className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                                  value={override.appId}
-                                  onChange={(e) => updateOverride(i, { appId: e.target.value })}
+                                  value={override.value === undefined ? "" : String(override.value)}
+                                  onChange={(e) => updateOverride(i, { value: e.target.value === "" ? "" : e.target.value === "true" })}
                                   disabled={isPending}
                                 >
-                                  {assignedApps.map((app) => {
-                                    const id = app._id ?? app.id;
-                                    return (
-                                      <option key={id} value={id}>
-                                        {app.name ?? app.appCode}
-                                      </option>
-                                    );
-                                  })}
+                                  <option value="">— not set —</option>
+                                  <option value="true">true</option>
+                                  <option value="false">false</option>
                                 </select>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">Attribute</p>
+                              ) : def?.dataType === "enum" && def?.constraints?.allowedValues?.length > 0 ? (
                                 <select
                                   className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                                  value={override.attributeDefId}
-                                  onChange={(e) => updateOverride(i, { attributeDefId: e.target.value, value: "" })}
+                                  value={override.value ?? ""}
+                                  onChange={(e) => updateOverride(i, { value: e.target.value })}
                                   disabled={isPending}
                                 >
-                                  {attrDefs.map((d) => (
-                                    <option key={d.id} value={d.id}>{d.displayName}</option>
+                                  <option value="">— not set —</option>
+                                  {def.constraints.allowedValues.map((v) => (
+                                    <option key={v} value={v}>{v}</option>
                                   ))}
                                 </select>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">Value</p>
-                                {def?.dataType === "boolean" ? (
-                                  <select
-                                    className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                                    value={override.value === undefined ? "" : String(override.value)}
-                                    onChange={(e) => updateOverride(i, { value: e.target.value === "" ? "" : e.target.value === "true" })}
-                                    disabled={isPending}
-                                  >
-                                    <option value="">— not set —</option>
-                                    <option value="true">true</option>
-                                    <option value="false">false</option>
-                                  </select>
-                                ) : def?.dataType === "enum" && def?.constraints?.allowedValues?.length > 0 ? (
-                                  <select
-                                    className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                                    value={override.value ?? ""}
-                                    onChange={(e) => updateOverride(i, { value: e.target.value })}
-                                    disabled={isPending}
-                                  >
-                                    <option value="">— not set —</option>
-                                    {def.constraints.allowedValues.map((v) => (
-                                      <option key={v} value={v}>{v}</option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <Input
-                                    className="h-8 text-xs"
-                                    type={def?.dataType === "number" ? "number" : "text"}
-                                    value={override.value ?? ""}
-                                    onChange={(e) =>
-                                      updateOverride(i, {
-                                        value: def?.dataType === "number"
-                                          ? (e.target.value === "" ? "" : Number(e.target.value))
-                                          : e.target.value,
-                                      })
-                                    }
-                                    placeholder="Override value..."
-                                    disabled={isPending}
-                                  />
-                                )}
-                              </div>
+                              ) : (
+                                <Input
+                                  className="h-8 text-xs"
+                                  type={def?.dataType === "number" ? "number" : "text"}
+                                  value={override.value ?? ""}
+                                  onChange={(e) =>
+                                    updateOverride(i, {
+                                      value: def?.dataType === "number"
+                                        ? (e.target.value === "" ? "" : Number(e.target.value))
+                                        : e.target.value,
+                                    })
+                                  }
+                                  placeholder="Override value..."
+                                  disabled={isPending}
+                                />
+                              )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => removeOverride(i)}
-                              disabled={isPending}
-                              className="mt-5 text-gray-400 hover:text-red-500 shrink-0 disabled:opacity-50"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          <button
+                            type="button"
+                            onClick={() => removeOverride(i)}
+                            disabled={isPending}
+                            className="mt-5 text-gray-400 hover:text-red-500 shrink-0 disabled:opacity-50"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
 
                   <Button
                     type="button"
