@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import apiClient from "@/lib/apiClient";
 import { getValidHubUrl } from "@/config/env";
 import { AuthContext } from "./AuthContext";
@@ -28,34 +28,65 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false);
   };
 
+  const verifySession = useCallback(async ({ redirectOnFailure = true } = {}) => {
+    try {
+      const verifyRes = await apiClient.post("/auth/verify", {}, { timeout: 15000 });
+      const body = verifyRes.data;
+
+      if (body?.success && body?.data?.user) {
+        const backendUser = body.data.user;
+        localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(backendUser));
+        setUser(backendUser);
+        setIsAuthenticated(true);
+        return true;
+      } else {
+        clearSession();
+        if (redirectOnFailure) window.location.href = `${getValidHubUrl()}/login`;
+        return false;
+      }
+    } catch {
+      const isDev = import.meta.env.DEV || localStorage.getItem("dev_mode") === "true";
+      clearSession();
+      if (redirectOnFailure && !isDev) {
+        window.location.href = `${getValidHubUrl()}/login`;
+      }
+      return false;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const initializeAuth = async () => {
-      try {
-        const verifyRes = await apiClient.post("/auth/verify", {}, { timeout: 15000 });
-        const body = verifyRes.data;
-
-        if (body?.success && body?.data?.user) {
-          const backendUser = body.data.user;
-          localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(backendUser));
-          setUser(backendUser);
-          setIsAuthenticated(true);
-        } else {
-          clearSession();
-          window.location.href = `${getValidHubUrl()}/login`;
-        }
-      } catch (error) {
-        const isDev = import.meta.env.DEV || localStorage.getItem("dev_mode") === "true";
-        clearSession();
-        if (!isDev) {
-          window.location.href = `${getValidHubUrl()}/login`;
-        }
-      } finally {
-        setLoading(false);
-      }
+      await verifySession({ redirectOnFailure: true });
+      setLoading(false);
     };
 
     initializeAuth();
-  }, []);
+  }, [verifySession]);
+
+  // Re-verify when this window/tab regains focus — covers both tab-switching and
+  // switching back from another browser window (e.g. Hub in one window, IAM in another).
+  useEffect(() => {
+    const check = () => {
+      if (isAuthenticated) verifySession({ redirectOnFailure: true });
+    };
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [isAuthenticated, verifySession]);
+
+  // Poll session every 5s while authenticated — ensures prompt logout even when
+  // the IAM window stays focused the whole time after a Hub logout.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const id = setInterval(() => {
+      verifySession({ redirectOnFailure: true });
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [isAuthenticated, verifySession]);
 
   const rolesReady = true;
 
