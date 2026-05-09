@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
 import { useAbacScope } from '../contexts/AbacScopeContext';
+import { BulkImportDialog } from './BulkImportDialog';
 
 const DATA_TYPES = [
   { value: 'string',   label: 'String'   },
@@ -456,12 +457,15 @@ export function AppAttributesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [showCreate, setShowCreate]     = useState(false);
-  const [editTarget, setEditTarget]     = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [createForm, setCreateForm]     = useState({ ...EMPTY_FORM });
-  const [editForm, setEditForm]         = useState({ ...EMPTY_FORM });
-  const [namespaceTab, setNamespaceTab] = useState('subject');
+  const [showCreate, setShowCreate]         = useState(false);
+  const [editTarget, setEditTarget]         = useState(null);
+  const [deleteTarget, setDeleteTarget]     = useState(null);
+  const [createForm, setCreateForm]         = useState({ ...EMPTY_FORM });
+  const [editForm, setEditForm]             = useState({ ...EMPTY_FORM });
+  const [namespaceTab, setNamespaceTab]     = useState('subject');
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [isImporting, setIsImporting]       = useState(false);
+  const [importStatus, setImportStatus]     = useState(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['abac', 'appAttributes', selectedApp?.key],
@@ -578,6 +582,139 @@ export function AppAttributesPage() {
     createMutation.mutate(buildPayload(createForm));
   };
 
+  /**
+   * Sequentially create a hierarchy of attributes from BulkImportDialog output.
+   *
+   * Strategy:
+   *   1. Pre-flight: detect collisions against existing keys in the current namespace
+   *      (the backend has a unique constraint on [applicationId, namespace, key]).
+   *   2. Group nodes by depth (0..N).
+   *   3. For each depth level, create all nodes in parallel; build a tmp→real id map
+   *      from the responses and use it to resolve `parentId` at the next level.
+   *   4. Stop on first failure, show a destructive toast, keep dialog open so the
+   *      user can fix and retry. Already-created rows from earlier depths persist.
+   *
+   * @param {ParsedNode[]} nodes Output from BulkImportDialog.
+   */
+  const processBulkImport = async (nodes) => {
+    if (!selectedApp?.key || !nodes?.length) return;
+
+    // Pre-flight: backend uniqueness on (applicationId, namespace, key).
+    // Block if any incoming key collides with an existing one in this namespace.
+    const existingKeysInNs = new Set(
+      attributes
+        .filter((a) => a.namespace === namespaceTab)
+        .map((a) => a.key),
+    );
+    const collisions = nodes.filter((n) => existingKeysInNs.has(n.key));
+    if (collisions.length > 0) {
+      toast({
+        title: 'Cannot import: duplicate keys',
+        description: `${collisions.length} key(s) already exist in "${namespaceTab}": ${collisions
+          .slice(0, 3)
+          .map((n) => n.key)
+          .join(', ')}${collisions.length > 3 ? '…' : ''}`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Group by depth.
+    const byDepth = new Map();
+    for (const n of nodes) {
+      if (!byDepth.has(n.depth)) byDepth.set(n.depth, []);
+      byDepth.get(n.depth).push(n);
+    }
+    const depths = [...byDepth.keys()].sort((a, b) => a - b);
+    const totalLevels = depths.length;
+
+    /** Maps tmp UUID (ParsedNode.id) → real backend UUID. */
+    const idMap = new Map();
+
+    setIsImporting(true);
+    try {
+      for (let i = 0; i < depths.length; i++) {
+        const depth = depths[i];
+        const batch = byDepth.get(depth);
+        setImportStatus(
+          `Importing attributes (Level ${i + 1}/${totalLevels}) — ${batch.length} item(s)…`,
+        );
+
+        // Build payloads with resolved real parent ids.
+        const payloads = batch.map((node) => {
+          const realParentId = node.parentId ? idMap.get(node.parentId) ?? null : null;
+          return {
+            node,
+            payload: {
+              namespace: namespaceTab,
+              key: node.key,
+              displayName: node.displayName,
+              description: node.originalName,
+              dataType: 'boolean',
+              isRequired: false,
+              isMultiValued: false,
+              isUserRequestable: false,
+              parentId: realParentId,
+              constraints: { defaultValue: 'false' },
+            },
+          };
+        });
+
+        // Fire this level in parallel; abort the whole import on first failure.
+        const results = await Promise.all(
+          payloads.map(({ node, payload }) =>
+            abacService.createAppAttrDef(selectedApp.key, payload).then((res) => ({
+              node,
+              res,
+            })),
+          ),
+        );
+
+        for (const { node, res } of results) {
+          // API returns either { data: { data: {...} } } or { data: {...} }.
+          const created = res?.data?.data ?? res?.data;
+          const realId = created?.id;
+          if (!realId) {
+            throw new Error(`Created attribute "${node.key}" but no id was returned.`);
+          }
+          idMap.set(node.id, realId);
+        }
+      }
+
+      // Success — refresh tree, notify, close dialog.
+      await queryClient.invalidateQueries({
+        queryKey: ['abac', 'appAttributes', selectedApp.key],
+      });
+      toast({
+        title: 'Import complete',
+        description: `Created ${nodes.length} attribute(s) across ${totalLevels} level(s).`,
+      });
+      setShowBulkImport(false);
+    } catch (err) {
+      // Partial success is possible — earlier depths persisted in the DB.
+      const created = idMap.size;
+      toast({
+        title: 'Import failed',
+        description:
+          (err?.response?.data?.error ?? err?.message ?? 'Unknown error') +
+          (created > 0
+            ? ` (${created} of ${nodes.length} attribute(s) were created before the failure; refresh to view)`
+            : ''),
+        variant: 'destructive',
+      });
+      // Refresh so any partial creates show up in the tree.
+      if (created > 0) {
+        await queryClient.invalidateQueries({
+          queryKey: ['abac', 'appAttributes', selectedApp.key],
+        });
+      }
+      // Keep dialog open so the user doesn't lose their edits.
+    } finally {
+      setIsImporting(false);
+      setImportStatus(null);
+    }
+  };
+
   const handleUpdate = () => {
     if (!editTarget) return;
     const c = {};
@@ -619,14 +756,22 @@ export function AppAttributesPage() {
             Define attributes specific to this application. These cannot conflict with Hub Attributes.
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setCreateForm({ ...EMPTY_FORM, namespace: namespaceTab });
-            setShowCreate(true);
-          }}
-        >
-          + New Attribute
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowBulkImport(true)}
+          >
+            Import Structure
+          </Button>
+          <Button
+            onClick={() => {
+              setCreateForm({ ...EMPTY_FORM, namespace: namespaceTab });
+              setShowCreate(true);
+            }}
+          >
+            + New Attribute
+          </Button>
+        </div>
       </div>
 
       <Tabs
@@ -731,6 +876,18 @@ export function AppAttributesPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Bulk Import Dialog ── */}
+      <BulkImportDialog
+        open={showBulkImport}
+        onOpenChange={(o) => {
+          if (isImporting) return;
+          setShowBulkImport(o);
+        }}
+        onImportComplete={processBulkImport}
+        isImporting={isImporting}
+        importStatus={importStatus}
+      />
 
       {/* ── Delete Confirmation Dialog ── */}
       <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>

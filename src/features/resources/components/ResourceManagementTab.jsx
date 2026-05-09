@@ -179,8 +179,9 @@ export function ResourceManagementTab() {
 
     const appMap = new Map();
 
-    const l2s = resources.filter(r => r.level === 2);
+    const l2s = resources.filter(r => r.level === 2 && !r.isUnassignedNode);
     const l3s = resources.filter(r => r.level === 3);
+    const l2IdSet = new Set(l2s.map(r => (r._id || r.id).toString()));
 
     l2s.forEach(l2 => {
       const assignedApps = l2.assignedApplications || [];
@@ -213,18 +214,47 @@ export function ResourceManagementTab() {
 
     l3s.forEach(l3 => {
       const parentId = (l3.parentResource?._id || l3.parentResource?.id || l3.parentId)?.toString();
-      if (!parentId) return;
 
-      appMap.forEach(appNode => {
-        const l2Node = appNode.children.get(parentId);
-        if (l2Node) {
-          l2Node.children.push({
-            ...l3,
-            type: 'resource',
-            treeId: `${l2Node.treeId}-l3-${l3._id || l3.id}`
-          });
-        }
-      });
+      if (parentId && l2IdSet.has(parentId)) {
+        // Normal L3: attach under its L2 parent
+        appMap.forEach(appNode => {
+          const l2Node = appNode.children.get(parentId);
+          if (l2Node) {
+            l2Node.children.push({
+              ...l3,
+              type: 'resource',
+              treeId: `${l2Node.treeId}-l3-${l3._id || l3.id}`
+            });
+          }
+        });
+      } else {
+        // Orphaned L3: parent was an unassigned node — attach directly under each of its apps
+        const assignedApps = l3.assignedApplications || [];
+        assignedApps.forEach(app => {
+          const appId = (app._id || app.id || app).toString();
+          if (!appMap.has(appId)) {
+            const fullApp = applications.find(a => (a._id || a.id).toString() === appId);
+            if (fullApp) {
+              appMap.set(appId, {
+                ...fullApp,
+                type: 'application',
+                treeId: `app-${appId}`,
+                children: new Map()
+              });
+            }
+          }
+          const appNode = appMap.get(appId);
+          if (appNode) {
+            const treeId = `app-${appId}-l3-${l3._id || l3.id}`;
+            appNode.children.set(treeId, {
+              ...l3,
+              type: 'resource',
+              treeId,
+              children: []
+            });
+          }
+        });
+      }
     });
 
     return Array.from(appMap.values())

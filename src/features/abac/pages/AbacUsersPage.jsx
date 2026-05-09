@@ -81,13 +81,20 @@ function isHubOwner(user) {
 function getUserRoleSummary(user) {
   const roles = getHubRolesList(user);
   let globalRoles = roles.filter((r) => GLOBAL_ROLES.includes(r));
-  
-  // Filter out USER if APP_OWNER or HUB_OWNER is present to reduce UI clutter
-  if (globalRoles.includes('APP_OWNER') || globalRoles.includes('HUB_OWNER')) {
-    globalRoles = globalRoles.filter(r => r !== 'USER');
-  }
-  
+
   const isAppOwner = (user.applicationMembers ?? []).length > 0;
+  const hasPlainAppAccess = (user.accessRequests ?? []).length > 0;
+
+  // Only hide USER when HUB_OWNER is present (they have implicit access to everything).
+  // Keep USER visible alongside APP_OWNER when the user also has plain app access,
+  // so the HUB Role column reflects both roles per spec.
+  if (globalRoles.includes('HUB_OWNER')) {
+    globalRoles = globalRoles.filter((r) => r !== 'USER' && r !== 'APP_OWNER');
+  } else if (globalRoles.includes('APP_OWNER') && !hasPlainAppAccess) {
+    // Pure app owner with no plain-user access — hide redundant USER badge
+    globalRoles = globalRoles.filter((r) => r !== 'USER');
+  }
+
   return { globalRoles, isAppOwner };
 }
 
@@ -237,7 +244,8 @@ export function AbacUsersPage() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['abac', 'users', debouncedSearch],
     queryFn: () => abacService.listUsers({ search: debouncedSearch, limit: 50 }),
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
   const users = data?.data?.data ?? data?.data ?? [];
 

@@ -342,6 +342,7 @@ export const AccessRequestsPage = () => {
 
       toast({ title });
       queryClient.invalidateQueries({ queryKey: ['access-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['abac', 'users'] });
 
       // Keep modal open and switch to the next pending tab so the reviewer
       // doesn't have to re-open the modal from the table.
@@ -373,6 +374,7 @@ export const AccessRequestsPage = () => {
     onSuccess: () => {
       toast({ title: 'Request rejected' });
       queryClient.invalidateQueries({ queryKey: ['access-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['abac', 'users'] });
       setModal(null);
     },
     onError: (err) => toast({ title: 'Reject failed', description: err?.message, variant: 'destructive' }),

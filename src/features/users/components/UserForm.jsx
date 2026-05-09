@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +9,8 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select';
-import { AlertCircle, Eye, EyeOff, X } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { AlertCircle, Eye, EyeOff, Plus, X } from 'lucide-react';
 
 // ─── password validation ──────────────────────────────────────────────────────
 
@@ -52,16 +53,18 @@ function HubAttrField({ def, value, onChange, error, onRemove, isOptional }) {
 
   const inputEl = (() => {
     if (dt === 'boolean') {
+      const checked = value === true || value === 'true';
       return (
-        <Select value={value !== '' ? String(value) : undefined} onValueChange={onChange}>
-          <SelectTrigger className={error ? 'border-red-400 focus:ring-red-300' : ''}>
-            <SelectValue placeholder="Select true or false…" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="true">true</SelectItem>
-            <SelectItem value="false">false</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Switch
+            id={`hub-attr-${def.key}`}
+            checked={checked}
+            onCheckedChange={(v) => onChange(String(v))}
+          />
+          <Label htmlFor={`hub-attr-${def.key}`} className="text-sm cursor-pointer">
+            {checked ? 'Yes' : 'No'}
+          </Label>
+        </div>
       );
     }
     if (dt === 'enum' && def?.constraints?.allowedValues?.length) {
@@ -205,7 +208,19 @@ export function UserForm({
 
   const [attrValues, setAttrValues] = useState({});
   const [addedOptionalIds, setAddedOptionalIds] = useState([]);
-  const [addAttrPickerId, setAddAttrPickerId] = useState('');
+  const [attrPickerOpen, setAttrPickerOpen] = useState(false);
+  const attrPickerRef = useRef(null);
+
+  useEffect(() => {
+    if (!attrPickerOpen) return;
+    const handler = (e) => {
+      if (attrPickerRef.current && !attrPickerRef.current.contains(e.target)) {
+        setAttrPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [attrPickerOpen]);
 
   // seed empty slots for required attrs when defs load
   useEffect(() => {
@@ -298,7 +313,7 @@ export function UserForm({
     if (!def) return;
     setAddedOptionalIds((prev) => [...prev, defId]);
     setAttrValues((prev) => ({ ...prev, [defId]: emptyValueFor(def) }));
-    setAddAttrPickerId('');
+    setAttrPickerOpen(false);
   };
 
   const handleRemoveOptional = (defId) => {
@@ -482,19 +497,35 @@ export function UserForm({
           )}
 
           {availableOptionalDefs.length > 0 && (
-            <div className="pt-1">
-              <Select value={addAttrPickerId} onValueChange={handleAddOptional}>
-                <SelectTrigger className="text-sm text-gray-500 border-dashed">
-                  <SelectValue placeholder="+ Add optional attribute…" />
-                </SelectTrigger>
-                <SelectContent>
+            <div ref={attrPickerRef} className="relative pt-1">
+              <button
+                type="button"
+                onClick={() => setAttrPickerOpen((o) => !o)}
+                className="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium py-1 px-1 rounded transition-colors hover:bg-indigo-50"
+              >
+                <Plus className="w-4 h-4" />
+                Add attribute
+              </button>
+
+              {attrPickerOpen && (
+                <div className="absolute z-50 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
                   {availableOptionalDefs.map((def) => (
-                    <SelectItem key={def.id || def._id} value={String(def.id || def._id)}>
-                      {def.displayName ? `${def.displayName} (${def.key})` : def.key}
-                    </SelectItem>
+                    <button
+                      key={def.id || def._id}
+                      type="button"
+                      className="w-full flex items-start gap-2 px-3 py-2 hover:bg-gray-50 text-left transition-colors"
+                      onMouseDown={(e) => { e.preventDefault(); handleAddOptional(String(def.id || def._id)); }}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {def.displayName || def.key}
+                        </p>
+                        <p className="text-xs text-gray-400 font-mono">{def.dataType}</p>
+                      </div>
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              )}
             </div>
           )}
 

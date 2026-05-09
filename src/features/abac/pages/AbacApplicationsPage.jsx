@@ -181,6 +181,7 @@ export function AbacApplicationsPage() {
       toast({ title: 'Application registered' });
       queryClient.invalidateQueries({ queryKey: ['applications'] });
       queryClient.invalidateQueries({ queryKey: ['abac', 'applications'] });
+      queryClient.invalidateQueries({ queryKey: ['abac', 'users'] });
       refetch();
       closePanel();
     },
@@ -199,6 +200,7 @@ export function AbacApplicationsPage() {
       toast({ title: 'Application updated' });
       queryClient.invalidateQueries({ queryKey: ['applications'] });
       queryClient.invalidateQueries({ queryKey: ['abac', 'applications'] });
+      queryClient.invalidateQueries({ queryKey: ['abac', 'users'] });
       refetch();
       closePanel();
     },

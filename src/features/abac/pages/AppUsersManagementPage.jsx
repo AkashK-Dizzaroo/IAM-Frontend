@@ -72,12 +72,12 @@ function ResourceAccessCell({ pairs, resourceMap }) {
         const meta = resourceMap[resource_id];
         const name = meta?.name ?? resource_id;
         return (
-          <div key={`${resource_id}-${idx}`} className="flex items-center justify-between gap-2 min-w-0">
-            <span className="text-xs text-gray-800 font-medium truncate flex-1" title={name}>
+          <div key={`${resource_id}-${idx}`} className="flex items-start gap-x-2 gap-y-1 flex-wrap">
+            <span className="text-xs text-gray-800 font-medium break-words max-w-[85%]">
               {name}
             </span>
             {role && (
-              <span className="shrink-0 text-[10px] font-mono text-gray-500 bg-gray-100 border border-gray-200 rounded px-1.5 py-0.5 leading-none whitespace-nowrap">
+              <span className="shrink-0 text-[10px] font-mono text-gray-500 bg-gray-100 border border-gray-200 rounded px-1.5 py-0.5 leading-none whitespace-nowrap mt-0.5">
                 {role}
               </span>
             )}
@@ -296,7 +296,7 @@ export function AppUsersManagementPage() {
                       </div>
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 break-words">
                       <ResourceAccessCell pairs={resourcePairs} resourceMap={resourceMap} />
                     </td>
 
