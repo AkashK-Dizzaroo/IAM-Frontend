@@ -594,9 +594,10 @@ export function AppAttributesPage() {
    *   4. Stop on first failure, show a destructive toast, keep dialog open so the
    *      user can fix and retry. Already-created rows from earlier depths persist.
    *
-   * @param {ParsedNode[]} nodes Output from BulkImportDialog.
+   * @param {import('./BulkImportDialog').ParsedNode[]} nodes Output from BulkImportDialog.
+   * @param {{ dataType: string, isRequired: boolean, isMultiValued: boolean, isUserRequestable: boolean }} settings
    */
-  const processBulkImport = async (nodes) => {
+  const processBulkImport = async (nodes, settings) => {
     if (!selectedApp?.key || !nodes?.length) return;
 
     // Pre-flight: backend uniqueness on (applicationId, namespace, key).
@@ -643,6 +644,9 @@ export function AppAttributesPage() {
         // Build payloads with resolved real parent ids.
         const payloads = batch.map((node) => {
           const realParentId = node.parentId ? idMap.get(node.parentId) ?? null : null;
+          const constraints = {};
+          const dv = settings?.defaultValue?.trim();
+          if (dv) constraints.defaultValue = dv;
           return {
             node,
             payload: {
@@ -650,12 +654,12 @@ export function AppAttributesPage() {
               key: node.key,
               displayName: node.displayName,
               description: node.originalName,
-              dataType: 'boolean',
-              isRequired: false,
-              isMultiValued: false,
-              isUserRequestable: false,
+              dataType: settings?.dataType ?? 'boolean',
+              isRequired: settings?.isRequired ?? false,
+              isMultiValued: settings?.isMultiValued ?? false,
+              isUserRequestable: settings?.isUserRequestable ?? false,
               parentId: realParentId,
-              constraints: { defaultValue: 'false' },
+              constraints,
             },
           };
         });
@@ -757,12 +761,14 @@ export function AppAttributesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setShowBulkImport(true)}
-          >
-            Import Structure
-          </Button>
+          {namespaceTab === 'action' && (
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkImport(true)}
+            >
+              Import Structure
+            </Button>
+          )}
           <Button
             onClick={() => {
               setCreateForm({ ...EMPTY_FORM, namespace: namespaceTab });
