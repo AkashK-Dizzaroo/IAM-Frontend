@@ -32,7 +32,7 @@ export function AppResourcesPage() {
   }
 
   // While loading the full application object, use a minimal object from scope context
-  const effectiveApp = application ?? { id: selectedAppId, _id: selectedAppId, name: selectedAppName, appCode: selectedAppKey };
+  const effectiveApp = application ?? { id: selectedAppId, _id: selectedAppId, name: selectedAppName, key: selectedAppKey };
 
   return (
     <div className="space-y-6">

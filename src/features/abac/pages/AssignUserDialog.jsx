@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -564,9 +565,9 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
             <UserPlus className="h-5 w-5 text-primary shrink-0" />
             <DialogTitle className="text-base font-semibold">Assign User</DialogTitle>
           </div>
-          <p className="text-xs text-gray-500 mt-0.5 ml-7">
+          <DialogDescription className="text-xs text-gray-500 mt-0.5 ml-7">
             Directly grant a user resource access and attributes. They will receive an email notification.
-          </p>
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">

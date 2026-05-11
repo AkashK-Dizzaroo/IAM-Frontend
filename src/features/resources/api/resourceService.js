@@ -123,11 +123,13 @@ class ResourceService {
         error: error.response.data?.error,
         message: error.response.data?.message,
         statusCode: error.response.data?.statusCode,
+        details: error.response.data?.details,
       };
       return {
         message: safeData.error || safeData.message || "An error occurred",
         status: error.response.status,
         data: safeData,
+        details: safeData.details,
       };
     }
     if (error.request) {

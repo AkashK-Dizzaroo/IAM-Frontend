@@ -150,7 +150,7 @@ export function AppUsersManagementPage() {
     staleTime: 5 * 60_000,
   });
   const selectedApplication = (applicationsData?.data?.data ?? applicationsData?.data ?? []).find(
-    (a) => a?.key === selectedAppKey || a?.appCode === selectedAppKey
+    (a) => a?.key === selectedAppKey
   );
 
   const { data: resourcesData } = useQuery({
@@ -527,7 +527,7 @@ export function AppUsersManagementPage() {
               {selectedIds.size === 1 ? 'item' : 'items'}?
             </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-gray-600">This action cannot be undone.</p>
+          <DialogDescription className="text-sm text-gray-600">This action cannot be undone.</DialogDescription>
           {bulkDeletePreviewNames.length > 0 && (
             <ul className="mt-2 space-y-1">
               {bulkDeletePreviewNames.map((name, i) => (

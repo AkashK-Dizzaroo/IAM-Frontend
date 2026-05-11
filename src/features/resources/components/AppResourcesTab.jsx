@@ -12,6 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Plus,
   Search,
@@ -52,6 +60,9 @@ export function AppResourcesTab({ application }) {
 
   const [unlinkingId, setUnlinkingId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkUnlinkOpen, setBulkUnlinkOpen] = useState(false);
+  const [isBulkUnlinking, setIsBulkUnlinking] = useState(false);
 
   const {
     data: resourcesResponse,
@@ -124,7 +135,7 @@ export function AppResourcesTab({ application }) {
   // ── Hierarchy label for table view ───────────────────────────────────────
 
   function getHierarchyLabel(r) {
-    const appName = application?.name ?? application?.appCode ?? "—";
+    const appName = application?.name ?? application?.key ?? "—";
     if (r.level === 2) return `${appName} > ${r.name ?? "—"}`;
     if (r.level === 3) {
       const parent = r.parentResource;
@@ -159,6 +170,47 @@ export function AppResourcesTab({ application }) {
     if (!confirmed) return;
     setUnlinkingId(id);
     unlinkMutation.mutate({ resourceId: id, resourceName: r.name });
+  };
+
+  // ── Bulk select helpers (table view) ─────────────────────────────────────
+  const allSelected = resources.length > 0 && resources.every((r) => selectedIds.has(r._id ?? r.id));
+  const someSelected = resources.some((r) => selectedIds.has(r._id ?? r.id)) && !allSelected;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(resources.map((r) => r._id ?? r.id)));
+    }
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkUnlink = async () => {
+    setIsBulkUnlinking(true);
+    const ids = Array.from(selectedIds);
+    let failed = 0;
+    await Promise.all(
+      ids.map((id) =>
+        resourceService.unlinkResourceFromApp(id, applicationId).catch(() => { failed++; })
+      )
+    );
+    setIsBulkUnlinking(false);
+    setBulkUnlinkOpen(false);
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ["resources-by-app", applicationId] });
+    queryClient.invalidateQueries({ queryKey: ["resources"] });
+    if (failed > 0) {
+      toast({ title: `${ids.length - failed} unlinked, ${failed} failed`, variant: 'destructive' });
+    } else {
+      toast({ title: `${ids.length} resource${ids.length === 1 ? '' : 's'} unlinked` });
+    }
   };
 
   // ── Row actions renderer ─────────────────────────────────────────────────
@@ -377,6 +429,13 @@ export function AppResourcesTab({ application }) {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="pl-4 pr-2 py-3 w-10">
+                    <Checkbox
+                      checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Resource Name</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Level</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Resource Hierarchy</th>
@@ -410,11 +469,19 @@ export function AppResourcesTab({ application }) {
                     const uid = r.resourceExternalId ?? r.externalId ?? "—";
                     const active = r.isActive !== false;
                     const boundApps = (r.assignedApplications ?? [])
-                      .map((a) => a?.name ?? a?.appCode ?? null)
+                      .map((a) => a?.name ?? a?.key ?? null)
                       .filter(Boolean);
                     const classification = r.metadata?.classification ?? null;
                     return (
-                      <tr key={id}>
+                      <tr key={id} className={`group ${selectedIds.has(id) ? 'bg-blue-50/40' : ''}`}>
+                        <td className="pl-4 pr-2 py-3 w-10">
+                          <Checkbox
+                            checked={selectedIds.has(id)}
+                            onCheckedChange={() => toggleSelectOne(id)}
+                            aria-label={`Select ${r.name}`}
+                            className={selectedIds.size === 0 ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}
+                          />
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-900 font-medium">{r.name ?? "—"}</td>
                         <td className="px-4 py-3 text-sm text-gray-700">L{r.level ?? "—"}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{getHierarchyLabel(r)}</td>
@@ -445,6 +512,21 @@ export function AppResourcesTab({ application }) {
                 )}
               </tbody>
             </table>
+            {/* Floating bulk action bar — table view */}
+            {selectedIds.size > 0 && (
+              <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm z-10">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-gray-700">{selectedIds.size} selected</span>
+                  <button onClick={() => setSelectedIds(new Set())} className="text-sm text-gray-500 hover:text-gray-700 underline">
+                    Deselect all
+                  </button>
+                </div>
+                <Button variant="destructive" size="sm" onClick={() => setBulkUnlinkOpen(true)}>
+                  <Unlink className="h-4 w-4 mr-1.5" />
+                  Unlink {selectedIds.size} {selectedIds.size === 1 ? 'resource' : 'resources'}
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           /* Tree view */
@@ -472,6 +554,44 @@ export function AppResourcesTab({ application }) {
           </div>
         )}
       </div>
+
+      {/* Bulk unlink confirmation */}
+      <Dialog open={bulkUnlinkOpen} onOpenChange={setBulkUnlinkOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Unlink {selectedIds.size} {selectedIds.size === 1 ? 'resource' : 'resources'}?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              These resources will be removed from <strong>{application?.name ?? application?.key}</strong> but will still exist globally.
+            </p>
+            <ul className="text-sm text-gray-700 space-y-1 max-h-40 overflow-y-auto">
+              {resources
+                .filter((r) => selectedIds.has(r._id ?? r.id))
+                .slice(0, 5)
+                .map((r) => {
+                  const id = r._id ?? r.id;
+                  return (
+                    <li key={id} className="flex items-center gap-2">
+                      <Unlink className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      <span className="truncate">{r.name}</span>
+                      <Badge variant="outline" className="text-[10px] ml-auto shrink-0">L{r.level}</Badge>
+                    </li>
+                  );
+                })}
+              {selectedIds.size > 5 && (
+                <li className="text-gray-400 text-xs">…and {selectedIds.size - 5} more</li>
+              )}
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkUnlinkOpen(false)} disabled={isBulkUnlinking}>Cancel</Button>
+            <Button variant="destructive" onClick={handleBulkUnlink} disabled={isBulkUnlinking}>
+              {isBulkUnlinking ? 'Unlinking…' : 'Unlink'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modals */}
       <LinkResourceModal

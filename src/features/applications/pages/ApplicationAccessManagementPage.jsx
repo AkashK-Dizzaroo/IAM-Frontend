@@ -297,15 +297,15 @@ export const ApplicationAccessManagementPage = () => {
                                     <Globe className="w-3 h-3 text-indigo-500" />
                                     <span className="font-semibold text-xs text-gray-900">
                                       {assignment.application?.name ||
-                                        assignment.application?.appCode ||
+                                        assignment.application?.key ||
                                         "Unknown App"}
                                     </span>
-                                    {assignment.application?.appCode && (
+                                    {assignment.application?.key && (
                                       <Badge
                                         variant="outline"
                                         className="text-[10px] px-1 py-0"
                                       >
-                                        {assignment.application.appCode}
+                                        {assignment.application.key}
                                       </Badge>
                                     )}
                                   </div>
@@ -459,7 +459,7 @@ export const ApplicationAccessManagementPage = () => {
                       key={app._id || app.id}
                       value={app._id || app.id}
                     >
-                      {app.name} ({app.appCode})
+                      {app.name} ({app.key})
                     </SelectItem>
                   ))}
                 </SelectContent>

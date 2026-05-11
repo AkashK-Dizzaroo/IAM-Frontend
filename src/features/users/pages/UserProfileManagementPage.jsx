@@ -97,7 +97,7 @@ const AssignmentRow = memo(({ assignment }) => {
       <td className="px-4 py-3 text-sm text-gray-900">{userName}</td>
       <td className="px-4 py-3 text-sm text-gray-700">
         {assignment.application?.name ||
-          assignment.application?.appCode ||
+          assignment.application?.key ||
           "—"}
       </td>
       <td className="px-4 py-3 text-sm text-gray-700">{resourceName}</td>
@@ -387,13 +387,13 @@ export const UserProfileManagementPage = () => {
   const users = usersData || [];
   const applications = applicationsData || [];
 
-  // Use appCode for API calls when available - backend accepts both _id and appCode
+  // Use key for API calls when available - backend accepts both _id and key
   const selectedAppIdentifier = (() => {
     if (!selectedApplicationId) return null;
     const app = applications.find(
-      (a) => (a._id || a.id) === selectedApplicationId || a.appCode === selectedApplicationId
+      (a) => (a._id || a.id) === selectedApplicationId || a.key === selectedApplicationId
     );
-    return app?.appCode || selectedApplicationId;
+    return app?.key || selectedApplicationId;
   })();
 
   const { data: rolesData } = useQuery({
@@ -617,7 +617,7 @@ export const UserProfileManagementPage = () => {
                     key={app._id || app.id}
                     value={app._id || app.id}
                   >
-                    {app.name} ({app.appCode})
+                    {app.name} ({app.key})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1007,7 +1007,7 @@ export const UserProfileManagementPage = () => {
                       key={app._id || app.id}
                       value={app._id || app.id}
                     >
-                      {app.name} ({app.appCode})
+                      {app.name} ({app.key})
                     </SelectItem>
                   ))}
                 </SelectContent>

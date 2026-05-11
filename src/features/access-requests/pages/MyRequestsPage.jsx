@@ -190,7 +190,7 @@ export const MyRequestsPage = () => {
 
             // Top-level fields are populated by getRequestsByUser.
             // requestedItems[i].* are raw ObjectIds from that endpoint — do not use for names.
-            const appName = resolveName(req.application, "name", "appCode");
+            const appName = resolveName(req.application, "name", "key");
             const roleName = resolveName(req.requestedRole, "name", "roleCode");
             const resourceName = resolveName(req.requestedResource, "name", "resourceExternalId");
 

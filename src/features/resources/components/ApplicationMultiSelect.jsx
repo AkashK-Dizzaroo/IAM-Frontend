@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { APP_LEVEL_TYPES } from "../config/resourceTypeConfig";
 
 function appSupportsL2(app) {
-  const code = (app?.appCode ?? "").toUpperCase();
+  const code = (app?.key ?? "").toUpperCase();
   const config = APP_LEVEL_TYPES[code];
   if (config) return Array.isArray(config[2]) && config[2].length > 0;
   return app?.supportsLevel2 === true;
@@ -39,7 +39,7 @@ export function ApplicationMultiSelect({
     return applications.filter(
       (app) =>
         (app.name ?? "").toLowerCase().includes(term) ||
-        (app.appCode ?? "").toLowerCase().includes(term)
+        (app.key ?? "").toLowerCase().includes(term)
     );
   }, [applications, search]);
 
@@ -61,7 +61,7 @@ export function ApplicationMultiSelect({
     selectedApps.length === 0
       ? placeholder
       : selectedApps.length === 1
-        ? selectedApps[0].name ?? selectedApps[0].appCode ?? "1 selected"
+        ? selectedApps[0].name ?? selectedApps[0].key ?? "1 selected"
         : `${selectedApps.length} applications selected`;
 
   return (
@@ -118,10 +118,10 @@ export function ApplicationMultiSelect({
                       No L2 Support
                     </span>
                   )}
-                  <span className="truncate">{app.name ?? app.appCode ?? "—"}</span>
-                  {app.appCode && (
+                  <span className="truncate">{app.name ?? app.key ?? "—"}</span>
+                  {app.key && (
                     <span className="text-xs text-muted-foreground">
-                      ({app.appCode})
+                      ({app.key})
                     </span>
                   )}
                 </label>

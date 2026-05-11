@@ -10,7 +10,14 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { AppWindow, Pencil, X, Plus } from 'lucide-react';
+import { AppWindow, Pencil, Plus } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { IconPickerField } from '@/components/ui/IconPickerField';
 
 const STRATEGIES = [
@@ -47,7 +54,7 @@ export function AbacApplicationsPage() {
   const [panel, setPanel] = useState(null);
   const [form, setForm] = useState({
     name: '',
-    appCode: '',
+    key: '',
     description: '',
     baseUrl: '',
     isVisibleInHub: true,
@@ -114,7 +121,7 @@ export function AbacApplicationsPage() {
   const mergedApps = useMemo(() => {
     return apps.map((app) => {
       const abacApp = abacApps.find(
-        (a) => a.key === app.appCode?.toLowerCase()
+        (a) => a.key === app.key
       );
       return {
         ...app,
@@ -131,7 +138,7 @@ export function AbacApplicationsPage() {
   const openCreate = () => {
     setForm({
       name: '',
-      appCode: '',
+      key: '',
       description: '',
       baseUrl: '',
       isVisibleInHub: true,
@@ -149,7 +156,7 @@ export function AbacApplicationsPage() {
   const openEdit = (app) => {
     setForm({
       name: app.name ?? '',
-      appCode: app.appCode ?? '',
+      key: app.key ?? '',
       description: app.description ?? '',
       baseUrl: app.baseUrl ?? '',
       isVisibleInHub: app.isVisibleInHub !== false,
@@ -221,19 +228,43 @@ export function AbacApplicationsPage() {
       });
       return;
     }
+    if (form.name.trim().length > 255) {
+      toast({
+        title: 'Validation',
+        description: 'Name must be 255 characters or fewer',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (form.baseUrl?.trim() && !/^https?:\/\/.+/.test(form.baseUrl.trim())) {
+      toast({
+        title: 'Validation',
+        description: 'Base URL must start with http:// or https://',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (panel === 'create') {
-      const code = form.appCode.trim();
+      const code = form.key.trim();
       if (!code) {
         toast({
           title: 'Validation',
-          description: 'App code is required',
+          description: 'App key is required',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!/^[a-z0-9_]+$/.test(code)) {
+        toast({
+          title: 'Validation',
+          description: 'App key may only contain lowercase letters, numbers, and underscores',
           variant: 'destructive',
         });
         return;
       }
       createMutation.mutate({
         name: form.name.trim(),
-        appCode: code.toUpperCase(),
+        key: code.toLowerCase(),
         description: form.description?.trim() || undefined,
         baseUrl: form.baseUrl?.trim() || '',
         isVisibleInHub: form.isVisibleInHub,
@@ -379,7 +410,7 @@ export function AbacApplicationsPage() {
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{app.name}</div>
                     <div className="font-mono text-xs text-gray-500">
-                      {app.appCode}
+                      {app.key}
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -440,25 +471,15 @@ export function AbacApplicationsPage() {
         </div>
       )}
 
-      {panel !== null && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/20 z-40"
-            onClick={closePanel}
-          />
-          <div className="fixed right-0 top-0 h-full w-full max-w-[480px] z-50 bg-white border-l border-gray-200 shadow-xl flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-900 text-base">
-                {panel === 'create'
-                  ? 'Register Application'
-                  : 'Edit Application'}
-              </h2>
-              <Button variant="ghost" size="sm" onClick={closePanel}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+      <Dialog open={panel !== null} onOpenChange={(o) => { if (!o) closePanel(); }}>
+        <DialogContent className="max-w-xl flex flex-col max-h-[90vh]">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>
+              {panel === 'create' ? 'Register Application' : 'Edit Application'}
+            </DialogTitle>
+          </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+          <div className="flex-1 overflow-y-auto pr-1 space-y-6">
               <div>
                 <h3 className="text-sm font-medium text-gray-900">
                   Basic info
@@ -475,20 +496,24 @@ export function AbacApplicationsPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>App code</Label>
+                    <Label>App key</Label>
                     <Input
-                      value={form.appCode}
+                      value={form.key}
                       onChange={(e) =>
                         setForm((p) => ({
                           ...p,
-                          appCode: e.target.value.toUpperCase(),
+                          key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''),
                         }))
                       }
                       className="font-mono"
                       disabled={panel !== 'create'}
-                      placeholder="MY_APP"
+                      placeholder="my_app"
                     />
-                    {panel !== 'create' && (
+                    {panel === 'create' ? (
+                      <p className="text-xs text-gray-500">
+                        Lowercase letters, numbers, and underscores only — cannot be changed after creation
+                      </p>
+                    ) : (
                       <p className="text-xs text-gray-500">
                         Cannot be changed after creation
                       </p>
@@ -662,19 +687,18 @@ export function AbacApplicationsPage() {
                   deny_overrides regardless of this setting.
                 </div>
               </div>
-            </div>
-
-            <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
-              <Button variant="outline" onClick={closePanel} disabled={saving}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmit} disabled={saving}>
-                {panel === 'create' ? 'Register' : 'Save'}
-              </Button>
-            </div>
           </div>
-        </>
-      )}
+
+          <DialogFooter className="shrink-0 border-t border-gray-100 pt-4">
+            <Button variant="outline" onClick={closePanel} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={saving}>
+              {panel === 'create' ? 'Register' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -14,6 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import {
   Building2,
   Plus,
@@ -198,6 +206,9 @@ export const FacilitiesPage = () => {
   const [panel, setPanel] = useState(null); // null | 'create' | facilityObject
   const [form, setForm] = useState(EMPTY_FORM);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['facilities', { search, typeFilter, statusFilter }],
@@ -311,6 +322,40 @@ export const FacilitiesPage = () => {
   };
 
   const saving = createMutation.isPending || updateMutation.isPending;
+
+  const allSelected = facilities.length > 0 && facilities.every((f) => selectedIds.has(f.id));
+  const someSelected = facilities.some((f) => selectedIds.has(f.id)) && !allSelected;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(facilities.map((f) => f.id)));
+    }
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => facilityService.remove(id)));
+      toast({ title: `${selectedIds.size} facilit${selectedIds.size === 1 ? 'y' : 'ies'} deleted` });
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      invalidate();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.response?.data?.error ?? err.message, variant: 'destructive' });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
   const showState = form.country && !COUNTRIES_WITHOUT_STATES.has(form.country);
   const stateOptions = STATES_BY_COUNTRY[form.country] ?? null;
 
@@ -407,6 +452,15 @@ export const FacilitiesPage = () => {
           <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-left">
+                {isHubOwner && (
+                  <th className="pl-4 pr-2 py-3 w-10">
+                    <Checkbox
+                      checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-3 font-medium text-gray-600">Facility</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Type</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Location</th>
@@ -417,7 +471,17 @@ export const FacilitiesPage = () => {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {facilities.map((f) => (
-                <tr key={f.id} className="hover:bg-gray-50">
+                <tr key={f.id} className={`group hover:bg-gray-50 ${selectedIds.has(f.id) ? 'bg-blue-50/40' : ''}`}>
+                  {isHubOwner && (
+                    <td className="pl-4 pr-2 py-3 w-10">
+                      <Checkbox
+                        checked={selectedIds.has(f.id)}
+                        onCheckedChange={() => toggleSelectOne(f.id)}
+                        aria-label={`Select ${f.name}`}
+                        className={selectedIds.size === 0 ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{f.name}</div>
                     {f.campusName && <div className="text-xs text-gray-500">{f.campusName}</div>}
@@ -472,8 +536,63 @@ export const FacilitiesPage = () => {
               ))}
             </tbody>
           </table>
+
+          {/* Floating bulk action bar */}
+          {selectedIds.size > 0 && (
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm z-10">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-700">{selectedIds.size} selected</span>
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-sm text-gray-500 hover:text-gray-700 underline"
+                >
+                  Deselect all
+                </button>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Delete {selectedIds.size} {selectedIds.size === 1 ? 'facility' : 'facilities'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Bulk delete dialog */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete {selectedIds.size} {selectedIds.size === 1 ? 'facility' : 'facilities'}?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">This action cannot be undone.</p>
+            <ul className="text-sm text-gray-700 space-y-1 max-h-40 overflow-y-auto">
+              {facilities
+                .filter((f) => selectedIds.has(f.id))
+                .slice(0, 5)
+                .map((f) => (
+                  <li key={f.id} className="flex items-center gap-2">
+                    <Building2 className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                    <span className="truncate">{f.name}</span>
+                  </li>
+                ))}
+              {selectedIds.size > 5 && (
+                <li className="text-gray-400 text-xs">…and {selectedIds.size - 5} more</li>
+              )}
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={isBulkDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={isBulkDeleting}>
+              {isBulkDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation */}
       {deleteTarget && (

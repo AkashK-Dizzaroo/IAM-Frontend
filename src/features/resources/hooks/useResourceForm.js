@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from "react";
 import { APP_LEVEL_TYPES } from "../config/resourceTypeConfig";
 
 export function appSupportsL2(app) {
-  const code = (app?.appCode ?? "").toUpperCase();
+  const code = (app?.key ?? "").toUpperCase();
   const config = APP_LEVEL_TYPES[code];
   if (config) {
     return Array.isArray(config[2]) && config[2].length > 0;

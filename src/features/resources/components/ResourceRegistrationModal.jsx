@@ -63,7 +63,7 @@ function AppOwnerApplicationSelect({ ownedAppIds, allApplications, value, onChan
       <option value="">Select your application...</option>
       {ownedApps.map((app) => (
         <option key={app._id ?? app.id} value={(app._id ?? app.id)?.toString()}>
-          {app.name} ({app.appCode})
+          {app.name} ({app.key})
         </option>
       ))}
     </select>
@@ -566,7 +566,7 @@ export function ResourceRegistrationModal({
                                     const id = app._id ?? app.id;
                                     return (
                                       <option key={id} value={id}>
-                                        {app.name ?? app.appCode}
+                                        {app.name ?? app.key}
                                       </option>
                                     );
                                   })}

@@ -496,7 +496,6 @@ export function AppUserAttributesPage() {
   const selectedApplication = applications.find(
     (a) =>
       a?.key === selectedAppKey ||
-      a?.appCode === selectedAppKey ||
       String(a?.id || a?._id || '') === String(selectedAppKey)
   );
 

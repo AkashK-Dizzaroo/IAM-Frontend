@@ -71,7 +71,7 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
                 {[request.requester?.firstName, request.requester?.lastName].filter(Boolean).join(' ') || request.requester?.email || '—'}
               </span>
             </InfoRow>
-            <InfoRow label="Application">{request.application?.name || request.application?.appCode || '—'}</InfoRow>
+            <InfoRow label="Application">{request.application?.name || request.application?.key || '—'}</InfoRow>
             <InfoRow label="Resource">
               {request.requestedResource
                 ? (request.requestedResource.name || request.requestedResource.resourceExternalId)
@@ -115,7 +115,7 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
         <div>
           <h3 className="text-lg font-semibold text-green-700">Approve Access Request</h3>
           <p className="text-xs text-gray-500 mt-0.5">
-            {requesterName} · {request.application?.name || request.application?.appCode || '—'}
+            {requesterName} · {request.application?.name || request.application?.key || '—'}
           </p>
         </div>
 
@@ -220,7 +220,7 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
                   <span className="font-medium">{requesterName}</span>
                 </InfoRow>
                 <InfoRow label="Application">
-                  {request.application?.name || request.application?.appCode || '—'}
+                  {request.application?.name || request.application?.key || '—'}
                 </InfoRow>
                 <InfoRow label="Requested Role">
                   {requestedRole
@@ -493,7 +493,7 @@ export const AccessRequestsPage = () => {
 
                       {/* Application */}
                       <td className="px-4 py-3 text-gray-700">
-                        {req.application?.name || req.application?.appCode || '—'}
+                        {req.application?.name || req.application?.key || '—'}
                       </td>
 
                       {/* Resource */}

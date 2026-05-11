@@ -109,7 +109,7 @@ export function RequestAccessModal({
 
   // Fetch only user-requestable attribute definitions for this app.
   // Uses the /requestable endpoint (userAuth only) instead of the admin-gated /attributes route.
-  const appKey = application?.key ?? application?.appKey ?? application?.appCode;
+  const appKey = application?.key ?? application?.appKey;
   const { data: attrDefsData, isLoading: attrDefsLoading } = useQuery({
     queryKey: ["appAttrDefs", appKey, "requestable"],
     queryFn: () => abacService.listRequestableAppAttrDefs(appKey),

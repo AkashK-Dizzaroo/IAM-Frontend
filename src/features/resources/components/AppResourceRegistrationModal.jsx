@@ -141,7 +141,7 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
     createMutation.mutate(buildPayload());
   };
 
-  const appName = application?.name ?? application?.appCode ?? "this application";
+  const appName = application?.name ?? application?.key ?? "this application";
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }}>
@@ -197,8 +197,8 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
               <div className="flex items-center h-9 px-3 py-2 rounded-md border border-input bg-muted/50 text-sm gap-2">
                 <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <span>{appName}</span>
-                {application?.appCode && (
-                  <span className="text-xs text-muted-foreground">({application.appCode})</span>
+                {application?.key && (
+                  <span className="text-xs text-muted-foreground">({application.key})</span>
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">

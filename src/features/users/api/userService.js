@@ -49,7 +49,7 @@ class UserService {
   async getUserAssignments(userId, options = {}) {
     try {
       const params = new URLSearchParams();
-      if (options.appCode) params.append("appCode", options.appCode);
+      if (options.key) params.append("key", options.key);
       if (options.applicationId) params.append("applicationId", options.applicationId);
 
       const response = await apiClient.get(`/users/${userId}/assignments?${params}`);

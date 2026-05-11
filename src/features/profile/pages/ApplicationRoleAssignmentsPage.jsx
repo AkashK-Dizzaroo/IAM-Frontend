@@ -158,9 +158,9 @@ export const ApplicationRoleAssignmentsPage = () => {
                                 {assignment.application?.name ||
                                   "Unknown Application"}
                               </div>
-                              {assignment.application?.appCode && (
+                              {assignment.application?.key && (
                                 <div className="text-xs text-gray-500 truncate">
-                                  {assignment.application.appCode}
+                                  {assignment.application.key}
                                 </div>
                               )}
                             </div>

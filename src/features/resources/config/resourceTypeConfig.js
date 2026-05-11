@@ -29,9 +29,9 @@ export const APP_LEVEL_TYPES = {
 
 const DEFAULT_TYPES = ["Application", "Project", "Study", "Site"];
 
-export function getTypesForApplicationAndLevel(appCode, level) {
-  if (!appCode || !level) return DEFAULT_TYPES;
-  const upper = String(appCode).toUpperCase();
+export function getTypesForApplicationAndLevel(appKey, level) {
+  if (!appKey || !level) return DEFAULT_TYPES;
+  const upper = String(appKey).toUpperCase();
   const config = APP_LEVEL_TYPES[upper];
   if (!config) return DEFAULT_TYPES;
   const types = config[level];
@@ -39,13 +39,13 @@ export function getTypesForApplicationAndLevel(appCode, level) {
   return types;
 }
 
-export function levelHasTypes(appCode, level) {
-  const types = getTypesForApplicationAndLevel(appCode, level);
+export function levelHasTypes(appKey, level) {
+  const types = getTypesForApplicationAndLevel(appKey, level);
   return types && types.length > 0;
 }
 
 /**
- * Given an appCode and a child resource type, determine the required parent type
+ * Given an appKey and a child resource type, determine the required parent type
  * based on APP_LEVEL_TYPES. Finds the level where the child type lives, then
  * returns the first type from the nearest lower level that has configured types.
  */
@@ -60,10 +60,10 @@ export function getLevelForType(type) {
   return 2;
 }
 
-export function getParentTypeFor(appCode, childType) {
-  if (!appCode || !childType) return null;
+export function getParentTypeFor(appKey, childType) {
+  if (!appKey || !childType) return null;
 
-  const upper = String(appCode).toUpperCase();
+  const upper = String(appKey).toUpperCase();
   const config = APP_LEVEL_TYPES[upper];
   if (!config) return null;
 

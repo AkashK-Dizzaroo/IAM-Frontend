@@ -104,8 +104,8 @@ function getAssignedApps(user, allApps) {
   const reqs = user.accessRequests ?? [];
   const owned = user.applicationMembers ?? [];
 
-  const ownedNames = new Set(owned.map((o) => o.application?.name || o.application?.appCode).filter(Boolean));
-  const reqNames = reqs.map((r) => r.application?.name || r.application?.appCode).filter(Boolean);
+  const ownedNames = new Set(owned.map((o) => o.application?.name || o.application?.key).filter(Boolean));
+  const reqNames = reqs.map((r) => r.application?.name || r.application?.key).filter(Boolean);
   
   const allNames = Array.from(new Set([...reqNames, ...ownedNames]));
   return allNames.map(name => ({
@@ -264,7 +264,7 @@ export function AbacUsersPage() {
     staleTime: 5 * 60_000,
   });
   const allAppNames = (appsData?.data?.data ?? appsData?.data ?? []).map(
-    (a) => a.name || a.appCode
+    (a) => a.name || a.key
   ).filter(Boolean);
 
 

@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -272,7 +273,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
     staleTime: 60_000,
   });
   const selectedApplication = (applicationsData?.data?.data ?? applicationsData?.data ?? []).find(
-    (a) => a?.key === appKey || a?.appCode === appKey
+    (a) => a?.key === appKey
   );
 
   const { data: resourcesData } = useQuery({
@@ -423,9 +424,9 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
               )}
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-0.5 ml-12">
+          <DialogDescription className="text-xs text-gray-500 mt-0.5 ml-12">
             Edit resource access and attributes for this user.
-          </p>
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">

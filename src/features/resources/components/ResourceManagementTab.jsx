@@ -14,9 +14,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Plus, Search, RefreshCw, Pencil, Trash2, ShieldCheck,
-  ChevronDown, ChevronRight, FolderOpen,
+  ChevronDown, ChevronRight, FolderOpen, AlertTriangle,
 } from "lucide-react";
 import { ResourceRegistrationModal } from "./ResourceRegistrationModal";
 import { EditResourceModal } from "./EditResourceModal";
@@ -41,6 +50,14 @@ export function ResourceManagementTab() {
   const [deletingId, setDeletingId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
   const [addingAppToResourceId, setAddingAppToResourceId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  // Single-resource hard-delete confirmation dialog
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLinkedApps, setDeleteLinkedApps] = useState([]);
 
   const { data: applicationsData } = useQuery({
     queryKey: ["applications-resources"],
@@ -85,7 +102,7 @@ export function ResourceManagementTab() {
   }
 
   function getResourceHierarchy(r) {
-    const appName = r.assignedApplications?.[0]?.name ?? r.assignedApplications?.[0]?.appCode ?? "—";
+    const appName = r.assignedApplications?.[0]?.name ?? r.assignedApplications?.[0]?.key ?? "—";
     if (r.level === 2) return `${appName} > ${r.name ?? "—"}`;
     if (r.level === 3) {
       const parent = r.parentResource;
@@ -104,39 +121,33 @@ export function ResourceManagementTab() {
     return myAppIds.find((id) => !assignedIds.includes(id.toString()));
   }
 
-  const handleDelete = async (resource) => {
-    const confirmed = window.confirm(
-      `Delete "${resource.name}"? This will deactivate the resource.`
-    );
-    if (!confirmed) return;
+  const handleDelete = (resource) => {
+    setDeleteTarget(resource);
+    setDeleteLinkedApps([]);
+    setDeleteError(null);
+    setDeleteConfirmOpen(true);
+  };
 
-    setDeletingId(resource._id ?? resource.id);
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget._id ?? deleteTarget.id;
+    setDeletingId(id);
     setDeleteError(null);
 
     try {
-      const result = await resourceService.deleteResource(resource._id ?? resource.id);
-
-      if (result?.success === false) {
-        if (result.details?.children) {
-          const childNames = result.details.children.map((c) => c.name).join(", ");
-          setDeleteError(
-            `Cannot delete "${resource.name}". Delete these L3 resources first: ${childNames}`
-          );
-        } else {
-          setDeleteError(result.error ?? "Failed to delete resource");
-        }
-        return;
-      }
-
-      toast({ title: "Success", description: `"${resource.name}" deleted successfully` });
+      await resourceService.deleteResource(id);
+      setDeleteConfirmOpen(false);
+      setDeleteTarget(null);
+      setDeleteLinkedApps([]);
+      toast({ title: "Success", description: `"${deleteTarget.name}" permanently deleted` });
       queryClient.invalidateQueries({ queryKey: ["resources"] });
     } catch (err) {
       const details = err?.details ?? err?.data?.details;
-      if (details?.children) {
+      if (details?.type === 'linked_applications' && details?.applications?.length > 0) {
+        setDeleteLinkedApps(details.applications);
+      } else if (details?.type === 'has_children' && details?.children?.length > 0) {
         const childNames = details.children.map((c) => c.name).join(", ");
-        setDeleteError(
-          `Cannot delete "${resource.name}". Delete these L3 resources first: ${childNames}`
-        );
+        setDeleteError(`Delete these child resources first: ${childNames}`);
       } else {
         setDeleteError(err?.message ?? "Failed to delete resource");
       }
@@ -159,6 +170,47 @@ export function ResourceManagementTab() {
       });
     } finally {
       setAddingAppToResourceId(null);
+    }
+  };
+
+  // Bulk select helpers (table view only — only leaf/L3 and L2 resources, not app nodes)
+  const selectableResources = filteredResources.filter((r) => !r.isUnassignedNode);
+  const allSelected = selectableResources.length > 0 && selectableResources.every((r) => selectedIds.has(r._id || r.id));
+  const someSelected = selectableResources.some((r) => selectedIds.has(r._id || r.id)) && !allSelected;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectableResources.map((r) => r._id || r.id)));
+    }
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    let failed = 0;
+    await Promise.all(
+      ids.map((id) =>
+        resourceService.deleteResource(id).catch(() => { failed++; })
+      )
+    );
+    setIsBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ["resources"] });
+    if (failed > 0) {
+      toast({ title: `${ids.length - failed} deleted, ${failed} failed`, description: 'Some resources could not be deleted (may have children).', variant: 'destructive' });
+    } else {
+      toast({ title: `${ids.length} resource${ids.length === 1 ? '' : 's'} deleted` });
     }
   };
 
@@ -306,7 +358,7 @@ export function ResourceManagementTab() {
 
               <span className={`truncate text-sm ${isApp ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
                 {node.name}
-                {isApp && <span className="ml-2 text-xs font-normal text-gray-500">({node.appCode})</span>}
+                {isApp && <span className="ml-2 text-xs font-normal text-gray-500">({node.key})</span>}
               </span>
 
               {!isApp && (
@@ -435,7 +487,7 @@ export function ResourceManagementTab() {
                 <SelectItem value="all">All Applications</SelectItem>
                 {applications.map((app) => (
                   <SelectItem key={app._id || app.id} value={app._id || app.id}>
-                    {app.name} ({app.appCode})
+                    {app.name} ({app.key})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -515,31 +567,24 @@ export function ResourceManagementTab() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    Resource Name
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    Level
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    Resource Hierarchy
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    Universal ID
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    Assigned Applications
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    Classification
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    Status
-                  </th>
-                  {(isHubOwner || isAppOwner) && (
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600">
-                      Actions
+                  {isHubOwner && (
+                    <th className="pl-4 pr-2 py-3 w-10">
+                      <Checkbox
+                        checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Select all"
+                      />
                     </th>
+                  )}
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Resource Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Level</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Resource Hierarchy</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Universal ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Assigned Applications</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Classification</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
+                  {(isHubOwner || isAppOwner) && (
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600">Actions</th>
                   )}
                 </tr>
               </thead>
@@ -560,7 +605,7 @@ export function ResourceManagementTab() {
                   filteredResources.map((r) => {
                     const universalId = r.resourceExternalId ?? r.externalId ?? "—";
                     const boundApps = (r.assignedApplications ?? []).map(
-                      (a) => a?.name ?? a?.appCode ?? null
+                      (a) => a?.name ?? a?.key ?? null
                     ).filter(Boolean);
                     const active = r.isActive !== false;
                     const rid = r._id || r.id;
@@ -568,7 +613,17 @@ export function ResourceManagementTab() {
                     const classification = r.metadata?.classification ?? null;
 
                     return (
-                      <tr key={rid}>
+                      <tr key={rid} className={`group ${selectedIds.has(rid) ? 'bg-blue-50/40' : ''}`}>
+                        {isHubOwner && (
+                          <td className="pl-4 pr-2 py-3 w-10">
+                            <Checkbox
+                              checked={selectedIds.has(rid)}
+                              onCheckedChange={() => toggleSelectOne(rid)}
+                              aria-label={`Select ${r.name}`}
+                              className={selectedIds.size === 0 ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-sm text-gray-900 font-medium">
                           {r.name ?? "—"}
                         </td>
@@ -668,6 +723,21 @@ export function ResourceManagementTab() {
                 )}
               </tbody>
             </table>
+            {/* Floating bulk action bar — table view */}
+            {selectedIds.size > 0 && (
+              <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm z-10">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-gray-700">{selectedIds.size} selected</span>
+                  <button onClick={() => setSelectedIds(new Set())} className="text-sm text-gray-500 hover:text-gray-700 underline">
+                    Deselect all
+                  </button>
+                </div>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="h-4 w-4 mr-1.5" />
+                  Delete {selectedIds.size} {selectedIds.size === 1 ? 'resource' : 'resources'}
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col">
@@ -694,6 +764,105 @@ export function ResourceManagementTab() {
           </div>
         )}
       </div>
+
+      {/* Single resource hard-delete confirmation */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) { setDeleteTarget(null); setDeleteLinkedApps([]); setDeleteError(null); }
+          setDeleteConfirmOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+              Permanently delete resource?
+            </DialogTitle>
+            <DialogDescription>
+              {deleteTarget?.name && (
+                <span className="font-medium text-foreground">"{deleteTarget.name}"</span>
+              )}{" "}
+              will be permanently removed. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteLinkedApps.length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-2">
+              <p className="text-sm font-medium text-amber-800 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Unlink from these applications first:
+              </p>
+              <ul className="space-y-1">
+                {deleteLinkedApps.map((app) => (
+                  <li key={app.id} className="text-sm text-amber-700 flex items-center gap-2">
+                    <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                    {app.name}
+                    <Badge variant="outline" className="text-[10px] ml-auto">{app.key}</Badge>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {deleteError && (
+            <p className="text-sm text-destructive">{deleteError}</p>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={!!deletingId}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={!!deletingId || deleteLinkedApps.length > 0}
+            >
+              {deletingId ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk delete confirmation */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete {selectedIds.size} {selectedIds.size === 1 ? 'resource' : 'resources'}?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">These resources will be <strong>permanently deleted</strong>. Resources still linked to applications or with children will fail — unlink them first.</p>
+            <ul className="text-sm text-gray-700 space-y-1 max-h-40 overflow-y-auto">
+              {filteredResources
+                .filter((r) => selectedIds.has(r._id || r.id))
+                .slice(0, 5)
+                .map((r) => {
+                  const rid = r._id || r.id;
+                  return (
+                    <li key={rid} className="flex items-center gap-2">
+                      <ShieldCheck className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                      <span className="truncate">{r.name}</span>
+                      <Badge variant="outline" className="text-[10px] ml-auto shrink-0">L{r.level}</Badge>
+                    </li>
+                  );
+                })}
+              {selectedIds.size > 5 && (
+                <li className="text-gray-400 text-xs">…and {selectedIds.size - 5} more</li>
+              )}
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={isBulkDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={isBulkDeleting}>
+              {isBulkDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ResourceRegistrationModal
         open={showCreateModal}

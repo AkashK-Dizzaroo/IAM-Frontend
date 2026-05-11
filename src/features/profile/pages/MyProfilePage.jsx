@@ -559,13 +559,13 @@ export const MyProfilePage = () => {
                               <div className="min-w-0">
                                 <div className="font-medium text-gray-900 truncate">
                                   {assignment.application?.name ||
-                                    assignment.application?.appCode ||
+                                    assignment.application?.key ||
                                     assignment.appName ||
                                     "Unknown Application"}
                                 </div>
-                                {assignment.application?.appCode && assignment.application?.name && (
+                                {assignment.application?.key && assignment.application?.name && (
                                   <div className="text-xs text-gray-500 truncate">
-                                    {assignment.application.appCode}
+                                    {assignment.application.key}
                                   </div>
                                 )}
                               </div>

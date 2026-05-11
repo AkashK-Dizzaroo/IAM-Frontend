@@ -50,13 +50,19 @@ function StatusBadge({ status }) {
 }
 
 function MultiValueDropdown({ allowedValues = [], selectedValues = [], onChange, disabled }) {
+  const allStrings = allowedValues.map(v => String(v));
   const selected = Array.isArray(selectedValues) ? selectedValues.map(v => String(v)) : [];
+  const allSelected = allStrings.length > 0 && allStrings.every(v => selected.includes(v));
+  const someSelected = selected.length > 0 && !allSelected;
+
   const summary =
     selected.length === 0
       ? 'Select values...'
-      : selected.length <= 2
-        ? selected.join(', ')
-        : `${selected.length} selected`;
+      : allSelected
+        ? 'All selected'
+        : selected.length <= 2
+          ? selected.join(', ')
+          : `${selected.length} of ${allStrings.length} selected`;
 
   const toggleValue = (value, checked) => {
     const val = String(value);
@@ -64,6 +70,14 @@ function MultiValueDropdown({ allowedValues = [], selectedValues = [], onChange,
       onChange(Array.from(new Set([...selected, val])));
     } else {
       onChange(selected.filter(v => v !== val));
+    }
+  };
+
+  const toggleAll = () => {
+    if (allSelected) {
+      onChange([]);
+    } else {
+      onChange([...allStrings]);
     }
   };
 
@@ -81,9 +95,30 @@ function MultiValueDropdown({ allowedValues = [], selectedValues = [], onChange,
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1" align="start">
-        <div className="max-h-56 overflow-auto">
-          {allowedValues.map((v) => {
-            const value = String(v);
+        {allStrings.length > 1 && (
+          <>
+            <div
+              role="option"
+              aria-selected={allSelected}
+              className="w-full flex items-center justify-between rounded px-2 py-1.5 text-xs cursor-pointer hover:bg-gray-50"
+              onClick={toggleAll}
+            >
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={allSelected}
+                  data-state={someSelected ? 'indeterminate' : allSelected ? 'checked' : 'unchecked'}
+                  onCheckedChange={toggleAll}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <span className="font-medium text-gray-700">Select all</span>
+              </div>
+              {allSelected && <Check className="h-3.5 w-3.5 text-primary" />}
+            </div>
+            <div className="my-1 border-t border-gray-100" />
+          </>
+        )}
+        <div className="max-h-52 overflow-auto">
+          {allStrings.map((value) => {
             const checked = selected.includes(value);
             return (
               <div
