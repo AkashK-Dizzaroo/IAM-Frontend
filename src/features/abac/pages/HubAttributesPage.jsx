@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -59,6 +60,15 @@ const EMPTY_FORM = {
   isRequired: false,
 };
 
+/**
+ * HubAttributesPage
+ *
+ * Admin page for managing hub-level attribute definitions, grouped by
+ * namespace in tabs. Supports single-attribute create/edit/delete and
+ * bulk multi-select delete via a floating action bar at the bottom of
+ * each namespace tab. Bulk delete uses Promise.all over individual service
+ * calls and resets selection after completion.
+ */
 export function HubAttributesPage() {
   const { toast } = useToast();
   const [dialogMode, setDialogMode] = useState(null); // null | 'create' | <def object>
@@ -66,6 +76,11 @@ export function HubAttributesPage() {
   const [enumInput, setEnumInput] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [namespaceTab, setNamespaceTab] = useState('subject');
+
+  // ── Bulk-select state ──────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['abac', 'hubAttrDefs'],
@@ -111,6 +126,12 @@ export function HubAttributesPage() {
     return o;
   }, [defs]);
 
+  // Reset selection when the active tab changes so stale ids from another ns are cleared.
+  const handleNamespaceTabChange = (ns) => {
+    setNamespaceTab(ns);
+    setSelectedIds(new Set());
+  };
+
   const resetForm = useCallback(() => {
     setFormData(EMPTY_FORM);
     setEnumInput('');
@@ -141,7 +162,7 @@ export function HubAttributesPage() {
   const isEditing = isOpen && dialogMode !== 'create';
   const editId = isEditing ? (dialogMode.id || dialogMode._id) : null;
 
-  // --- Mutations ---
+  // ── Mutations ──────────────────────────────────────────────────────────────
   const createMutation = useMutation({
     mutationFn: (data) => abacService.createHubAttrDef(data),
     onSuccess: () => {
@@ -181,6 +202,71 @@ export function HubAttributesPage() {
     },
   });
 
+  // ── Bulk-select helpers ────────────────────────────────────────────────────
+  const nsDefs = defsByNamespace[namespaceTab] ?? [];
+  const nsIds = nsDefs.map((d) => d.id || d._id);
+  const allNsSelected = nsIds.length > 0 && nsIds.every((id) => selectedIds.has(id));
+  const someNsSelected = nsIds.some((id) => selectedIds.has(id)) && !allNsSelected;
+
+  const handleSelectAll = () => {
+    if (allNsSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        nsIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        nsIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const handleRowCheckbox = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // ── Bulk delete ────────────────────────────────────────────────────────────
+  const handleBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    try {
+      await Promise.all(ids.map((id) => abacService.deleteHubAttrDef(id)));
+      toast({
+        title: 'Attributes deleted',
+        description: `${ids.length} attribute${ids.length === 1 ? '' : 's'} deleted.`,
+      });
+      setBulkDeleteOpen(false);
+      setSelectedIds(new Set());
+      refetch();
+    } catch (err) {
+      const msg =
+        err?.response?.status === 409
+          ? 'Cannot delete — one or more attributes are referenced by active policies or have user values.'
+          : err.message;
+      toast({ title: 'Bulk delete failed', description: msg, variant: 'destructive' });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  // Summary list for the confirmation dialog (max 5 shown).
+  const bulkDeletePreviewNames = useMemo(() => {
+    const ids = Array.from(selectedIds);
+    const matched = defs.filter((d) => ids.includes(d.id || d._id));
+    return matched.slice(0, 5).map((d) => d.displayName || d.key);
+  }, [selectedIds, defs]);
+
+  const bulkDeleteOverflow = selectedIds.size > 5 ? selectedIds.size - 5 : 0;
+
+  // ── Form helpers ───────────────────────────────────────────────────────────
   const handleSave = () => {
     const payload = { ...formData };
     if (dialogMode === 'create') {
@@ -193,7 +279,6 @@ export function HubAttributesPage() {
 
   const saving = createMutation.isPending || updateMutation.isPending;
 
-  // --- Constraints helpers ---
   const updateConstraint = (key, value) => {
     setFormData((p) => ({
       ...p,
@@ -255,7 +340,7 @@ export function HubAttributesPage() {
         </Button>
       </div>
 
-      {/* Loading */}
+      {/* Loading skeleton */}
       {isLoading && (
         <div className="space-y-2">
           {[...Array(5)].map((_, i) => (
@@ -266,7 +351,7 @@ export function HubAttributesPage() {
 
       {/* Namespace Tabs */}
       {!isLoading && (
-        <Tabs value={namespaceTab} onValueChange={setNamespaceTab} className="w-full">
+        <Tabs value={namespaceTab} onValueChange={handleNamespaceTabChange} className="w-full">
           <TabsList
             className="grid w-full h-auto p-1 gap-1 sm:grid-cols-2 lg:grid-cols-4 bg-gray-100/80"
             aria-label="Attribute namespace"
@@ -292,10 +377,10 @@ export function HubAttributesPage() {
           </TabsList>
 
           {NAMESPACES.map((ns) => {
-            const nsDefs = defsByNamespace[ns] ?? [];
+            const currentNsDefs = defsByNamespace[ns] ?? [];
             return (
               <TabsContent key={ns} value={ns} className="mt-0 pt-4 focus-visible:outline-none">
-                {nsDefs.length === 0 ? (
+                {currentNsDefs.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center border border-gray-200 rounded-lg bg-white">
                     <div className="rounded-full bg-gray-100 p-4 mb-4">
                       <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -317,10 +402,24 @@ export function HubAttributesPage() {
                   </div>
                 ) : (
                   <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                    {/* Column header row — flat tree style matching resource tree */}
+                    {/* Column header row */}
                     <div className="flex items-center py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      {/* 24px spacer matching where a chevron would sit */}
-                      <div className="w-6 shrink-0 mr-2" />
+                      {/* Select-all checkbox */}
+                      <div className="w-6 shrink-0 mr-2 flex items-center justify-center">
+                        <Checkbox
+                          checked={
+                            ns === namespaceTab
+                              ? allNsSelected
+                                ? true
+                                : someNsSelected
+                                ? 'indeterminate'
+                                : false
+                              : false
+                          }
+                          onCheckedChange={handleSelectAll}
+                          aria-label={`Select all ${NAMESPACE_TAB_LABEL[ns]} attributes`}
+                        />
+                      </div>
                       <div className="flex-1">Display Name / Key</div>
                       <div className="w-[90px] shrink-0">Type</div>
                       <div className="w-[220px] shrink-0">Constraints</div>
@@ -328,18 +427,29 @@ export function HubAttributesPage() {
                       <div className="w-[80px] shrink-0 text-right">Actions</div>
                     </div>
 
-                    {nsDefs.map((def) => {
+                    {currentNsDefs.map((def) => {
                       const id = def.id || def._id;
                       const isDeleting = deleteConfirmId === id;
                       const isPolicyReferenced = referencedKeys.has(`${def.namespace}.${def.key}`);
+                      const isChecked = selectedIds.has(id);
+
                       return (
                         <div
                           key={id}
-                          className="flex items-center py-2 px-3 hover:bg-gray-50 border-b border-gray-100 transition-colors"
+                          className="flex items-center py-2 px-3 hover:bg-gray-50 border-b border-gray-100 transition-colors group"
                         >
-                          {/* Spacer where chevron would be — hub attrs have no hierarchy */}
-                          <div className="w-6 shrink-0 mr-2">
-                            <div className="w-4 h-4" />
+                          {/* Row checkbox — hidden until hover or any selection is active */}
+                          <div className="w-6 shrink-0 mr-2 flex items-center justify-center">
+                            <Checkbox
+                              checked={isChecked}
+                              onCheckedChange={() => handleRowCheckbox(id)}
+                              aria-label={`Select ${def.displayName || def.key}`}
+                              className={
+                                selectedIds.size > 0
+                                  ? 'opacity-100'
+                                  : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
+                              }
+                            />
                           </div>
 
                           {/* Display name + key */}
@@ -432,6 +542,32 @@ export function HubAttributesPage() {
                         </div>
                       );
                     })}
+
+                    {/* Floating bulk-action bar — only visible when rows are selected in this tab */}
+                    {selectedIds.size > 0 && ns === namespaceTab && (
+                      <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between rounded-b-lg shadow-sm z-10">
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-gray-700">
+                            {selectedIds.size} selected
+                          </span>
+                          <button
+                            onClick={() => setSelectedIds(new Set())}
+                            className="text-sm text-gray-500 hover:text-gray-700 underline"
+                          >
+                            Deselect all
+                          </button>
+                        </div>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setBulkDeleteOpen(true)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1.5" />
+                          Delete {selectedIds.size}{' '}
+                          {selectedIds.size === 1 ? 'item' : 'items'}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </TabsContent>
@@ -440,7 +576,7 @@ export function HubAttributesPage() {
         </Tabs>
       )}
 
-      {/* Centered Dialog */}
+      {/* ── Create / Edit Dialog ── */}
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
         <DialogContent className="max-w-3xl w-full max-h-[85vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 py-5 border-b border-gray-100 shrink-0">
@@ -650,6 +786,41 @@ export function HubAttributesPage() {
             <Button variant="outline" onClick={closeDialog}>Cancel</Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Attribute'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk-delete confirmation dialog ── */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selectedIds.size}{' '}
+              {selectedIds.size === 1 ? 'item' : 'items'}?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">This action cannot be undone.</p>
+          {bulkDeletePreviewNames.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {bulkDeletePreviewNames.map((name, i) => (
+                <li key={i} className="text-sm text-gray-700 truncate">
+                  • {name}
+                </li>
+              ))}
+              {bulkDeleteOverflow > 0 && (
+                <li className="text-sm text-gray-400">+{bulkDeleteOverflow} more</li>
+              )}
+            </ul>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+            >
+              {isBulkDeleting ? 'Deleting…' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

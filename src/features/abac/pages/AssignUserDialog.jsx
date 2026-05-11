@@ -50,7 +50,6 @@ function UserDropdown({ selectedUser, onSelect, open: dialogOpen }) {
     return allUsers.filter(
       (u) =>
         (u.displayName || '').toLowerCase().includes(q) ||
-        (u.username || '').toLowerCase().includes(q) ||
         (u.email || '').toLowerCase().includes(q)
     );
   }, [allUsers, query]);
@@ -78,7 +77,7 @@ function UserDropdown({ selectedUser, onSelect, open: dialogOpen }) {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">
-              {selectedUser.displayName || selectedUser.username}
+              {selectedUser.displayName || selectedUser.email}
             </p>
             <p className="text-xs text-gray-500 truncate">{selectedUser.email}</p>
           </div>
@@ -143,7 +142,7 @@ function UserDropdown({ selectedUser, onSelect, open: dialogOpen }) {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
-                      {u.displayName || u.username}
+                      {u.displayName || u.email}
                     </p>
                     <p className="text-xs text-gray-500 truncate">{u.email}</p>
                   </div>
@@ -497,7 +496,6 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
       );
       if (isDuplicate) {
         setDuplicateWarningIdx(idx);
-        setTimeout(() => setDuplicateWarningIdx(null), 2500);
         return;
       }
     }

@@ -159,6 +159,8 @@ function validatePolicyForm(form) {
 
   if (!form.name?.trim()) {
     errors.push('Policy name is required.');
+  } else if (form.name.trim().length > 255) {
+    errors.push('Policy name must be 255 characters or less.');
   }
 
   const leaves = collectLeaves(form.conditions);
@@ -912,6 +914,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
           <input
             value={form.name}
             disabled={isArchived}
+            maxLength={255}
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
             className="
               font-semibold text-lg text-gray-900
@@ -1194,9 +1197,13 @@ function PolicyCreatePanel({ onClose, onCreated, attributeDefs }) {
             <Input
               placeholder="e.g. Block suspended users"
               value={form.name}
+              maxLength={255}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               autoFocus
             />
+            {form.name.length > 200 && (
+              <p className="text-xs text-amber-500">{255 - form.name.length} characters remaining</p>
+            )}
           </div>
 
           <div className="space-y-1.5">

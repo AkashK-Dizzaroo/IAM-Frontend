@@ -1,4 +1,4 @@
-import { PLATFORM_USER_KEY } from '@/features/auth/utils/authInit';
+import { PLATFORM_USER_KEY } from '@/features/auth/utils/sessionKeys';
 
 const SENSITIVE_KEY_REGEX = /(password|token|secret|authorization|cookie)/i;
 

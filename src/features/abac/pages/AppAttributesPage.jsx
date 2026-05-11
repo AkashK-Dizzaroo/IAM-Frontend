@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
@@ -448,6 +449,15 @@ function buildAttributeTree(baseList) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+/**
+ * AppAttributesPage
+ *
+ * Admin page for managing per-application attribute definitions, displayed in a
+ * namespace-tabbed tree view. Supports single-attribute create/edit/delete as well
+ * as bulk multi-select delete via a floating action bar. Bulk delete uses
+ * Promise.all over individual service calls. Bulk selection resets when the
+ * namespace tab changes.
+ */
 export function AppAttributesPage() {
   const { selectedAppKey, selectedAppName } = useAbacScope();
   const selectedApp = selectedAppKey
@@ -466,6 +476,11 @@ export function AppAttributesPage() {
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [isImporting, setIsImporting]       = useState(false);
   const [importStatus, setImportStatus]     = useState(null);
+
+  // ── Bulk-select state ──────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['abac', 'appAttributes', selectedApp?.key],
@@ -522,6 +537,12 @@ export function AppAttributesPage() {
     setCreateForm((f) => ({ ...f, namespace: namespaceTab }));
   }, [namespaceTab, showCreate]);
 
+  // Reset selection when switching namespace tabs.
+  const handleNamespaceTabChange = (ns) => {
+    setNamespaceTab(ns);
+    setSelectedIds(new Set());
+  };
+
   const createMutation = useMutation({
     mutationFn: (payload) => abacService.createAppAttrDef(selectedApp?.key, payload),
     onSuccess: () => {
@@ -568,6 +589,32 @@ export function AppAttributesPage() {
       }),
   });
 
+  // ── Bulk delete handler (passed down into the table component) ─────────────
+  const handleBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    try {
+      await Promise.all(
+        ids.map((id) => abacService.deleteAppAttrDef(selectedApp.key, id))
+      );
+      toast({
+        title: 'Attributes deleted',
+        description: `${ids.length} attribute${ids.length === 1 ? '' : 's'} deleted.`,
+      });
+      setBulkDeleteOpen(false);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['abac', 'appAttributes', selectedApp.key] });
+    } catch (err) {
+      toast({
+        title: 'Bulk delete failed',
+        description: err?.response?.data?.error ?? err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   if (!selectedApp) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center h-full">
@@ -595,13 +642,11 @@ export function AppAttributesPage() {
    *      user can fix and retry. Already-created rows from earlier depths persist.
    *
    * @param {import('./BulkImportDialog').ParsedNode[]} nodes Output from BulkImportDialog.
-   * @param {{ dataType: string, isRequired: boolean, isMultiValued: boolean, isUserRequestable: boolean }} settings
    */
-  const processBulkImport = async (nodes, settings) => {
+  const processBulkImport = async (nodes) => {
     if (!selectedApp?.key || !nodes?.length) return;
 
     // Pre-flight: backend uniqueness on (applicationId, namespace, key).
-    // Block if any incoming key collides with an existing one in this namespace.
     const existingKeysInNs = new Set(
       attributes
         .filter((a) => a.namespace === namespaceTab)
@@ -620,7 +665,6 @@ export function AppAttributesPage() {
       return;
     }
 
-    // Group by depth.
     const byDepth = new Map();
     for (const n of nodes) {
       if (!byDepth.has(n.depth)) byDepth.set(n.depth, []);
@@ -641,30 +685,25 @@ export function AppAttributesPage() {
           `Importing attributes (Level ${i + 1}/${totalLevels}) — ${batch.length} item(s)…`,
         );
 
-        // Build payloads with resolved real parent ids.
         const payloads = batch.map((node) => {
           const realParentId = node.parentId ? idMap.get(node.parentId) ?? null : null;
-          const constraints = {};
-          const dv = settings?.defaultValue?.trim();
-          if (dv) constraints.defaultValue = dv;
           return {
             node,
             payload: {
               namespace: namespaceTab,
               key: node.key,
               displayName: node.displayName,
-              description: node.originalName,
-              dataType: settings?.dataType ?? 'boolean',
-              isRequired: settings?.isRequired ?? false,
-              isMultiValued: settings?.isMultiValued ?? false,
-              isUserRequestable: settings?.isUserRequestable ?? false,
+              description: node.displayName,
+              dataType: 'boolean',
+              isRequired: null,
+              isMultiValued: null,
+              isUserRequestable: null,
               parentId: realParentId,
-              constraints,
+              constraints: { defaultValue: 'true', action_tab: true },
             },
           };
         });
 
-        // Fire this level in parallel; abort the whole import on first failure.
         const results = await Promise.all(
           payloads.map(({ node, payload }) =>
             abacService.createAppAttrDef(selectedApp.key, payload).then((res) => ({
@@ -675,7 +714,6 @@ export function AppAttributesPage() {
         );
 
         for (const { node, res } of results) {
-          // API returns either { data: { data: {...} } } or { data: {...} }.
           const created = res?.data?.data ?? res?.data;
           const realId = created?.id;
           if (!realId) {
@@ -685,7 +723,6 @@ export function AppAttributesPage() {
         }
       }
 
-      // Success — refresh tree, notify, close dialog.
       await queryClient.invalidateQueries({
         queryKey: ['abac', 'appAttributes', selectedApp.key],
       });
@@ -695,7 +732,6 @@ export function AppAttributesPage() {
       });
       setShowBulkImport(false);
     } catch (err) {
-      // Partial success is possible — earlier depths persisted in the DB.
       const created = idMap.size;
       toast({
         title: 'Import failed',
@@ -706,13 +742,11 @@ export function AppAttributesPage() {
             : ''),
         variant: 'destructive',
       });
-      // Refresh so any partial creates show up in the tree.
       if (created > 0) {
         await queryClient.invalidateQueries({
           queryKey: ['abac', 'appAttributes', selectedApp.key],
         });
       }
-      // Keep dialog open so the user doesn't lose their edits.
     } finally {
       setIsImporting(false);
       setImportStatus(null);
@@ -750,6 +784,15 @@ export function AppAttributesPage() {
     setEditForm(formFromAttr(attr));
   };
 
+  // Summary list for the confirmation dialog (max 5 shown).
+  const bulkDeletePreviewNames = useMemo(() => {
+    const ids = Array.from(selectedIds);
+    const matched = attributes.filter((a) => ids.includes(a.id));
+    return matched.slice(0, 5).map((a) => a.displayName || a.key);
+  }, [selectedIds, attributes]);
+
+  const bulkDeleteOverflow = selectedIds.size > 5 ? selectedIds.size - 5 : 0;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
@@ -766,7 +809,7 @@ export function AppAttributesPage() {
               variant="outline"
               onClick={() => setShowBulkImport(true)}
             >
-              Import Structure
+              Import Action Tabs Attribute
             </Button>
           )}
           <Button
@@ -782,7 +825,7 @@ export function AppAttributesPage() {
 
       <Tabs
         value={namespaceTab}
-        onValueChange={setNamespaceTab}
+        onValueChange={handleNamespaceTabChange}
         className="w-full"
       >
         <TabsList
@@ -818,6 +861,9 @@ export function AppAttributesPage() {
               namespaceKey={ns}
               onEdit={openEdit}
               onDelete={setDeleteTarget}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              onBulkDeleteOpen={() => setBulkDeleteOpen(true)}
             />
           </TabsContent>
         ))}
@@ -895,7 +941,7 @@ export function AppAttributesPage() {
         importStatus={importStatus}
       />
 
-      {/* ── Delete Confirmation Dialog ── */}
+      {/* ── Single-item Delete Confirmation Dialog ── */}
       <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -926,6 +972,41 @@ export function AppAttributesPage() {
               {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk-delete confirmation dialog ── */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selectedIds.size}{' '}
+              {selectedIds.size === 1 ? 'item' : 'items'}?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">This action cannot be undone.</p>
+          {bulkDeletePreviewNames.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {bulkDeletePreviewNames.map((name, i) => (
+                <li key={i} className="text-sm text-gray-700 truncate">
+                  • {name}
+                </li>
+              ))}
+              {bulkDeleteOverflow > 0 && (
+                <li className="text-sm text-gray-400">+{bulkDeleteOverflow} more</li>
+              )}
+            </ul>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+            >
+              {isBulkDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -960,22 +1041,57 @@ function buildNestedTree(flatList) {
 
 /**
  * A single row in the attribute tree view.
- * Renders a chevron button (or spacer) for expand/collapse, followed by attribute details
- * and hover-revealed action buttons. Recursively renders child nodes when expanded.
+ * Renders a checkbox as the first element, then a chevron button (or spacer)
+ * for expand/collapse, followed by attribute details and hover-revealed action
+ * buttons. Recursively renders child nodes when expanded.
  *
- * @param {{ node: object, level: number, expandedIds: Set<string>, onToggle: Function, referencedKeys: Set<string>, onEdit: Function, onDelete: Function }} props
+ * @param {{ node: object, level: number, expandedIds: Set<string>, onToggle: Function, referencedKeys: Set<string>, onEdit: Function, onDelete: Function, selectedIds: Set<string>, onSelectionChange: Function }} props
  */
-function AttributeTreeNode({ node, level, expandedIds, onToggle, referencedKeys, onEdit, onDelete }) {
+function AttributeTreeNode({
+  node,
+  level,
+  expandedIds,
+  onToggle,
+  referencedKeys,
+  onEdit,
+  onDelete,
+  selectedIds,
+  onSelectionChange,
+}) {
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expandedIds.has(node.id);
+  const isChecked = selectedIds.has(node.id);
   const c = node.constraints ?? {};
+
+  const handleCheckbox = () => {
+    onSelectionChange((prev) => {
+      const next = new Set(prev);
+      if (next.has(node.id)) next.delete(node.id);
+      else next.add(node.id);
+      return next;
+    });
+  };
 
   return (
     <>
       <div
-        className="flex items-center py-2 hover:bg-gray-50 border-b border-gray-100 transition-colors"
+        className="flex items-center py-2 hover:bg-gray-50 border-b border-gray-100 transition-colors group"
         style={{ paddingLeft: `${level * 24 + 12}px` }}
       >
+        {/* Row checkbox — hidden until hover or any selection is active */}
+        <div className="flex items-center w-6 justify-center shrink-0 mr-1">
+          <Checkbox
+            checked={isChecked}
+            onCheckedChange={handleCheckbox}
+            aria-label={`Select ${node.displayName}`}
+            className={
+              selectedIds.size > 0
+                ? 'opacity-100'
+                : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
+            }
+          />
+        </div>
+
         {/* Chevron / spacer */}
         <div className="flex items-center w-6 justify-center shrink-0 mr-2">
           {hasChildren ? (
@@ -1084,6 +1200,8 @@ function AttributeTreeNode({ node, level, expandedIds, onToggle, referencedKeys,
               referencedKeys={referencedKeys}
               onEdit={onEdit}
               onDelete={onDelete}
+              selectedIds={selectedIds}
+              onSelectionChange={onSelectionChange}
             />
           ))}
         </div>
@@ -1093,14 +1211,16 @@ function AttributeTreeNode({ node, level, expandedIds, onToggle, referencedKeys,
 }
 
 /**
- * Replaces the old flat-table `NamespaceAttributesTable`.
- * Accepts the same props interface: `{ isLoading, treeAttributes, referencedKeys, namespaceKey, onEdit, onDelete }`.
+ * NamespaceAttributesTable
  *
- * `treeAttributes` is the flat sorted array produced by `buildAttributeTree`. This component
- * converts it to a nested structure internally via `buildNestedTree`, then renders an interactive
- * expand/collapse tree using `AttributeTreeNode`. Root nodes start expanded by default.
+ * Renders the expand/collapse tree for a single namespace tab. Accepts
+ * `selectedIds` and `onSelectionChange` from the parent page for bulk-select,
+ * and `onBulkDeleteOpen` to trigger the bulk-delete confirmation dialog.
  *
- * @param {{ isLoading: boolean, treeAttributes: Array, referencedKeys: Set<string>, namespaceKey: string, onEdit: Function, onDelete: Function }} props
+ * The select-all checkbox in the header operates on the full flat `treeAttributes`
+ * array (all ids in this namespace, regardless of expand/collapse state).
+ *
+ * @param {{ isLoading: boolean, treeAttributes: Array, referencedKeys: Set<string>, namespaceKey: string, onEdit: Function, onDelete: Function, selectedIds: Set<string>, onSelectionChange: Function, onBulkDeleteOpen: Function }} props
  */
 function NamespaceAttributesTable({
   isLoading,
@@ -1109,6 +1229,9 @@ function NamespaceAttributesTable({
   namespaceKey,
   onEdit,
   onDelete,
+  selectedIds,
+  onSelectionChange,
+  onBulkDeleteOpen,
 }) {
   const nestedRoots = useMemo(() => buildNestedTree(treeAttributes), [treeAttributes]);
 
@@ -1133,10 +1256,41 @@ function NamespaceAttributesTable({
     });
   };
 
+  // Select-all operates on the full flat list for this namespace.
+  const allIds = treeAttributes.map((a) => a.id);
+  const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+  const someSelected = allIds.some((id) => selectedIds.has(id)) && !allSelected;
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      onSelectionChange((prev) => {
+        const next = new Set(prev);
+        allIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      onSelectionChange((prev) => {
+        const next = new Set(prev);
+        allIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       {/* Column header row */}
       <div className="flex items-center py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+        {/* Select-all checkbox */}
+        <div className="flex items-center w-6 justify-center shrink-0 mr-1">
+          <Checkbox
+            checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+            onCheckedChange={handleSelectAll}
+            aria-label={`Select all ${NAMESPACE_TAB_LABEL[namespaceKey] ?? namespaceKey} attributes`}
+          />
+        </div>
+        {/* Chevron placeholder */}
+        <div className="w-6 shrink-0 mr-2" />
         {/* indent + chevron placeholder + name col */}
         <div className="flex-1">Display Name / Key</div>
         <div className="w-[80px] shrink-0">Type</div>
@@ -1167,8 +1321,36 @@ function NamespaceAttributesTable({
               referencedKeys={referencedKeys}
               onEdit={onEdit}
               onDelete={onDelete}
+              selectedIds={selectedIds}
+              onSelectionChange={onSelectionChange}
             />
           ))}
+        </div>
+      )}
+
+      {/* Floating bulk-action bar — visible when any rows are selected */}
+      {selectedIds.size > 0 && (
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between rounded-b-lg shadow-sm z-10">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">
+              {selectedIds.size} selected
+            </span>
+            <button
+              onClick={() => onSelectionChange(new Set())}
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              Deselect all
+            </button>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={onBulkDeleteOpen}
+          >
+            <Trash2 className="h-4 w-4 mr-1.5" />
+            Delete {selectedIds.size}{' '}
+            {selectedIds.size === 1 ? 'item' : 'items'}
+          </Button>
         </div>
       )}
     </div>

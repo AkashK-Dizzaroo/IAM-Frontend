@@ -416,7 +416,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
             </div>
             <div className="min-w-0 flex-1">
               <DialogTitle className="text-base font-semibold text-gray-900">
-                {user?.displayName || user?.username || '—'}
+                {user?.displayName || user?.email || '—'}
               </DialogTitle>
               {user?.email && (
                 <p className="text-xs text-gray-500 mt-0.5">{user.email}</p>

@@ -90,7 +90,7 @@ function UserSearchPicker({ onSelect }) {
               ref={inputRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Name, email or username…"
+              placeholder="Name or email…"
               className="w-full text-sm outline-none placeholder-gray-400"
             />
           </div>
@@ -103,8 +103,8 @@ function UserSearchPicker({ onSelect }) {
               <div className="px-3 py-3 text-xs text-gray-400 text-center">No users found</div>
             ) : (
               users.map((u) => {
-                const name = u.displayName || u.username || u.email || 'User';
-                const sub  = u.email && u.email !== name ? u.email : u.username;
+                const name = u.displayName || u.email || 'User';
+                const sub  = u.email && u.email !== name ? u.email : null;
                 const parts = name.split(' ');
                 const initials = parts.length > 1
                   ? (parts[0][0] + parts[1][0]).toUpperCase()
@@ -543,13 +543,13 @@ export function PolicyTesterPage() {
             {form.selectedUser && (
               <div className="flex items-center gap-2 px-2.5 py-1.5 bg-primary/5 border border-primary/20 rounded-md">
                 <span className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold bg-primary/15 text-primary flex-shrink-0">
-                  {(form.selectedUser.displayName || form.selectedUser.username || form.selectedUser.email || 'U').substring(0, 2).toUpperCase()}
+                  {(form.selectedUser.displayName || form.selectedUser.email || 'U').substring(0, 2).toUpperCase()}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-primary truncate">
-                    {form.selectedUser.displayName || form.selectedUser.username || form.selectedUser.email}
+                    {form.selectedUser.displayName || form.selectedUser.email}
                   </p>
-                  {form.selectedUser.email && form.selectedUser.email !== (form.selectedUser.displayName || form.selectedUser.username) && (
+                  {form.selectedUser.email && form.selectedUser.email !== form.selectedUser.displayName && (
                     <p className="text-[10px] text-gray-400 truncate">{form.selectedUser.email}</p>
                   )}
                 </div>
@@ -574,7 +574,7 @@ export function PolicyTesterPage() {
                 >
                   <span className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold bg-primary/15 text-primary">Me</span>
                   <span className="text-xs text-primary font-medium">
-                    {currentUser.displayName || currentUser.username || currentUser.email || 'Me'}
+                    {currentUser.displayName || currentUser.email || 'Me'}
                   </span>
                 </button>
               )}

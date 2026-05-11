@@ -317,14 +317,20 @@ export function RequestAccessModal({
                     {...register("justification", {
                       required: "Justification is required",
                       minLength: { value: 10, message: "Please provide at least 10 characters" },
+                      maxLength: { value: 2000, message: "Justification must be 2000 characters or less" },
                     })}
                     placeholder="Explain why you need this access…"
                     rows={3}
+                    maxLength={2000}
                     className={errors.justification ? "border-red-400 bg-red-50" : ""}
                   />
-                  {errors.justification && (
-                    <p className="text-xs text-red-500 mt-1">{errors.justification.message}</p>
-                  )}
+                  <div className="flex justify-between items-start mt-1">
+                    {errors.justification ? (
+                      <p className="text-xs text-red-500">{errors.justification.message}</p>
+                    ) : (
+                      <span />
+                    )}
+                  </div>
                 </div>
               </div>
             </TabsContent>

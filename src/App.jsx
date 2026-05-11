@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/config/queryClient";
 import { AuthProvider, useAuth, ProtectedRoute } from "@/features/auth";
 import LogoutPage from "@/features/auth/components/LogoutPage";
+import OAuthCallbackPage from "@/features/auth/components/OAuthCallbackPage";
 import { Toaster } from "@/components/ui/toaster";
 import { getValidHubUrl } from "@/config/env";
 import { DashboardPage } from "@/features/layout";
@@ -115,6 +116,7 @@ function AppRoutes() {
         />
       </Route>
 
+      <Route path="/callback" element={<OAuthCallbackPage />} />
       <Route path="/logout" element={<LogoutPage />} />
 
       <Route

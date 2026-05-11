@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import apiClient from "@/lib/apiClient";
 import { getValidHubUrl } from "@/config/env";
-import { PLATFORM_TOKEN_KEY, PLATFORM_USER_KEY } from "@/features/auth/utils/authInit";
+import { PLATFORM_TOKEN_KEY, PLATFORM_USER_KEY } from "@/features/auth/utils/sessionKeys";
 
 /**
  * Handles forced logout when Hub navigates this tab to /logout.

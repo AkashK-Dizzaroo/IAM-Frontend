@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import apiClient from "@/lib/apiClient";
 import { getValidHubUrl } from "@/config/env";
 import { AuthContext } from "./AuthContext";
-import { PLATFORM_TOKEN_KEY, PLATFORM_USER_KEY } from "@/features/auth/utils/authInit";
+import { PLATFORM_TOKEN_KEY, PLATFORM_USER_KEY } from "@/features/auth/utils/sessionKeys";
+import { startOAuthLogin } from "@/features/auth/utils/oauthFlow";
 
 export const DEFAULT_EFFECTIVE_ROLES = {
   isHubOwner: false,
@@ -15,10 +16,22 @@ export const DEFAULT_EFFECTIVE_ROLES = {
   canAccessAdmin: false,
 };
 
+// Pages where session failure must NOT trigger a fresh OAuth redirect — the
+// browser is already in a navigation flow that owns the auth lifecycle.
+const OAUTH_FLOW_PATHS = new Set(["/callback", "/logout"]);
+
+function isInOAuthFlowPath() {
+  const p = (typeof window !== "undefined" && window.location.pathname) || "";
+  return OAUTH_FLOW_PATHS.has(p);
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Avoid re-entering the OAuth redirect while one is already in progress
+  // (e.g. focus/blur events firing during the navigation).
+  const oauthRedirectInFlightRef = useRef(false);
 
   const clearSession = () => {
     localStorage.removeItem(PLATFORM_USER_KEY);
@@ -27,6 +40,16 @@ export function AuthProvider({ children }) {
     setUser(null);
     setIsAuthenticated(false);
   };
+
+  const triggerLogin = useCallback(() => {
+    if (oauthRedirectInFlightRef.current) return;
+    if (isInOAuthFlowPath()) return;
+    oauthRedirectInFlightRef.current = true;
+    startOAuthLogin().catch((e) => {
+      oauthRedirectInFlightRef.current = false;
+      console.error("[IAM] Failed to start OAuth flow", e);
+    });
+  }, []);
 
   const verifySession = useCallback(async ({ redirectOnFailure = true } = {}) => {
     try {
@@ -39,24 +62,25 @@ export function AuthProvider({ children }) {
         setUser(backendUser);
         setIsAuthenticated(true);
         return true;
-      } else {
-        clearSession();
-        if (redirectOnFailure) window.location.href = `${getValidHubUrl()}/login`;
-        return false;
       }
-    } catch {
-      const isDev = import.meta.env.DEV || localStorage.getItem("dev_mode") === "true";
       clearSession();
-      if (redirectOnFailure && !isDev) {
-        window.location.href = `${getValidHubUrl()}/login`;
-      }
+      if (redirectOnFailure) triggerLogin();
+      return false;
+    } catch {
+      clearSession();
+      if (redirectOnFailure) triggerLogin();
       return false;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [triggerLogin]);
 
   useEffect(() => {
     const initializeAuth = async () => {
+      // Don't pre-empt the OAuth callback page — let it complete its exchange,
+      // which will set cookies and navigate the browser.
+      if (isInOAuthFlowPath()) {
+        setLoading(false);
+        return;
+      }
       await verifySession({ redirectOnFailure: true });
       setLoading(false);
     };
@@ -64,8 +88,7 @@ export function AuthProvider({ children }) {
     initializeAuth();
   }, [verifySession]);
 
-  // Re-verify when this window/tab regains focus — covers both tab-switching and
-  // switching back from another browser window (e.g. Hub in one window, IAM in another).
+  // Re-verify when this window/tab regains focus.
   useEffect(() => {
     const check = () => {
       if (isAuthenticated) verifySession({ redirectOnFailure: true });

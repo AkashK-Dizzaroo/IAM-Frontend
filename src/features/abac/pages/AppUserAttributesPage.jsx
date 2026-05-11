@@ -663,7 +663,7 @@ export function AppUserAttributesPage() {
                     <div className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-semibold shrink-0">
                       {initial}
                     </div>
-                    <span>{u.displayName || u.email || u.username || u.id}</span>
+                    <span>{u.displayName || u.email || u.id}</span>
                     {u.email && u.displayName && (
                       <span className="text-xs text-gray-400">{u.email}</span>
                     )}

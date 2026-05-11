@@ -276,7 +276,7 @@ export function AbacUsersPage() {
   }, []);
 
   // ── edit form state ───────────────────────────────────────────────────────
-  const [editFormData, setEditFormData] = useState({ displayName: '', username: '', email: '' });
+  const [editFormData, setEditFormData] = useState({ displayName: '', email: '' });
   const [editNewAttr, setEditNewAttr] = useState({ attributeDefId: '', value: '' });
 
   const resetCreate = useCallback(() => {
@@ -292,7 +292,6 @@ export function AbacUsersPage() {
   const openEdit = (user) => {
     setEditFormData({
       displayName: user.displayName || '',
-      username: user.username || '',
       email: user.email || '',
     });
     setEditNewAttr({ attributeDefId: '', value: '' });
@@ -681,15 +680,6 @@ export function AbacUsersPage() {
                       value={editFormData.displayName}
                       onChange={(e) => setEditFormData((p) => ({ ...p, displayName: e.target.value }))}
                       placeholder="e.g. Jane Smith"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Username</Label>
-                    <Input
-                      value={editFormData.username}
-                      onChange={(e) => setEditFormData((p) => ({ ...p, username: e.target.value }))}
-                      className="font-mono"
-                      placeholder="e.g. jsmith"
                     />
                   </div>
                 </div>

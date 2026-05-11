@@ -1,6 +1,6 @@
 import axios from "axios";
 import { env } from "@/config/env";
-import { PLATFORM_USER_KEY } from "@/features/auth/utils/authInit";
+import { PLATFORM_USER_KEY } from "@/features/auth/utils/sessionKeys";
 import { logger } from "./logger";
 
 const REQUEST_ID_HEADER = "x-request-id";
@@ -92,15 +92,14 @@ apiClient.interceptors.response.use(
     });
 
     if (error.response?.status === 401) {
-      const isDevEnv =
-        import.meta.env.DEV || import.meta.env.VITE_DEV_MODE === "true";
       const devMode = localStorage.getItem("dev_mode") === "true";
       localStorage.removeItem(PLATFORM_USER_KEY);
       if (devMode) {
         console.warn("[API] 401 — session invalid");
-      } else if (!isDevEnv && !window.location.pathname.includes("/login")) {
-        window.location.href = `${env.getValidHubUrl()}/login`;
       }
+      // AuthProvider's verifySession + polling layer handles re-auth via OAuth.
+      // We deliberately do NOT redirect from the Axios interceptor — multiple
+      // concurrent 401s would each kick off a redirect race.
     }
     return Promise.reject(error);
   }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Navigate } from "react-router-dom";
-import { getValidHubUrl } from "@/config/env";
 import { useAuth } from "../hooks/useAuth";
+import { startOAuthLogin } from "@/features/auth/utils/oauthFlow";
 
 export const ProtectedRoute = ({ children, requiredRoles = [] }) => {
   const { user, loading, isAuthenticated } = useAuth();
@@ -12,11 +12,13 @@ export const ProtectedRoute = ({ children, requiredRoles = [] }) => {
     if (isAuthenticated && user) return;
     if (redirectStarted.current) return;
     redirectStarted.current = true;
-    const hub = getValidHubUrl().replace(/\/$/, "");
-    const returnTo = encodeURIComponent(
-      `${window.location.origin}${window.location.pathname}${window.location.search}`
-    );
-    window.location.replace(`${hub}/login?returnTo=${returnTo}`);
+    // Kick off the OAuth Authorization Code + PKCE flow against the Hub IdP.
+    // The Hub will silently re-issue a session if the user already has one
+    // there, otherwise it will prompt for login and redirect back here.
+    startOAuthLogin().catch((err) => {
+      redirectStarted.current = false;
+      console.error("[IAM] startOAuthLogin failed", err);
+    });
   }, [loading, isAuthenticated, user]);
 
   if (loading) {

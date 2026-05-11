@@ -7,6 +7,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -90,6 +91,15 @@ function ResourceAccessCell({ pairs, resourceMap }) {
 
 // ─── page ─────────────────────────────────────────────────────────────────────
 
+/**
+ * AppUsersManagementPage
+ *
+ * Displays users assigned to the selected application with their app-specific
+ * attributes. Supports single-user removal and bulk multi-select removal via a
+ * floating action bar. The currently logged-in user is excluded from bulk
+ * operations. Bulk removal runs individual service calls in parallel via
+ * Promise.all and resets selection after completion.
+ */
 export function AppUsersManagementPage() {
   const { selectedAppKey, selectedAppName } = useAbacScope();
   const { user: currentUser } = useAuth();
@@ -101,6 +111,11 @@ export function AppUsersManagementPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const debounceRef = useRef(null);
+
+  // ── Bulk-select state ──────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   useEffect(() => {
     clearTimeout(debounceRef.current);
@@ -188,6 +203,76 @@ export function AppUsersManagementPage() {
     );
   }, [allUsers, debouncedSearch]);
 
+  // ── Select-all helpers for the visible (filtered) list ────────────────────
+  // Exclude the currently logged-in user from bulk operations.
+  const selectableUsers = useMemo(
+    () =>
+      filteredUsers.filter(
+        (u) => currentUser?.id !== (u.id || u._id)
+      ),
+    [filteredUsers, currentUser]
+  );
+
+  const visibleIds = selectableUsers.map((u) => u.id || u._id);
+  const allSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someSelected = visibleIds.some((id) => selectedIds.has(id)) && !allSelected;
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        visibleIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        visibleIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const handleRowCheckbox = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // ── Bulk delete ────────────────────────────────────────────────────────────
+  const handleBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    try {
+      await Promise.all(ids.map((id) => abacService.removeAppUser(selectedAppKey, id)));
+      toast({
+        title: 'Users removed',
+        description: `${ids.length} user${ids.length === 1 ? '' : 's'} removed from ${selectedAppName || selectedAppKey}.`,
+      });
+      setBulkDeleteOpen(false);
+      setSelectedIds(new Set());
+      refetchUsers();
+    } catch (err) {
+      const msg = err?.response?.data?.error ?? err?.message ?? 'One or more removals failed.';
+      toast({ title: 'Bulk remove failed', description: msg, variant: 'destructive' });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  // Summary list for the bulk-delete confirmation dialog (max 5 shown).
+  const bulkDeletePreviewNames = useMemo(() => {
+    const ids = Array.from(selectedIds);
+    const matched = allUsers.filter((u) => ids.includes(u.id || u._id));
+    return matched.slice(0, 5).map((u) => u.displayName || u.email || u.id);
+  }, [selectedIds, allUsers]);
+
+  const bulkDeleteOverflow = selectedIds.size > 5 ? selectedIds.size - 5 : 0;
+
   if (!selectedAppKey) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center h-full">
@@ -265,15 +350,26 @@ export function AppUsersManagementPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-left uppercase text-xs text-gray-500 tracking-wide">
-                <th className="px-4 py-3 font-medium w-[26%]">User</th>
-                <th className="px-4 py-3 font-medium w-[38%]">Resource Access</th>
-                <th className="px-4 py-3 font-medium w-[18%]">Flags</th>
+                {/* Select-all checkbox column */}
+                <th className="px-3 py-3 w-10">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                    onCheckedChange={handleSelectAll}
+                    aria-label="Select all visible users"
+                  />
+                </th>
+                <th className="px-4 py-3 font-medium w-[24%]">User</th>
+                <th className="px-4 py-3 font-medium w-[35%]">Resource Access</th>
+                <th className="px-4 py-3 font-medium w-[16%]">Flags</th>
                 <th className="px-4 py-3 font-medium w-[8%] text-center">Assigned</th>
                 <th className="px-4 py-3 font-medium w-[10%] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredUsers.map((user) => {
+                const userId = user.id || user._id;
+                const isCurrentUser = currentUser?.id === userId;
+                const isSelectable = !isCurrentUser;
                 const initial = (user.displayName || user.email || '?')[0].toUpperCase();
                 const attrs = user.appAttributes ?? {};
                 const assignedCount = user.appUserAttributes?.length ?? Object.keys(attrs).length;
@@ -281,7 +377,25 @@ export function AppUsersManagementPage() {
                 const flags = extractFlags(attrs);
 
                 return (
-                  <tr key={user.id} className="hover:bg-gray-50 transition-colors align-top">
+                  <tr key={userId} className="hover:bg-gray-50 transition-colors align-top group">
+                    {/* Row-level checkbox — hidden until hover or selection is active */}
+                    <td className="px-3 py-3 w-10">
+                      {isSelectable ? (
+                        <Checkbox
+                          checked={selectedIds.has(userId)}
+                          onCheckedChange={() => handleRowCheckbox(userId)}
+                          aria-label={`Select ${user.displayName || user.email}`}
+                          className={
+                            selectedIds.size > 0
+                              ? 'opacity-100'
+                              : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
+                          }
+                        />
+                      ) : (
+                        <div className="w-4 h-4" />
+                      )}
+                    </td>
+
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
@@ -289,7 +403,7 @@ export function AppUsersManagementPage() {
                         </div>
                         <div className="min-w-0">
                           <div className="font-medium text-gray-900 truncate">
-                            {user.displayName || user.username || '—'}
+                            {user.displayName || user.email || '—'}
                           </div>
                           <div className="text-xs text-gray-500 truncate">{user.email || '—'}</div>
                         </div>
@@ -331,7 +445,7 @@ export function AppUsersManagementPage() {
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        {currentUser?.id !== (user.id || user._id) && (
+                        {!isCurrentUser && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -348,10 +462,36 @@ export function AppUsersManagementPage() {
               })}
             </tbody>
           </table>
+
+          {/* Floating bulk-action bar — inside the table card, above the bottom border */}
+          {selectedIds.size > 0 && (
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between rounded-b-lg shadow-sm z-10">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-700">
+                  {selectedIds.size} selected
+                </span>
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-sm text-gray-500 hover:text-gray-700 underline"
+                >
+                  Deselect all
+                </button>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Delete {selectedIds.size}{' '}
+                {selectedIds.size === 1 ? 'item' : 'items'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Delete confirmation dialog */}
+      {/* ── Single-row delete confirmation dialog ── */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
           <DialogHeader>
@@ -378,7 +518,44 @@ export function AppUsersManagementPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit attributes dialog */}
+      {/* ── Bulk-delete confirmation dialog ── */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selectedIds.size}{' '}
+              {selectedIds.size === 1 ? 'item' : 'items'}?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">This action cannot be undone.</p>
+          {bulkDeletePreviewNames.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {bulkDeletePreviewNames.map((name, i) => (
+                <li key={i} className="text-sm text-gray-700 truncate">
+                  • {name}
+                </li>
+              ))}
+              {bulkDeleteOverflow > 0 && (
+                <li className="text-sm text-gray-400">+{bulkDeleteOverflow} more</li>
+              )}
+            </ul>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+            >
+              {isBulkDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit attributes dialog ── */}
       <AppUserAttributesPanel
         appKey={selectedAppKey}
         user={selectedUser}
@@ -388,7 +565,7 @@ export function AppUsersManagementPage() {
         onAttributeChanged={refetchUsers}
       />
 
-      {/* Assign user dialog */}
+      {/* ── Assign user dialog ── */}
       <AssignUserDialog
         open={assignDialogOpen}
         onClose={() => setAssignDialogOpen(false)}

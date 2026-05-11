@@ -47,6 +47,7 @@ export const MyProfilePage = () => {
     phoneNumber: "",
     address: "",
   });
+  const [formErrors, setFormErrors] = useState({});
 
   // Profile tab — query key ["userProfile"]
   const {
@@ -104,11 +105,41 @@ export const MyProfilePage = () => {
         address: profileData.address || "",
       });
     }
+    setFormErrors({});
     setIsEditing(true);
   };
 
-  const handleSave = () => updateMutation.mutate(formData);
-  const handleCancel = () => setIsEditing(false);
+  const validateForm = () => {
+    const errors = {};
+    if (!formData.firstName.trim()) {
+      errors.firstName = "First name is required";
+    } else if (formData.firstName.trim().length > 50) {
+      errors.firstName = "First name must be 50 characters or less";
+    }
+    if (!formData.lastName.trim()) {
+      errors.lastName = "Last name is required";
+    } else if (formData.lastName.trim().length > 50) {
+      errors.lastName = "Last name must be 50 characters or less";
+    }
+    if (formData.phoneNumber && formData.phoneNumber.length > 30) {
+      errors.phoneNumber = "Phone number must be 30 characters or less";
+    }
+    if (formData.address && formData.address.length > 500) {
+      errors.address = "Address must be 500 characters or less";
+    }
+    return errors;
+  };
+
+  const handleSave = () => {
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    setFormErrors({});
+    updateMutation.mutate(formData);
+  };
+  const handleCancel = () => { setIsEditing(false); setFormErrors({}); };
 
   const formatDate = (date) => {
     if (!date) return "—";
@@ -195,30 +226,36 @@ export const MyProfilePage = () => {
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="firstName">First Name</Label>
+                        <Label htmlFor="firstName">First Name <span className="text-red-500">*</span></Label>
                         <Input
                           id="firstName"
                           value={formData.firstName}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              firstName: e.target.value,
-                            })
-                          }
+                          maxLength={50}
+                          onChange={(e) => {
+                            setFormData({ ...formData, firstName: e.target.value });
+                            if (formErrors.firstName) setFormErrors((prev) => ({ ...prev, firstName: undefined }));
+                          }}
+                          className={formErrors.firstName ? "border-red-400 bg-red-50" : ""}
                         />
+                        {formErrors.firstName && (
+                          <p className="text-xs text-red-500 mt-1">{formErrors.firstName}</p>
+                        )}
                       </div>
                       <div>
-                        <Label htmlFor="lastName">Last Name</Label>
+                        <Label htmlFor="lastName">Last Name <span className="text-red-500">*</span></Label>
                         <Input
                           id="lastName"
                           value={formData.lastName}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              lastName: e.target.value,
-                            })
-                          }
+                          maxLength={50}
+                          onChange={(e) => {
+                            setFormData({ ...formData, lastName: e.target.value });
+                            if (formErrors.lastName) setFormErrors((prev) => ({ ...prev, lastName: undefined }));
+                          }}
+                          className={formErrors.lastName ? "border-red-400 bg-red-50" : ""}
                         />
+                        {formErrors.lastName && (
+                          <p className="text-xs text-red-500 mt-1">{formErrors.lastName}</p>
+                        )}
                       </div>
                     </div>
                     <div>
@@ -226,27 +263,33 @@ export const MyProfilePage = () => {
                       <Input
                         id="phoneNumber"
                         value={formData.phoneNumber}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            phoneNumber: e.target.value,
-                          })
-                        }
+                        maxLength={30}
+                        onChange={(e) => {
+                          setFormData({ ...formData, phoneNumber: e.target.value });
+                          if (formErrors.phoneNumber) setFormErrors((prev) => ({ ...prev, phoneNumber: undefined }));
+                        }}
+                        className={formErrors.phoneNumber ? "border-red-400 bg-red-50" : ""}
                       />
+                      {formErrors.phoneNumber && (
+                        <p className="text-xs text-red-500 mt-1">{formErrors.phoneNumber}</p>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="address">Address</Label>
                       <Input
                         id="address"
                         value={formData.address}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            address: e.target.value,
-                          })
-                        }
+                        maxLength={500}
+                        onChange={(e) => {
+                          setFormData({ ...formData, address: e.target.value });
+                          if (formErrors.address) setFormErrors((prev) => ({ ...prev, address: undefined }));
+                        }}
                         placeholder="Enter your address"
+                        className={formErrors.address ? "border-red-400 bg-red-50" : ""}
                       />
+                      {formErrors.address && (
+                        <p className="text-xs text-red-500 mt-1">{formErrors.address}</p>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <Button
