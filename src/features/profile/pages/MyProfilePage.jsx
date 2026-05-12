@@ -14,6 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tabs,
   TabsList,
   TabsTrigger,
@@ -22,18 +29,17 @@ import {
 import {
   User,
   Mail,
-  Phone,
   Building2,
   Calendar,
   Globe,
   Bell,
   MapPin,
   Shield,
-  RefreshCw,
   CheckCircle,
   XCircle,
+  RefreshCw,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 export const MyProfilePage = () => {
@@ -44,7 +50,6 @@ export const MyProfilePage = () => {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
-    phoneNumber: "",
     address: "",
   });
   const [formErrors, setFormErrors] = useState({});
@@ -90,7 +95,8 @@ export const MyProfilePage = () => {
   } = useQuery({
     queryKey: ["userAssignments"],
     queryFn: async () => {
-      const response = await profileService.getUserRolesAndResources();
+      const uid = user?.id || user?.user_id;
+      const response = await profileService.getUserRolesAndResources(uid);
       return response.data;
     },
     enabled: !!user,
@@ -101,7 +107,6 @@ export const MyProfilePage = () => {
       setFormData({
         firstName: profileData.firstName || "",
         lastName: profileData.lastName || "",
-        phoneNumber: profileData.phoneNumber || "",
         address: profileData.address || "",
       });
     }
@@ -120,9 +125,6 @@ export const MyProfilePage = () => {
       errors.lastName = "Last name is required";
     } else if (formData.lastName.trim().length > 50) {
       errors.lastName = "Last name must be 50 characters or less";
-    }
-    if (formData.phoneNumber && formData.phoneNumber.length > 30) {
-      errors.phoneNumber = "Phone number must be 30 characters or less";
     }
     if (formData.address && formData.address.length > 500) {
       errors.address = "Address must be 500 characters or less";
@@ -156,6 +158,78 @@ export const MyProfilePage = () => {
 
   const profile = profileData || {};
   const assignments = assignmentsData || [];
+
+  const [filters, setFilters] = useState({
+    application: "all",
+    resource: "all",
+    role: "all",
+  });
+
+  const filterOptions = useMemo(() => {
+    const apps = new Map();
+    const resources = new Set();
+    const roles = new Set();
+
+    for (const a of assignments) {
+      const key = a?.application?.key || a?.application?.id || a?.applicationId || a?.appKey || null;
+      const name = a?.application?.name || a?.application?.key || a?.appName || null;
+      if (key && !apps.has(String(key))) apps.set(String(key), String(name || key));
+
+      const resourceName =
+        a?.resource?.name ||
+        a?.resourceName ||
+        a?.resource?.resourceExternalId ||
+        null;
+      if (resourceName) resources.add(String(resourceName));
+
+      const roleName =
+        a?.role?.name ||
+        a?.roleName ||
+        a?.role?.roleCode ||
+        a?.roleCode ||
+        (typeof a?.role === "string" ? a.role : null);
+      if (roleName) roles.add(String(roleName));
+    }
+
+    return {
+      applications: Array.from(apps.entries()).map(([value, label]) => ({ value, label }))
+        .sort((x, y) => x.label.localeCompare(y.label)),
+      resources: Array.from(resources).sort((a, b) => a.localeCompare(b)),
+      roles: Array.from(roles).sort((a, b) => a.localeCompare(b)),
+    };
+  }, [assignments]);
+
+  const filteredAssignments = useMemo(() => {
+    const norm = (v) => String(v || "").trim().toLowerCase();
+    const appFilter = filters.application;
+    const resFilter = filters.resource;
+    const roleFilter = filters.role;
+
+    return assignments.filter((a) => {
+      if (appFilter !== "all") {
+        const k = String(a?.application?.key || a?.application?.id || a?.applicationId || a?.appKey || "");
+        if (k !== String(appFilter)) return false;
+      }
+      if (resFilter !== "all") {
+        const rn =
+          a?.resource?.name ||
+          a?.resourceName ||
+          a?.resource?.resourceExternalId ||
+          "";
+        if (norm(rn) !== norm(resFilter)) return false;
+      }
+      if (roleFilter !== "all") {
+        const ro =
+          a?.role?.name ||
+          a?.roleName ||
+          a?.role?.roleCode ||
+          a?.roleCode ||
+          (typeof a?.role === "string" ? a.role : "");
+        if (norm(ro) !== norm(roleFilter)) return false;
+      }
+      return true;
+    });
+  }, [assignments, filters]);
 
   return (
     <Tabs defaultValue="profile" className="space-y-6">
@@ -259,22 +333,6 @@ export const MyProfilePage = () => {
                       </div>
                     </div>
                     <div>
-                      <Label htmlFor="phoneNumber">Phone Number</Label>
-                      <Input
-                        id="phoneNumber"
-                        value={formData.phoneNumber}
-                        maxLength={30}
-                        onChange={(e) => {
-                          setFormData({ ...formData, phoneNumber: e.target.value });
-                          if (formErrors.phoneNumber) setFormErrors((prev) => ({ ...prev, phoneNumber: undefined }));
-                        }}
-                        className={formErrors.phoneNumber ? "border-red-400 bg-red-50" : ""}
-                      />
-                      {formErrors.phoneNumber && (
-                        <p className="text-xs text-red-500 mt-1">{formErrors.phoneNumber}</p>
-                      )}
-                    </div>
-                    <div>
                       <Label htmlFor="address">Address</Label>
                       <Input
                         id="address"
@@ -330,15 +388,6 @@ export const MyProfilePage = () => {
                           <p className="text-sm text-gray-500">Email</p>
                           <p className="font-medium text-gray-900 break-words">
                             {profile.email || "—"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <Phone className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm text-gray-500">Phone Number</p>
-                          <p className="font-medium text-gray-900">
-                            {profile.phoneNumber || "—"}
                           </p>
                         </div>
                       </div>
@@ -504,16 +553,77 @@ export const MyProfilePage = () => {
                     Your application access, roles, and resource assignments
                   </CardDescription>
                 </div>
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <RefreshCw
-                    className={`w-3 h-3 ${assignmentsLoading ? "animate-spin" : ""}`}
-                  />
-                  {assignments.length}{" "}
-                  {assignments.length === 1 ? "assignment" : "assignments"}
-                </Badge>
+                <div className="text-xs text-gray-500">
+                  {filteredAssignments.length}{" "}
+                  {filteredAssignments.length === 1 ? "assignment" : "assignments"}
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
+              <div className="px-4 py-4 border-b bg-white">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div>
+                    <Label className="text-xs text-gray-500">Application</Label>
+                    <Select
+                      value={filters.application}
+                      onValueChange={(v) => setFilters((p) => ({ ...p, application: v }))}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="All applications" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        {filterOptions.applications.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-gray-500">Resource</Label>
+                    <Select
+                      value={filters.resource}
+                      onValueChange={(v) => setFilters((p) => ({ ...p, resource: v }))}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="All resources" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        {filterOptions.resources.map((r) => (
+                          <SelectItem key={r} value={r}>
+                            {r}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-gray-500">Role</Label>
+                    <Select
+                      value={filters.role}
+                      onValueChange={(v) => setFilters((p) => ({ ...p, role: v }))}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="All roles" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        {filterOptions.roles.map((r) => (
+                          <SelectItem key={r} value={r}>
+                            {r}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b">
@@ -531,10 +641,7 @@ export const MyProfilePage = () => {
                         Approved by
                       </th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                        Start date
-                      </th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                        End date
+                        Approved date
                       </th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700">
                         Status
@@ -542,7 +649,7 @@ export const MyProfilePage = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {assignments.map((assignment) => {
+                    {filteredAssignments.map((assignment) => {
                       const isExpired =
                         assignment.validUntil &&
                         new Date(assignment.validUntil) < new Date();
@@ -556,15 +663,12 @@ export const MyProfilePage = () => {
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-2">
                               <Globe className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-                              <div className="min-w-0">
-                                <div className="font-medium text-gray-900 truncate">
-                                  {assignment.application?.name ||
-                                    assignment.application?.key ||
-                                    assignment.appName ||
-                                    "Unknown Application"}
+                              <div className="break-words whitespace-normal">
+                                <div className="font-medium text-gray-900">
+                                  {assignment.application?.name || assignment.application?.key || assignment.appName || "Unknown Application"}
                                 </div>
                                 {assignment.application?.key && assignment.application?.name && (
-                                  <div className="text-xs text-gray-500 truncate">
+                                  <div className="text-xs text-gray-500">
                                     {assignment.application.key}
                                   </div>
                                 )}
@@ -573,45 +677,38 @@ export const MyProfilePage = () => {
                           </td>
                           <td className="px-4 py-4">
                             {(() => {
-                              const resourceName =
-                                assignment.resource?.name ||
-                                assignment.resourceName ||
-                                assignment.resource?.resourceExternalId ||
-                                null;
+                              const resourceName = assignment.resource?.name || assignment.resourceName || assignment.resource?.resourceExternalId || null;
                               return resourceName ? (
-                                <div className="min-w-0">
-                                  <div className="font-medium text-gray-900 truncate">
+                                <div className="break-words whitespace-normal">
+                                  <div className="font-medium text-gray-900">
                                     {resourceName}
                                   </div>
                                   {assignment.resource?.level != null && (
-                                    <div className="text-xs text-gray-500 truncate">
+                                    <div className="text-xs text-gray-500">
                                       Level {assignment.resource.level}
                                     </div>
                                   )}
                                 </div>
                               ) : (
-                                <span className="text-gray-400 italic">
-                                  Global Access
-                                </span>
+                                <span className="text-gray-400 italic">Global Access</span>
                               );
                             })()}
                           </td>
                           <td className="px-4 py-4">
-                            {(() => {
-                              const roleName =
-                                assignment.role?.name ||
-                                assignment.roleName ||
-                                assignment.role?.roleCode ||
-                                assignment.roleCode ||
-                                (typeof assignment.role === "string" ? assignment.role : null);
-                              return roleName ? (
-                                <Badge variant="outline" className="text-xs">
-                                  {roleName}
-                                </Badge>
-                              ) : (
-                                <span className="text-gray-400 italic">—</span>
-                              );
-                            })()}
+                            {assignment.assignedBy ? (
+                              <div className="break-words whitespace-normal">
+                                <div className="text-gray-900">
+                                  {assignment.assignedBy.name || assignment.assignedBy.email || "—"}
+                                </div>
+                                {assignment.assignedBy.name && assignment.assignedBy.email && (
+                                  <div className="text-xs text-gray-500">
+                                    {assignment.assignedBy.email}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 italic">—</span>
+                            )}
                           </td>
                           <td className="px-4 py-4">
                             {assignment.assignedBy ? (
@@ -634,30 +731,6 @@ export const MyProfilePage = () => {
                           </td>
                           <td className="px-4 py-4 text-gray-700">
                             {formatDate(assignment.validFrom)}
-                          </td>
-                          <td className="px-4 py-4">
-                            {assignment.validUntil ? (
-                              <div>
-                                <div
-                                  className={`${
-                                    isExpired
-                                      ? "text-red-600 font-medium"
-                                      : "text-gray-700"
-                                  }`}
-                                >
-                                  {formatDate(assignment.validUntil)}
-                                </div>
-                                {isExpired && (
-                                  <div className="text-xs text-red-500 mt-1">
-                                    Expired
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 italic">
-                                No expiration
-                              </span>
-                            )}
                           </td>
                           <td className="px-4 py-4">
                             <Badge

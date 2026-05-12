@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { startOAuthLogin } from "@/features/auth/utils/oauthFlow";
+import { AppShellSkeleton } from "@/components/ui/AppShellSkeleton";
 
 export const ProtectedRoute = ({ children, requiredRoles = [] }) => {
   const { user, loading, isAuthenticated } = useAuth();
@@ -22,11 +23,7 @@ export const ProtectedRoute = ({ children, requiredRoles = [] }) => {
   }, [loading, isAuthenticated, user]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600" />
-      </div>
-    );
+    return <AppShellSkeleton />;
   }
 
   if (!isAuthenticated || !user) {

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import apiClient from "@/lib/apiClient";
 import { getValidHubUrl } from "@/config/env";
 import { PLATFORM_TOKEN_KEY, PLATFORM_USER_KEY } from "@/features/auth/utils/sessionKeys";
+import { queryClient } from "@/config/queryClient";
 
 /**
  * Handles forced logout when Hub navigates this tab to /logout.
@@ -16,9 +17,9 @@ export default function LogoutPage() {
         await apiClient.post("/auth/logout").catch(() => {});
       } finally {
         if (cancelled) return;
-        localStorage.removeItem(PLATFORM_USER_KEY);
-        localStorage.removeItem(PLATFORM_TOKEN_KEY);
-        localStorage.removeItem("dev_mode");
+        localStorage.clear();
+        sessionStorage.clear();
+        queryClient.clear();
         window.location.replace(`${getValidHubUrl()}/login`);
       }
     })();

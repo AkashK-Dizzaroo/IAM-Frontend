@@ -8,16 +8,30 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Globe, Shield, RefreshCw, CheckCircle, XCircle } from "lucide-react";
+import { useMemo, useState } from "react";
 
 export const ApplicationRoleAssignmentsPage = () => {
   const { user } = useAuth();
+  const [filters, setFilters] = useState({
+    application: "all",
+    resource: "all",
+    role: "all",
+  });
 
   const { data: assignmentsData, isLoading, error } = useQuery({
     queryKey: ["userAssignments"],
     queryFn: async () => {
-      const response = await profileService.getUserRolesAndResources();
+      const uid = user?.id || user?.user_id;
+      const response = await profileService.getUserRolesAndResources(uid);
       return response.data;
     },
     enabled: !!user,
@@ -53,6 +67,72 @@ export const ApplicationRoleAssignmentsPage = () => {
   }
 
   const assignments = assignmentsData || [];
+
+  const filterOptions = useMemo(() => {
+    const apps = new Map();
+    const resources = new Set();
+    const roles = new Set();
+
+    for (const a of assignments) {
+      const key = a?.application?.key || a?.application?.id || a?.applicationId || a?.appKey || null;
+      const name = a?.application?.name || a?.application?.key || a?.appName || null;
+      if (key && !apps.has(String(key))) apps.set(String(key), String(name || key));
+
+      const resourceName =
+        a?.resource?.name ||
+        a?.resourceName ||
+        a?.resource?.resourceExternalId ||
+        null;
+      if (resourceName) resources.add(String(resourceName));
+
+      const roleName =
+        a?.role?.name ||
+        a?.roleName ||
+        a?.role?.roleCode ||
+        a?.roleCode ||
+        (typeof a?.role === "string" ? a.role : null);
+      if (roleName) roles.add(String(roleName));
+    }
+
+    return {
+      applications: Array.from(apps.entries()).map(([value, label]) => ({ value, label }))
+        .sort((x, y) => x.label.localeCompare(y.label)),
+      resources: Array.from(resources).sort((a, b) => a.localeCompare(b)),
+      roles: Array.from(roles).sort((a, b) => a.localeCompare(b)),
+    };
+  }, [assignments]);
+
+  const filteredAssignments = useMemo(() => {
+    const norm = (v) => String(v || "").trim().toLowerCase();
+    const appFilter = filters.application;
+    const resFilter = filters.resource;
+    const roleFilter = filters.role;
+
+    return assignments.filter((a) => {
+      if (appFilter !== "all") {
+        const k = String(a?.application?.key || a?.application?.id || a?.applicationId || a?.appKey || "");
+        if (k !== String(appFilter)) return false;
+      }
+      if (resFilter !== "all") {
+        const rn =
+          a?.resource?.name ||
+          a?.resourceName ||
+          a?.resource?.resourceExternalId ||
+          "";
+        if (norm(rn) !== norm(resFilter)) return false;
+      }
+      if (roleFilter !== "all") {
+        const ro =
+          a?.role?.name ||
+          a?.roleName ||
+          a?.role?.roleCode ||
+          a?.roleCode ||
+          (typeof a?.role === "string" ? a.role : "");
+        if (norm(ro) !== norm(roleFilter)) return false;
+      }
+      return true;
+    });
+  }, [assignments, filters]);
 
   const formatDate = (date) => {
     if (!date) return "—";
@@ -100,16 +180,76 @@ export const ApplicationRoleAssignmentsPage = () => {
                   Your application access, roles, and resource assignments
                 </CardDescription>
               </div>
-              <Badge variant="outline" className="flex items-center gap-1">
-                <RefreshCw
-                  className={`w-3 h-3 ${isLoading ? "animate-spin" : ""}`}
-                />
-                {assignments.length}{" "}
-                {assignments.length === 1 ? "assignment" : "assignments"}
-              </Badge>
+              <div className="text-xs text-gray-500">
+                {filteredAssignments.length}{" "}
+                {filteredAssignments.length === 1 ? "assignment" : "assignments"}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
+            <div className="px-4 py-4 border-b bg-white">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div>
+                  <Label className="text-xs text-gray-500">Application</Label>
+                  <Select
+                    value={filters.application}
+                    onValueChange={(v) => setFilters((p) => ({ ...p, application: v }))}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="All applications" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      {filterOptions.applications.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-gray-500">Resource</Label>
+                  <Select
+                    value={filters.resource}
+                    onValueChange={(v) => setFilters((p) => ({ ...p, resource: v }))}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="All resources" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      {filterOptions.resources.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {r}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-gray-500">Role</Label>
+                  <Select
+                    value={filters.role}
+                    onValueChange={(v) => setFilters((p) => ({ ...p, role: v }))}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="All roles" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      {filterOptions.roles.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {r}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
@@ -127,10 +267,7 @@ export const ApplicationRoleAssignmentsPage = () => {
                       Approved by
                     </th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                      Start date
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                      End date
+                      Approved date
                     </th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700">
                       Status
@@ -138,7 +275,7 @@ export const ApplicationRoleAssignmentsPage = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {assignments.map((assignment) => {
+                  {filteredAssignments.map((assignment) => {
                     const isExpired =
                       assignment.validUntil &&
                       new Date(assignment.validUntil) < new Date();
@@ -214,30 +351,6 @@ export const ApplicationRoleAssignmentsPage = () => {
                         </td>
                         <td className="px-4 py-4 text-gray-700">
                           {formatDate(assignment.validFrom)}
-                        </td>
-                        <td className="px-4 py-4">
-                          {assignment.validUntil ? (
-                            <div>
-                              <div
-                                className={`${
-                                  isExpired
-                                    ? "text-red-600 font-medium"
-                                    : "text-gray-700"
-                                }`}
-                              >
-                                {formatDate(assignment.validUntil)}
-                              </div>
-                              {isExpired && (
-                                <div className="text-xs text-red-500 mt-1">
-                                  Expired
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400 italic">
-                              No expiration
-                            </span>
-                          )}
                         </td>
                         <td className="px-4 py-4">
                           <Badge

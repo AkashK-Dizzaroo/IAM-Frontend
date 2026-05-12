@@ -4,6 +4,7 @@ import { getValidHubUrl } from "@/config/env";
 import { AuthContext } from "./AuthContext";
 import { PLATFORM_TOKEN_KEY, PLATFORM_USER_KEY } from "@/features/auth/utils/sessionKeys";
 import { startOAuthLogin } from "@/features/auth/utils/oauthFlow";
+import { queryClient } from "@/config/queryClient";
 
 export const DEFAULT_EFFECTIVE_ROLES = {
   isHubOwner: false,
@@ -34,9 +35,9 @@ export function AuthProvider({ children }) {
   const oauthRedirectInFlightRef = useRef(false);
 
   const clearSession = () => {
-    localStorage.removeItem(PLATFORM_USER_KEY);
-    localStorage.removeItem(PLATFORM_TOKEN_KEY);
-    localStorage.removeItem("dev_mode");
+    localStorage.clear();
+    sessionStorage.clear();
+    queryClient.clear();
     setUser(null);
     setIsAuthenticated(false);
   };
@@ -88,28 +89,7 @@ export function AuthProvider({ children }) {
     initializeAuth();
   }, [verifySession]);
 
-  // Re-verify when this window/tab regains focus.
-  useEffect(() => {
-    const check = () => {
-      if (isAuthenticated) verifySession({ redirectOnFailure: true });
-    };
-    window.addEventListener("focus", check);
-    document.addEventListener("visibilitychange", check);
-    return () => {
-      window.removeEventListener("focus", check);
-      document.removeEventListener("visibilitychange", check);
-    };
-  }, [isAuthenticated, verifySession]);
 
-  // Poll session every 5s while authenticated — ensures prompt logout even when
-  // the IAM window stays focused the whole time after a Hub logout.
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const id = setInterval(() => {
-      verifySession({ redirectOnFailure: true });
-    }, 5_000);
-    return () => clearInterval(id);
-  }, [isAuthenticated, verifySession]);
 
   const rolesReady = true;
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Loader2, CheckCircle, XCircle, Clock, Ban, RefreshCw, Inbox,
+  Loader2, CheckCircle, XCircle, Clock, Ban, RefreshCw, Inbox, X,
 } from 'lucide-react';
 import { accessRequestService } from '../api/accessRequestService';
 import { useToast } from '@/hooks/use-toast';
@@ -62,9 +62,20 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
   // For reject: simple single-panel layout (no tabs needed)
   if (!isApprove) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-transparent">
         <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 p-6 space-y-4">
-          <h3 className="text-lg font-semibold text-red-700">Reject Access Request</h3>
+          <div className="flex items-start justify-between gap-4">
+            <h3 className="text-lg font-semibold text-red-700">Reject Access Request</h3>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              aria-label="Close"
+              disabled={loading}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
           <div className="bg-gray-50 border rounded-lg p-4 space-y-2.5">
             <InfoRow label="Requester">
               <span className="font-medium">
@@ -110,13 +121,24 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
   const resource = request.requestedResource;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-transparent">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 p-6 space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold text-green-700">Approve Access Request</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {requesterName} · {request.application?.name || request.application?.key || '—'}
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-green-700">Approve Access Request</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {requesterName} · {request.application?.name || request.application?.key || '—'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Close"
+            disabled={loading}
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -196,9 +218,7 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
                   </>
                 )}
                 {!hasPendingAttrs && (
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel}>Close</button>
-                  </div>
+                  <div className="pt-2" />
                 )}
               </div>
             ) : (
@@ -256,9 +276,7 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
                       Application attributes are still pending approval. Switch to the Application Attributes tab to complete the request.
                     </p>
                   )}
-                  <div className="flex justify-end pt-1">
-                    <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel}>Close</button>
-                  </div>
+                  <div className="pt-1" />
                 </div>
               ) : (
                 /* Resource step pending — show notes + approve button */

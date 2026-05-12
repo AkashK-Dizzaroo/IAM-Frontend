@@ -30,7 +30,20 @@ const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use(
-  (request) => {
+  async (request) => {
+    const url = request.url || "";
+    // Call /auth/verify before every API call, except for auth routes and get-all-studies
+    if (!url.includes("/auth/verify") && !url.includes("/auth/logout") && !url.includes("get-all-studies")) {
+      try {
+        await axios.post(`${env.AXIOS_BASE_URL}/auth/verify`, {}, {
+          withCredentials: true,
+          headers: { "Content-Type": "application/json", Accept: "application/json" }
+        });
+      } catch (error) {
+        logger.warn("Pre-request /auth/verify failed", { error: error.message });
+      }
+    }
+
     const requestId = generateRequestId();
     request.headers = request.headers || {};
     request.headers[REQUEST_ID_HEADER] = requestId;
