@@ -1,6 +1,6 @@
-import { PLATFORM_USER_KEY } from '@/features/auth/utils/sessionKeys';
-
 const SENSITIVE_KEY_REGEX = /(password|token|secret|authorization|cookie)/i;
+
+let currentUserId = 'anonymous';
 
 function sanitize(value, depth = 0) {
   if (value == null || depth > 4) return value;
@@ -13,22 +13,11 @@ function sanitize(value, depth = 0) {
   }, {});
 }
 
-function getCurrentUserId() {
-  try {
-    const raw = localStorage.getItem(PLATFORM_USER_KEY);
-    if (!raw) return 'anonymous';
-    const user = JSON.parse(raw);
-    return user?.id || user?.userId || user?.email || 'anonymous';
-  } catch {
-    return 'anonymous';
-  }
-}
-
 function baseContext() {
   return {
     timestamp: new Date().toISOString(),
-    userId: getCurrentUserId(),
-    route: window.location.pathname || '/',
+    userId: currentUserId,
+    route: typeof window !== 'undefined' ? window.location.pathname : '/',
   };
 }
 
@@ -49,6 +38,13 @@ export const logger = {
   info: (message, metadata) => emit('info', message, metadata),
   warn: (message, metadata) => emit('warn', message, metadata),
   error: (message, metadata) => emit('error', message, metadata),
+  /**
+   * Sets the user ID for auditing in all subsequent logs.
+   * Call this from AuthProvider when the user session is loaded.
+   */
+  setUser: (userId) => {
+    currentUserId = userId || 'anonymous';
+  },
   sanitize,
 };
 

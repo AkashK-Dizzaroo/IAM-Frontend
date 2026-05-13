@@ -2,9 +2,9 @@ import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import apiClient from "@/lib/apiClient";
 import { getValidHubUrl } from "@/config/env";
 import { AuthContext } from "./AuthContext";
-import { PLATFORM_TOKEN_KEY, PLATFORM_USER_KEY } from "@/features/auth/utils/sessionKeys";
 import { startOAuthLogin } from "@/features/auth/utils/oauthFlow";
 import { queryClient } from "@/config/queryClient";
+import { logger } from "@/lib/logger";
 
 export const DEFAULT_EFFECTIVE_ROLES = {
   isHubOwner: false,
@@ -35,11 +35,11 @@ export function AuthProvider({ children }) {
   const oauthRedirectInFlightRef = useRef(false);
 
   const clearSession = () => {
-    localStorage.clear();
     sessionStorage.clear();
     queryClient.clear();
     setUser(null);
     setIsAuthenticated(false);
+    logger.setUser('anonymous');
   };
 
   const triggerLogin = useCallback(() => {
@@ -59,9 +59,9 @@ export function AuthProvider({ children }) {
 
       if (body?.success && body?.data?.user) {
         const backendUser = body.data.user;
-        localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(backendUser));
         setUser(backendUser);
         setIsAuthenticated(true);
+        logger.setUser(backendUser.id || backendUser.email);
         return true;
       }
       clearSession();

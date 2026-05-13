@@ -1,6 +1,5 @@
 import axios from "axios";
 import { env } from "@/config/env";
-import { PLATFORM_USER_KEY } from "@/features/auth/utils/sessionKeys";
 import { logger } from "./logger";
 
 const REQUEST_ID_HEADER = "x-request-id";
@@ -106,7 +105,6 @@ apiClient.interceptors.response.use(
 
     if (error.response?.status === 401) {
       const devMode = localStorage.getItem("dev_mode") === "true";
-      localStorage.removeItem(PLATFORM_USER_KEY);
       if (devMode) {
         console.warn("[API] 401 — session invalid");
       }
