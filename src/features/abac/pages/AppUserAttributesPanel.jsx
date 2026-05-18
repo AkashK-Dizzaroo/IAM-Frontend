@@ -387,6 +387,21 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
     if (!userId) return;
     const validAssignments = rows.filter((r) => r.resourceId && r.role);
 
+    const seen = new Set();
+    for (const r of validAssignments) {
+      const key = `${r.resourceId}::${r.role}`;
+      if (seen.has(key)) {
+        const resourceName = resources.find((res) => (res.id ?? res._id) === r.resourceId)?.name ?? r.resourceId;
+        toast({
+          title: 'Duplicate assignment',
+          description: `"${resourceName}" with role "${r.role}" appears more than once. Remove the duplicate row before saving.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+      seen.add(key);
+    }
+
     const attributePayload = {};
     for (const def of otherDefs) {
       const val = attrValues[def.id];
