@@ -1,8 +1,6 @@
 import { OAUTH_STATE_KEY, OAUTH_PKCE_VERIFIER_KEY } from "./sessionKeys";
 
-const PROD_HUB_API_URL = "https://api.dizzaroo.com";
 const DEV_HUB_API_URL = "http://localhost:4001";
-const PROD_REDIRECT_URI = "https://iam.dizzaroo.com/callback";
 const DEV_REDIRECT_URI = "http://localhost:5001/callback";
 const DEFAULT_CLIENT_ID = "iam_app";
 
@@ -20,7 +18,8 @@ function getHubAuthorizeBase() {
   const apiBase =
     fromVite("VITE_HUB_OAUTH_API_URL") ||
     fromVite("VITE_API_URL") ||
-    (import.meta.env.DEV ? DEV_HUB_API_URL : PROD_HUB_API_URL);
+    (import.meta.env.DEV ? DEV_HUB_API_URL : "");
+  if (!apiBase) console.warn("[IAM] VITE_API_URL is not set — OAuth authorize URL will be wrong");
   return `${apiBase.replace(/\/$/, "")}/api/oauth/authorize`;
 }
 
@@ -31,7 +30,9 @@ function getOAuthClientId() {
 function getOAuthRedirectUri() {
   const explicit = fromVite("VITE_OAUTH_REDIRECT_URI");
   if (explicit) return explicit;
-  return import.meta.env.DEV ? DEV_REDIRECT_URI : PROD_REDIRECT_URI;
+  if (import.meta.env.DEV) return DEV_REDIRECT_URI;
+  console.warn("[IAM] VITE_OAUTH_REDIRECT_URI is not set — OAuth redirect will fail");
+  return "";
 }
 
 function base64UrlEncode(bytes) {

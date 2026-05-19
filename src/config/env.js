@@ -13,7 +13,6 @@ const sanitize = (value) => {
 
 const fromVite = (key) => sanitize(import.meta.env[key]);
 
-const PROD_HUB_URL = "https://hub.dizzaroo.com";
 const DEV_HUB_URL = "http://localhost:5000";
 const DEFAULT_DEV_API_URL = "http://localhost:4001";
 
@@ -59,8 +58,8 @@ export function getValidHubUrl() {
     return raw && isValidUrl(raw) ? raw : DEV_HUB_URL;
   }
   if (!raw || !isValidUrl(raw)) {
-    console.warn("[IAM] VITE_HUB_URL invalid or unset, using fallback:", raw || "(empty)");
-    return PROD_HUB_URL;
+    console.warn("[IAM] VITE_HUB_URL invalid or unset:", raw || "(empty)");
+    return "";
   }
   return raw;
 }

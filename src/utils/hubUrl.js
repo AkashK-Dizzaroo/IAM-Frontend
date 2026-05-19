@@ -5,7 +5,6 @@
  */
 export function getValidHubUrl() {
   const raw = import.meta.env.VITE_HUB_URL
-  const fallback = 'https://hub.dizzaroo.com'
   const devFallback = 'http://localhost:5000'
 
   if (import.meta.env.DEV) {
@@ -13,8 +12,8 @@ export function getValidHubUrl() {
   }
 
   if (!raw || !isValidHubUrl(raw)) {
-    console.warn('[IAM] VITE_HUB_URL invalid or unset, using fallback:', raw || '(empty)')
-    return fallback
+    console.warn('[IAM] VITE_HUB_URL invalid or unset:', raw || '(empty)')
+    return ""
   }
 
   return raw
