@@ -439,6 +439,7 @@ export const UserManagementTable = () => {
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  aria-label={`Edit ${user.firstName || user.email}`}
                                   onClick={() => setSelectedUser(user)}
                                 >
                                   <Edit className="w-4 h-4" />
@@ -447,6 +448,7 @@ export const UserManagementTable = () => {
                                   <Button
                                     variant="ghost"
                                     size="sm"
+                                    aria-label={`Delete ${user.firstName || user.email}`}
                                     className="hover:bg-red-50 hover:text-red-600"
                                     onClick={() => {
                                       setUserToDelete(user);

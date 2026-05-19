@@ -28,9 +28,12 @@
   },
 
   "globalHeaders": {
-    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data:",
+    "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https:; frame-src https://accounts.google.com; object-src 'none'; base-uri 'self'",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
     "x-frame-options": "SAMEORIGIN",
     "x-content-type-options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
     "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     "Cross-Origin-Embedder-Policy": "unsafe-none"
   },

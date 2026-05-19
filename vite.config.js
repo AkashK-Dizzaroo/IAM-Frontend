@@ -36,8 +36,13 @@ export default defineConfig({
     sourcemap: false,     // disables .map files (reduces file count)
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) return 'vendor' // bundle all libraries into one file
+        manualChunks: {
+          'react-core': ['react', 'react-dom'],
+          'react-router': ['react-router-dom'],
+          'query-vendor': ['@tanstack/react-query'],
+          'ui-vendor': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select', '@radix-ui/react-tabs', '@radix-ui/react-tooltip'],
+          'form-vendor': ['react-hook-form'],
+          'axios-vendor': ['axios'],
         }
       }
     },
