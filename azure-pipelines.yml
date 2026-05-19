@@ -1,35 +1,37 @@
-# Node.js with React
-# Build a Node.js project that uses React.
-# Add steps that analyze code, save build artifacts, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/javascript
-
 trigger:
-- main
+  - main
+
+pool:
+  vmImage: ubuntu-latest
 
 variables:
-  nodeVersion: '20.x'
+  - group: vg-iam-frontend-abac
+  - name: nodeVersion
+    value: '20.x'
 
 steps:
-# 0️⃣ Checkout code
-- checkout: self
-  displayName: 'Checkout Repository'
+  - checkout: self
+    displayName: Checkout Repository
 
-# 1️⃣ Install Node.js
-- task: NodeTool@0
-  inputs:
-    versionSpec: $(nodeVersion)
-  displayName: 'Install Node.js'
+  - task: NodeTool@0
+    inputs:
+      versionSpec: $(nodeVersion)
+    displayName: Install Node.js
 
-# 2️⃣ Clean previous builds
-- script: |
-    rm -rf $(Build.SourcesDirectory)/dist
-  displayName: 'Clean Previous Build'
+  - script: npm ci || npm install
+    workingDirectory: $(Build.SourcesDirectory)
+    displayName: Install Dependencies
 
-# 3️⃣ Install dependencies
-- script: |
-    npm ci || npm install
-  workingDirectory: $(Build.SourcesDirectory)
-  displayName: 'Install Dependencies'
+  - script: |
+      printf 'VITE_API_URL=%s\nVITE_HUB_URL=%s\nVITE_GOOGLE_CLIENT_ID=%s\nVITE_IAM_CUSTOM_DOMAIN=%s\n' \
+        "$(VITE_API_URL)" \
+        "$(VITE_HUB_URL)" \
+        "$(VITE_GOOGLE_CLIENT_ID)" \
+        "$(VITE_IAM_CUSTOM_DOMAIN)" \
+        > .env
+      cat .env
+    workingDirectory: $(Build.SourcesDirectory)
+    displayName: Create .env
 
 # 4️⃣ Build the app with environment variables
 # VITE_API_URL (same as Hub-Login) so both apps hit the same backend
@@ -43,7 +45,6 @@ steps:
     VITE_GOOGLE_CLIENT_ID: $(VITE_GOOGLE_CLIENT_ID)
     VITE_IAM_CUSTOM_DOMAIN: $(VITE_IAM_CUSTOM_DOMAIN)
     VITE_OAUTH_REDIRECT_URI: $(VITE_OAUTH_REDIRECT_URI)
-
 # 5️⃣ Copy Static Web App config to dist
 - script: |
     if [ -f "$(Build.SourcesDirectory)/staticwebapp.config.json" ]; then
