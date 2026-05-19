@@ -336,10 +336,8 @@ export function AbacUsersPage() {
   });
 
   const grantHubOwnerMutation = useMutation({
-    mutationFn: ({ userId, currentRoles }) => {
-      const updated = Array.from(new Set([...currentRoles, 'HUB_OWNER', 'USER']));
-      return abacService.setHubUserAttr(userId, { attribute_key: 'hub_roles', value: updated });
-    },
+    mutationFn: ({ userId }) =>
+      abacService.setHubUserAttr(userId, { attribute_key: 'hub_roles', value: ['HUB_OWNER'] }),
     onSuccess: () => {
       toast({ title: 'Hub Owner granted' });
       refetchUserAttrs();
@@ -711,7 +709,7 @@ export function AbacUsersPage() {
                             variant="outline" size="sm"
                             className="text-xs h-7 border-amber-300 text-amber-700 hover:bg-amber-50"
                             disabled={grantHubOwnerMutation.isPending}
-                            onClick={() => grantHubOwnerMutation.mutate({ userId: editUserId, currentRoles })}
+                            onClick={() => grantHubOwnerMutation.mutate({ userId: editUserId })}
                           >
                             {grantHubOwnerMutation.isPending ? 'Granting…' : 'Assign Hub Owner'}
                           </Button>
