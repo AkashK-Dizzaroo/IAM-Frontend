@@ -1,13 +1,7 @@
 node_modules
-*.ts
-*.tsx
-*.map
-*.log
 .git
 .env
 .env.*
-**/*.map
-**/*.test.js
+src
+*.log
 README.md
-MIGRATION_COMPLETE_SETUP.md
-index.html
