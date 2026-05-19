@@ -1,8 +1,9 @@
 /* @refresh reset */
 
-// Redirect Azure default domain to production IAM URL.
-if (window.location.hostname.endsWith("azurestaticapps.net")) {
-  const target = "https://iam.dizzaroo.com";
+// Redirect Azure default domain to production IAM URL if a custom domain is configured.
+const _iamCustomDomain = import.meta.env.VITE_IAM_CUSTOM_DOMAIN;
+if (_iamCustomDomain && window.location.hostname.endsWith("azurestaticapps.net")) {
+  const target = _iamCustomDomain.replace(/\/$/, "");
   const dest = window.location.pathname + window.location.search;
   window.location.replace(`${target}${dest}`);
 }
