@@ -1,11 +1,18 @@
 /* @refresh reset */
 
-// Redirect Azure default domain to production IAM URL if a custom domain is configured.
+// Redirect to custom domain only if it differs from the current hostname.
 const _iamCustomDomain = import.meta.env.VITE_IAM_CUSTOM_DOMAIN;
-if (_iamCustomDomain && window.location.hostname.endsWith("azurestaticapps.net")) {
-  const target = _iamCustomDomain.replace(/\/$/, "");
-  const dest = window.location.pathname + window.location.search;
-  window.location.replace(`${target}${dest}`);
+if (_iamCustomDomain) {
+  try {
+    const _customHost = new URL(_iamCustomDomain).hostname;
+    if (_customHost && _customHost !== window.location.hostname) {
+      const target = _iamCustomDomain.replace(/\/$/, "");
+      const dest = window.location.pathname + window.location.search;
+      window.location.replace(`${target}${dest}`);
+    }
+  } catch {
+    // invalid URL in VITE_IAM_CUSTOM_DOMAIN — skip redirect
+  }
 }
 
 // -------------------------------
