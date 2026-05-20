@@ -430,11 +430,9 @@ export const MyProfilePage = () => {
                     <p className="font-medium text-gray-900">
                       {getDisplayRole(effectiveRoles)}
                     </p>
-                    {(effectiveRoles?.isAppOwner || effectiveRoles?.isAppManager) && (
+                    {effectiveRoles?.isAppOwner && (
                       <p className="text-xs text-gray-400 mt-1">
-                        {effectiveRoles.isAppOwner
-                          ? `Owner of ${effectiveRoles.appOwnerOf.length} application(s)`
-                          : `Manager of ${effectiveRoles.appManagerOf.length} application(s)`}
+                        {`Owner of ${effectiveRoles.appOwnerOf.length} application(s)`}
                       </p>
                     )}
                   </div>

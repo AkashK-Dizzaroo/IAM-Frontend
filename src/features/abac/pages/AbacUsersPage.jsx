@@ -278,6 +278,8 @@ export function AbacUsersPage() {
   // ── edit form state ───────────────────────────────────────────────────────
   const [editFormData, setEditFormData] = useState({ displayName: '', email: '' });
   const [editNewAttr, setEditNewAttr] = useState({ attributeDefId: '', value: '' });
+  // null = no pending change; 'grant' = will assign HUB_OWNER on save; 'revoke' = will remove on save
+  const [pendingHubOwner, setPendingHubOwner] = useState(null);
 
   const resetCreate = useCallback(() => {
     createFormRef.current = { fields: {}, attrValues: {} };
@@ -295,6 +297,7 @@ export function AbacUsersPage() {
       email: user.email || '',
     });
     setEditNewAttr({ attributeDefId: '', value: '' });
+    setPendingHubOwner(null);
     setSubmitted(false);
     setDialogMode(user);
   };
@@ -335,16 +338,6 @@ export function AbacUsersPage() {
     onError: (err) => toast({ title: 'Error', description: apiErrorDescription(err), variant: 'destructive' }),
   });
 
-  const grantHubOwnerMutation = useMutation({
-    mutationFn: ({ userId }) =>
-      abacService.setHubUserAttr(userId, { attribute_key: 'hub_roles', value: ['HUB_OWNER'] }),
-    onSuccess: () => {
-      toast({ title: 'Hub Owner granted' });
-      refetchUserAttrs();
-      refetch();
-    },
-    onError: (err) => toast({ title: 'Error', description: apiErrorDescription(err), variant: 'destructive' }),
-  });
 
   const createMutation = useMutation({
     mutationFn: ({ payload }) => userService.createUser(payload),
@@ -461,6 +454,16 @@ export function AbacUsersPage() {
       if (editAttrDef && !isValueEmpty(editAttrDef, editNewAttr.value)) {
         toast({ title: 'Unsaved attribute', description: 'Click Add before saving, or clear the field.', variant: 'destructive' });
         return;
+      }
+      // Apply pending hub_roles change first (if any), then save core fields
+      if (pendingHubOwner === 'grant') {
+        abacService.setHubUserAttr(editUserId, { attribute_key: 'hub_roles', value: ['HUB_OWNER'] })
+          .then(() => { setPendingHubOwner(null); refetchUserAttrs(); })
+          .catch((err) => toast({ title: 'Failed to assign Hub Owner', description: apiErrorDescription(err), variant: 'destructive' }));
+      } else if (pendingHubOwner === 'revoke') {
+        abacService.setHubUserAttr(editUserId, { attribute_key: 'hub_roles', value: ['USER'] })
+          .then(() => { setPendingHubOwner(null); refetchUserAttrs(); })
+          .catch((err) => toast({ title: 'Failed to remove Hub Owner', description: apiErrorDescription(err), variant: 'destructive' }));
       }
       updateMutation.mutate({ id: editUserId, data: editFormData });
     }
@@ -703,50 +706,96 @@ export function AbacUsersPage() {
                       {(() => {
                         const hubRolesAttr = userAttrs.find((a) => (a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key) === 'hub_roles');
                         const currentRoles = Array.isArray(hubRolesAttr?.value) ? hubRolesAttr.value : typeof hubRolesAttr?.value === 'string' && hubRolesAttr.value ? [hubRolesAttr.value] : [];
-                        const isAlreadyHubOwner = currentRoles.includes('HUB_OWNER');
-                        return !isAlreadyHubOwner ? (
+                        const isHubOwnerInDb = currentRoles.includes('HUB_OWNER');
+                        // Compute effective state: db state + pending override
+                        const effectiveIsHubOwner =
+                          pendingHubOwner === 'grant' ? true :
+                          pendingHubOwner === 'revoke' ? false :
+                          isHubOwnerInDb;
+                        return effectiveIsHubOwner ? (
+                          <Button
+                            variant="outline" size="sm"
+                            className="text-xs h-7 border-red-300 text-red-600 hover:bg-red-50"
+                            onClick={() => setPendingHubOwner(isHubOwnerInDb ? 'revoke' : null)}
+                          >
+                            Remove Hub Owner
+                          </Button>
+                        ) : (
                           <Button
                             variant="outline" size="sm"
                             className="text-xs h-7 border-amber-300 text-amber-700 hover:bg-amber-50"
-                            disabled={grantHubOwnerMutation.isPending}
-                            onClick={() => grantHubOwnerMutation.mutate({ userId: editUserId })}
+                            onClick={() => setPendingHubOwner(isHubOwnerInDb ? null : 'grant')}
                           >
-                            {grantHubOwnerMutation.isPending ? 'Granting…' : 'Assign Hub Owner'}
+                            Assign Hub Owner
                           </Button>
-                        ) : null;
+                        );
                       })()}
                       <Badge variant="outline" className="text-xs text-gray-500">{userAttrs.length} assigned</Badge>
                     </div>
                   </div>
 
-                  {userAttrs.length > 0 && (
-                    <div className="space-y-2">
-                      {userAttrs.map((attr) => {
-                        const key = attr.attributeKey || attr.attribute_key || attr.attributeDef?.key || attr.key || '?';
-                        return (
-                          <div key={attr.id || key} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-md px-3 py-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Badge variant="outline" className="shrink-0 font-mono text-xs">{key}</Badge>
-                              <span className="text-sm font-mono text-gray-700 truncate">{String(attr.value ?? '')}</span>
+                  {(() => {
+                    // Build the displayed attribute list, reflecting any pending hub_roles change
+                    const hubRolesAttr = userAttrs.find((a) => (a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key) === 'hub_roles');
+                    const isHubOwnerInDb = (() => {
+                      const v = hubRolesAttr?.value;
+                      const roles = Array.isArray(v) ? v : (typeof v === 'string' && v ? [v] : []);
+                      return roles.includes('HUB_OWNER');
+                    })();
+
+                    // Rows to display: replace hub_roles with pending value, or add/remove it
+                    let displayAttrs = userAttrs.filter((a) => (a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key) !== 'hub_roles');
+                    const effectiveIsHubOwner =
+                      pendingHubOwner === 'grant' ? true :
+                      pendingHubOwner === 'revoke' ? false :
+                      isHubOwnerInDb;
+                    if (effectiveIsHubOwner) {
+                      displayAttrs = [
+                        { _synthetic: true, key: 'hub_roles', value: 'HUB_OWNER', isPending: pendingHubOwner === 'grant' },
+                        ...displayAttrs,
+                      ];
+                    }
+
+                    if (displayAttrs.length === 0) {
+                      return <p className="text-xs text-gray-400">No attributes assigned yet.</p>;
+                    }
+                    return (
+                      <div className="space-y-2">
+                        {displayAttrs.map((attr) => {
+                          const key = attr._synthetic ? attr.key : (attr.attributeKey || attr.attribute_key || attr.attributeDef?.key || attr.key || '?');
+                          const isPending = attr.isPending || (key === 'hub_roles' && pendingHubOwner === 'revoke');
+                          return (
+                            <div
+                              key={attr.id || key}
+                              className={`flex items-center justify-between border rounded-md px-3 py-2 ${isPending ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100'}`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Badge variant="outline" className="shrink-0 font-mono text-xs">{key}</Badge>
+                                <span className={`text-sm font-mono truncate ${isPending ? 'text-amber-700' : 'text-gray-700'}`}>
+                                  {pendingHubOwner === 'revoke' && key === 'hub_roles'
+                                    ? <><s>HUB_OWNER</s>{' → USER'}</>
+                                    : String(attr.value ?? '')}
+                                </span>
+                                {isPending && (
+                                  <span className="text-xs text-amber-600 italic">(pending)</span>
+                                )}
+                              </div>
+                              {key !== 'hub_roles' && (
+                                <Button
+                                  variant="ghost" size="sm"
+                                  className="text-gray-400 hover:text-red-500 shrink-0 h-7 w-7 p-0"
+                                  onClick={() => deleteAttrMutation.mutate({ userId: editUserId, attributeKey: key })}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              {key === 'hub_roles' && <div className="shrink-0 h-7 w-7" />}
                             </div>
-                            {key !== 'hub_roles' && (
-                              <Button
-                                variant="ghost" size="sm"
-                                className="text-gray-400 hover:text-red-500 shrink-0 h-7 w-7 p-0"
-                                onClick={() => deleteAttrMutation.mutate({ userId: editUserId, attributeKey: key })}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                            {key === 'hub_roles' && <div className="shrink-0 h-7 w-7" />}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {userAttrs.length === 0 && (
-                    <p className="text-xs text-gray-400">No attributes assigned yet.</p>
-                  )}
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
                     <Label className="text-xs font-medium text-gray-700">Add Attribute</Label>

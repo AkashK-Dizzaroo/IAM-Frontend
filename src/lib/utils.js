@@ -10,10 +10,8 @@ export function cn(...inputs) {
  */
 export function getDisplayRole(effectiveRoles) {
   if (!effectiveRoles) return "User";
-  if (effectiveRoles.isHubOwner)   return "Hub Owner";
-  if (effectiveRoles.isITSupport)  return "IT Support";
-  if (effectiveRoles.isAppOwner)   return "App Owner";
-  if (effectiveRoles.isAppManager) return "App Manager";
+  if (effectiveRoles.isHubOwner) return "Hub Owner";
+  if (effectiveRoles.isAppOwner) return "App Owner";
   return "User";
 }
 

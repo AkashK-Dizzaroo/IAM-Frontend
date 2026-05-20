@@ -169,14 +169,14 @@ export const DashboardPage = () => {
       label: "Account Approvals",
       icon: ShieldCheck,
       path: "/account-approvals",
-      show: effectiveRoles.isHubOwner || effectiveRoles.isITSupport,
+      show: effectiveRoles.isHubOwner,
     },
     {
       id: "access-approvals",
       label: "Access Approvals",
       icon: ClipboardList,
       path: "/access-approvals",
-      show: effectiveRoles.isHubOwner || effectiveRoles.isITSupport || effectiveRoles.isAppOwner,
+      show: effectiveRoles.isHubOwner || effectiveRoles.isAppOwner,
     },
   ];
 

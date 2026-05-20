@@ -200,29 +200,6 @@ class UserService {
     }
   }
 
-  async assignAppManager(userId, applicationId, resourceId) {
-    try {
-      const response = await apiClient.post(`/users/${userId}/assign-manager`, {
-        applicationId,
-        resourceId
-      });
-      return response.data ?? response;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
-  async removeAppManager(userId, assignmentId) {
-    try {
-      const response = await apiClient.delete(
-        `/users/${userId}/assignments/${assignmentId}/manager`
-      );
-      return response.data ?? response;
-    } catch (error) {
-      throw this.handleError(error);
-    }
-  }
-
   generateTempPassword() {
     const chars =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";

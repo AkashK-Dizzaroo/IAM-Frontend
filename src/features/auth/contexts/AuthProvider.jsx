@@ -8,11 +8,8 @@ import { logger } from "@/lib/logger";
 
 export const DEFAULT_EFFECTIVE_ROLES = {
   isHubOwner: false,
-  isITSupport: false,
   isAppOwner: false,
-  isAppManager: false,
   appOwnerOf: [],
-  appManagerOf: [],
   isElevated: false,
   canAccessAdmin: false,
 };
@@ -98,24 +95,16 @@ export function AuthProvider({ children }) {
 
     const hubRoles = user?.hubRoles ?? [];
     const isHubOwner = hubRoles.includes("HUB_OWNER");
-    const isITSupport = hubRoles.includes("IT_SUPPORT");
 
-    // Derived from application_owners table — returned by /auth/verify as ownedAppIds
     const appOwnerOf = Array.isArray(user.ownedAppIds) ? user.ownedAppIds : [];
-    const appManagerOf = [];
-
     const isAppOwner = appOwnerOf.length > 0;
-    const isAppManager = appManagerOf.length > 0;
-    const isElevated = isHubOwner || isITSupport || isAppOwner || isAppManager;
-    const canAccessAdmin = isHubOwner || isITSupport || isAppOwner || isAppManager;
+    const isElevated = isHubOwner || isAppOwner;
+    const canAccessAdmin = isHubOwner || isAppOwner;
 
     return {
       isHubOwner,
-      isITSupport,
       isAppOwner,
-      isAppManager,
       appOwnerOf,
-      appManagerOf,
       isElevated,
       canAccessAdmin,
     };

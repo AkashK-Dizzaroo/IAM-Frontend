@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, RefreshCw, Shield, Trash2 } from "lucide-react";
-import { AssignManagerModal } from "../components/AssignManagerModal";
 
 const formatDate = (value) => {
   if (!value) return "—";
@@ -140,8 +139,6 @@ export const UserProfileManagementPage = () => {
   // App Owner specific state
   const [selectedAppId, setSelectedAppId] = useState(null);
   const [appDetails, setAppDetails] = useState([]);
-  const [assignManagerTarget, setAssignManagerTarget] = useState(null);
-
   // Fetch application details for App Owner's owned apps
   useEffect(() => {
     if (isAppOwner && effectiveRoles.appOwnerOf?.length > 0) {
@@ -178,22 +175,6 @@ export const UserProfileManagementPage = () => {
     const raw = appTeamData?.data ?? [];
     return Array.isArray(raw) ? raw : [];
   }, [appTeamData]);
-
-  const removeManagerMutation = useMutation({
-    mutationFn: ({ userId, assignmentId }) =>
-      userService.removeAppManager(userId, assignmentId),
-    onSuccess: () => {
-      toast({ title: 'App Manager assignment removed' });
-      queryClient.invalidateQueries({ queryKey: ['appTeam', selectedAppId] });
-    },
-    onError: (error) => {
-      toast({
-        title: 'Failed to remove manager',
-        description: error.message,
-        variant: 'destructive',
-      });
-    },
-  });
 
   const { data: filterApplicationsData } = useQuery({
     queryKey: ["applications-filter"],
@@ -851,12 +832,6 @@ export const UserProfileManagementPage = () => {
             <div className="divide-y divide-gray-200">
               {appTeamUsers.map((entry) => {
                 const u = entry.user;
-                const managerAssignments = entry.assignments.filter(
-                  (a) => a.role?.roleCode === 'APP_MANAGER'
-                );
-                const nonManagerAssignments = entry.assignments.filter(
-                  (a) => a.role?.roleCode !== 'APP_MANAGER'
-                );
                 const userName = [u.firstName, u.lastName]
                   .filter(Boolean)
                   .join(' ') || u.email || '—';
@@ -868,20 +843,12 @@ export const UserProfileManagementPage = () => {
                         <span className="font-medium text-gray-900">{userName}</span>
                         <span className="text-sm text-gray-500 ml-2">{u.email}</span>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setAssignManagerTarget(entry)}
-                      >
-                        <Shield className="w-3.5 h-3.5 mr-1.5" />
-                        Assign as Manager
-                      </Button>
                     </div>
 
-                    {nonManagerAssignments.length > 0 && (
+                    {entry.assignments.length > 0 && (
                       <div className="mb-2">
                         <div className="flex flex-wrap gap-1.5">
-                          {nonManagerAssignments.map((a) => (
+                          {entry.assignments.map((a) => (
                             <Badge
                               key={a._id}
                               variant="outline"
@@ -892,47 +859,6 @@ export const UserProfileManagementPage = () => {
                             </Badge>
                           ))}
                         </div>
-                      </div>
-                    )}
-
-                    {managerAssignments.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {managerAssignments.map((a) => (
-                          <div
-                            key={a._id}
-                            className="flex items-center justify-between bg-purple-50 rounded px-3 py-1.5"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Badge className="bg-purple-100 text-purple-800 border-purple-200 text-xs hover:bg-purple-100">
-                                App Manager
-                              </Badge>
-                              <span className="text-sm text-gray-700">
-                                {a.resource?.name || a.resource?.resourceExternalId || 'Global'}
-                                {a.resource?.level ? ` (L${a.resource.level})` : ''}
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                expires {a.validUntil ? new Date(a.validUntil).toLocaleDateString() : '—'}
-                              </span>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 h-7 px-2"
-                              disabled={removeManagerMutation.isPending}
-                              onClick={() => {
-                                if (window.confirm(`Remove App Manager assignment for ${a.resource?.name || 'this resource'}?`)) {
-                                  removeManagerMutation.mutate({
-                                    userId: u._id,
-                                    assignmentId: a._id,
-                                  });
-                                }
-                              }}
-                            >
-                              <Trash2 className="w-3.5 h-3.5 mr-1" />
-                              Remove
-                            </Button>
-                          </div>
-                        ))}
                       </div>
                     )}
                   </div>
@@ -947,23 +873,6 @@ export const UserProfileManagementPage = () => {
         <div className="bg-white rounded-xl shadow-sm border px-4 py-8 text-center text-gray-500">
           Select an application above to view team members
         </div>
-      )}
-
-      {/* ── Assign Manager Modal ── */}
-      {assignManagerTarget && (
-        <AssignManagerModal
-          open={!!assignManagerTarget}
-          onOpenChange={(open) => { if (!open) setAssignManagerTarget(null); }}
-          user={assignManagerTarget.user}
-          applicationId={selectedAppId}
-          existingManagerResourceIds={
-            assignManagerTarget.assignments
-              .filter((a) => a.role?.roleCode === 'APP_MANAGER')
-              .map((a) => a.resource?._id ?? a.resource?.id)
-              .filter(Boolean)
-          }
-          onSuccess={() => setAssignManagerTarget(null)}
-        />
       )}
 
       <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>

@@ -40,7 +40,6 @@ function AppRoutes() {
   const getDefaultRedirect = () => {
     if (effectiveRoles.isHubOwner) return "/users";
     if (effectiveRoles.isAppOwner) return "/app-policies";
-    if (effectiveRoles.isITSupport) return "/account-approvals";
     return "/my-profile";
   };
 
