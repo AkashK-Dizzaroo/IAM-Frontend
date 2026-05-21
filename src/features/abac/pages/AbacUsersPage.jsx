@@ -540,7 +540,8 @@ export function AbacUsersPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {users.map((user) => {
-                const initial = (user.displayName || user.email || '?')[0].toUpperCase();
+                const fullName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
+                const initial = (fullName || user.email || '?')[0].toUpperCase();
                 const userStatus = getHubAttr(user, 'user_status');
                 const org = getHubAttr(user, 'organization');
                 const { globalRoles, isAppOwner } = getUserRoleSummary(user);
@@ -552,7 +553,7 @@ export function AbacUsersPage() {
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium shrink-0">{initial}</div>
                         <div className="min-w-0">
-                          <div className="font-medium text-gray-900 truncate">{user.displayName || '—'}</div>
+                          <div className="font-medium text-gray-900 truncate">{fullName || '—'}</div>
                           <div className="text-xs text-gray-500 truncate">{user.email || '—'}</div>
                         </div>
                       </div>
@@ -632,7 +633,7 @@ export function AbacUsersPage() {
             <DialogTitle>Delete User</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete{' '}
-              <strong>{userToDelete?.displayName || userToDelete?.email}</strong>{' '}
+              <strong>{`${userToDelete?.firstName ?? ''} ${userToDelete?.lastName ?? ''}`.trim() || userToDelete?.email}</strong>{' '}
               ({userToDelete?.email})? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
@@ -656,7 +657,7 @@ export function AbacUsersPage() {
         <DialogContent className="max-w-2xl w-full max-h-[85vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 py-5 border-b border-gray-100 shrink-0">
             <DialogTitle className="text-base font-semibold text-gray-900">
-              {!isEditing ? 'New User' : `Edit User — ${dialogMode?.displayName || dialogMode?.email || ''}`}
+              {!isEditing ? 'New User' : `Edit User — ${`${dialogMode?.firstName ?? ''} ${dialogMode?.lastName ?? ''}`.trim() || dialogMode?.email || ''}`}
             </DialogTitle>
           </DialogHeader>
 
