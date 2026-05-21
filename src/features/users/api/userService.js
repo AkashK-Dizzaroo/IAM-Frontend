@@ -106,11 +106,8 @@ class UserService {
         password: tempPassword,
         firstName,
         lastName,
-        phone: userData.phone,
-        phoneNumber: userData.phone || userData.phoneNumber,
         organization: userData.organization,
         address: userData.address,
-        department: userData.department,
         status: normalizedStatus,
         applications: applications.length > 0 ? applications : undefined,
       };

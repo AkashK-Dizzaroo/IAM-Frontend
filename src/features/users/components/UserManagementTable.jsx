@@ -28,7 +28,6 @@ import {
   Users,
   Plus,
   Search,
-  Edit,
   Trash2,
   CheckCircle,
   XCircle,
@@ -57,7 +56,6 @@ export const UserManagementTable = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(25);
   const [pagination, setPagination] = useState({ total: 0, pages: 0 });
-  const [selectedUser, setSelectedUser] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -436,14 +434,6 @@ export const UserManagementTable = () => {
                             </td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex items-center justify-end gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  aria-label={`Edit ${user.firstName || user.email}`}
-                                  onClick={() => setSelectedUser(user)}
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </Button>
                                 {!isCurrentUser && (
                                   <Button
                                     variant="ghost"

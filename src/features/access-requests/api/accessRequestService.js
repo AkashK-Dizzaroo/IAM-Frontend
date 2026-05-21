@@ -11,12 +11,9 @@ class AccessRequestService {
       const currentUser = this.getCurrentUserInfo();
       const requestPayload = {
         ...requestData,
-        requesterId: currentUser.id || generateObjectId(),
-        requesterEmail: currentUser.email || "demo@neurodoc.com",
-        requesterName:
-          currentUser.name ||
-          requestData.metadata?.requesterName ||
-          "Demo User",
+        requesterId: currentUser.id,
+        requesterEmail: currentUser.email,
+        requesterName: currentUser.name || requestData.metadata?.requesterName,
       };
       const response = await this.api.post("/access-requests", requestPayload);
       return response.data;
@@ -148,22 +145,24 @@ class AccessRequestService {
     };
   }
 
+  _readStoredUser() {
+    try {
+      return JSON.parse(localStorage.getItem("platform_user") || "{}");
+    } catch {
+      return {};
+    }
+  }
+
   getCurrentUserId() {
-    const user = JSON.parse(localStorage.getItem("platform_user") || "{}");
-    return user.id || user._id;
+    return this._readStoredUser().id || null;
   }
 
   getCurrentUserInfo() {
-    const user = JSON.parse(localStorage.getItem("platform_user") || "{}");
+    const user = this._readStoredUser();
     return {
-      id: user.id || user._id,
-      email: user.email,
-      name:
-        user.name ||
-        user.fullName ||
-        `${user.firstName || ""} ${user.lastName || ""}`.trim(),
-      department: user.department,
-      role: user.role || user.jobTitle,
+      id: user.id || null,
+      email: user.email || null,
+      name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.displayName || user.email || "",
     };
   }
 

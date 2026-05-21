@@ -14,6 +14,31 @@ export const DEFAULT_EFFECTIVE_ROLES = {
   canAccessAdmin: false,
 };
 
+const PLATFORM_USER_KEY = "platform_user";
+
+function persistUserToStorage(user) {
+  if (!user?.id) return;
+  try {
+    const safe = {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      displayName: user.displayName || user.name || "",
+      profilePicture: user.profilePicture || null,
+      hubRoles: Array.isArray(user.hubRoles) ? user.hubRoles : [],
+      status: user.status || "active",
+    };
+    localStorage.setItem(PLATFORM_USER_KEY, JSON.stringify(safe));
+  } catch {
+    /* ignore quota/security errors */
+  }
+}
+
+function clearUserFromStorage() {
+  try { localStorage.removeItem(PLATFORM_USER_KEY); } catch { /* ignore */ }
+}
+
 // Pages where session failure must NOT trigger a fresh OAuth redirect — the
 // browser is already in a navigation flow that owns the auth lifecycle.
 const OAUTH_FLOW_PATHS = new Set(["/callback", "/logout"]);
@@ -36,6 +61,7 @@ export function AuthProvider({ children }) {
     queryClient.clear();
     setUser(null);
     setIsAuthenticated(false);
+    clearUserFromStorage();
     logger.setUser('anonymous');
   };
 
@@ -58,6 +84,7 @@ export function AuthProvider({ children }) {
         const backendUser = body.data.user;
         setUser(backendUser);
         setIsAuthenticated(true);
+        persistUserToStorage(backendUser);
         logger.setUser(backendUser.id || backendUser.email);
         return true;
       }

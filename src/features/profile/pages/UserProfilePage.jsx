@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { User, Mail, Phone, Building2, Calendar, Globe, Bell, MapPin } from "lucide-react";
+import { User, Mail, Building2, Calendar, Globe, Bell, MapPin } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -23,7 +23,6 @@ export const UserProfilePage = () => {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
-    phoneNumber: "",
     address: "",
   });
 
@@ -60,7 +59,6 @@ export const UserProfilePage = () => {
       setFormData({
         firstName: profileData.firstName || "",
         lastName: profileData.lastName || "",
-        phoneNumber: profileData.phoneNumber || "",
         address: profileData.address || "",
       });
     }
@@ -158,16 +156,6 @@ export const UserProfilePage = () => {
                 </div>
               </div>
               <div>
-                <Label htmlFor="phoneNumber">Phone Number</Label>
-                <Input
-                  id="phoneNumber"
-                  value={formData.phoneNumber}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phoneNumber: e.target.value })
-                  }
-                />
-              </div>
-              <div>
                 <Label htmlFor="address">Address</Label>
                 <Input
                   id="address"
@@ -217,15 +205,6 @@ export const UserProfilePage = () => {
                     <p className="text-sm text-gray-500">Email</p>
                     <p className="font-medium text-gray-900 break-words">
                       {profile.email || "—"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Phone className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-500">Phone Number</p>
-                    <p className="font-medium text-gray-900">
-                      {profile.phoneNumber || "—"}
                     </p>
                   </div>
                 </div>

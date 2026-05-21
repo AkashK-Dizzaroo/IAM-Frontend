@@ -276,7 +276,7 @@ export function AbacUsersPage() {
   }, []);
 
   // ── edit form state ───────────────────────────────────────────────────────
-  const [editFormData, setEditFormData] = useState({ displayName: '', email: '' });
+  const [editFormData, setEditFormData] = useState({ firstName: '', lastName: '', email: '' });
   const [editNewAttr, setEditNewAttr] = useState({ attributeDefId: '', value: '' });
   // null = no pending change; 'grant' = will assign HUB_OWNER on save; 'revoke' = will remove on save
   const [pendingHubOwner, setPendingHubOwner] = useState(null);
@@ -293,7 +293,8 @@ export function AbacUsersPage() {
 
   const openEdit = (user) => {
     setEditFormData({
-      displayName: user.displayName || '',
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
       email: user.email || '',
     });
     setEditNewAttr({ attributeDefId: '', value: '' });
@@ -676,11 +677,19 @@ export function AbacUsersPage() {
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label>Display Name <span className="text-red-500">*</span></Label>
+                    <Label>First Name <span className="text-red-500">*</span></Label>
                     <Input
-                      value={editFormData.displayName}
-                      onChange={(e) => setEditFormData((p) => ({ ...p, displayName: e.target.value }))}
-                      placeholder="e.g. Jane Smith"
+                      value={editFormData.firstName}
+                      onChange={(e) => setEditFormData((p) => ({ ...p, firstName: e.target.value }))}
+                      placeholder="e.g. Jane"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Last Name <span className="text-red-500">*</span></Label>
+                    <Input
+                      value={editFormData.lastName}
+                      onChange={(e) => setEditFormData((p) => ({ ...p, lastName: e.target.value }))}
+                      placeholder="e.g. Smith"
                     />
                   </div>
                 </div>
