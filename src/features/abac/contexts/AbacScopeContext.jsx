@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 const AbacScopeContext = createContext(null);
 
@@ -25,39 +25,40 @@ function writeStorage(key, name, id = null) {
   }
 }
 
+// Single state atom instead of 4 independent useState calls.
+// Eliminates 3 extra re-renders per selectApp/selectGlobal call.
+function buildState(saved) {
+  if (saved?.key) {
+    return { scope: 'app', selectedAppKey: saved.key, selectedAppName: saved.name ?? null, selectedAppId: saved.id ?? null };
+  }
+  return { scope: 'global', selectedAppKey: null, selectedAppName: null, selectedAppId: null };
+}
+
 export function AbacScopeProvider({ children }) {
-  const saved = readStorage();
+  const [state, setState] = useState(() => buildState(readStorage()));
 
-  const [scope, setScope] = useState(saved ? 'app' : 'global');
-  const [selectedAppKey, setSelectedAppKey] = useState(saved?.key ?? null);
-  const [selectedAppName, setSelectedAppName] = useState(saved?.name ?? null);
-  const [selectedAppId, setSelectedAppId] = useState(saved?.id ?? null);
-
-  const selectApp = (key, name, id = null) => {
-    setSelectedAppKey(key);
-    setSelectedAppName(name);
-    setSelectedAppId(id);
-    setScope('app');
+  const selectApp = useCallback((key, name, id = null) => {
+    setState({ scope: 'app', selectedAppKey: key, selectedAppName: name, selectedAppId: id });
     writeStorage(key, name, id);
-  };
+  }, []);
 
-  const selectGlobal = () => {
-    setScope('global');
-    setSelectedAppKey(null);
-    setSelectedAppName(null);
-    setSelectedAppId(null);
+  const selectGlobal = useCallback(() => {
+    setState({ scope: 'global', selectedAppKey: null, selectedAppName: null, selectedAppId: null });
     writeStorage(null, null, null);
-  };
+  }, []);
+
+  // Stable object reference: only changes when the actual state values change.
+  const contextValue = useMemo(() => ({
+    scope: state.scope,
+    selectedAppKey: state.selectedAppKey,
+    selectedAppName: state.selectedAppName,
+    selectedAppId: state.selectedAppId,
+    selectApp,
+    selectGlobal,
+  }), [state, selectApp, selectGlobal]);
 
   return (
-    <AbacScopeContext.Provider value={{
-      scope,
-      selectedAppKey,
-      selectedAppName,
-      selectedAppId,
-      selectApp,
-      selectGlobal,
-    }}>
+    <AbacScopeContext.Provider value={contextValue}>
       {children}
     </AbacScopeContext.Provider>
   );

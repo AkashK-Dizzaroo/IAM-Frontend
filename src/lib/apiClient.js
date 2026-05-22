@@ -95,9 +95,13 @@ apiClient.interceptors.response.use(
       if (devMode) {
         console.warn("[API] 401 — session invalid");
       }
-      // AuthProvider's verifySession + polling layer handles re-auth via OAuth.
-      // We deliberately do NOT redirect from the Axios interceptor — multiple
-      // concurrent 401s would each kick off a redirect race.
+      // Emit a single global event instead of redirecting here. Multiple
+      // concurrent 401s all fire the same event; AuthProvider's listener
+      // is idempotent (guarded by oauthRedirectInFlightRef) so only one
+      // redirect is ever triggered.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("iam:session-expired"));
+      }
     }
     return Promise.reject(error);
   }

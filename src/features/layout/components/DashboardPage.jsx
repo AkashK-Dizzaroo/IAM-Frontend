@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "@/features/auth";
 import { useAbacScope } from "../../abac/contexts/AbacScopeContext";
@@ -45,7 +45,7 @@ const NavSection = ({ label }) => (
 );
 
 /** Single nav item button */
-const NavItem = ({ tab, isActive, onClick, sidebarCollapsed }) => {
+const NavItem = memo(({ tab, isActive, onClick, sidebarCollapsed }) => {
   const Icon = tab.icon;
   return (
     <button
@@ -83,7 +83,7 @@ const NavItem = ({ tab, isActive, onClick, sidebarCollapsed }) => {
       )}
     </button>
   );
-};
+});
 
 export const DashboardPage = () => {
   const { user, logout, effectiveRoles, loading, rolesReady } = useAuth();
@@ -125,6 +125,45 @@ export const DashboardPage = () => {
     ? allApps
     : allApps.filter((a) => effectiveRoles.appOwnerOf.includes(a.id));
 
+  const isGlobalScope = scope === "global";
+  const isAppScope = scope === "app" && !!selectedAppKey;
+
+  // ── Nav item definitions — only recomputed when role/scope flags change ──
+  const navPersonal = useMemo(() => [
+    { id: "my-profile", label: "My Profile", icon: User, path: "/my-profile", show: true },
+  ], []);
+
+  const navAdmin = useMemo(() => [
+    { id: "account-approvals", label: "Account Approvals", icon: ShieldCheck, path: "/account-approvals", show: effectiveRoles.isHubOwner },
+    { id: "access-approvals", label: "Access Approvals", icon: ClipboardList, path: "/access-approvals", show: effectiveRoles.isHubOwner || effectiveRoles.isAppOwner },
+  ], [effectiveRoles.isHubOwner, effectiveRoles.isAppOwner]);
+
+  const navGlobal = useMemo(() => [
+    { id: "users", label: "Users", icon: Users, path: "/users", show: effectiveRoles.isHubOwner },
+    { id: "hub-attributes", label: "Hub Attributes", icon: Tag, path: "/hub-attributes", show: effectiveRoles.isHubOwner },
+    { id: "global-policies", label: "Global Policies", icon: Globe2, path: "/global-policies", show: effectiveRoles.isHubOwner },
+    { id: "applications", label: "Applications", icon: AppWindow, path: "/applications", show: effectiveRoles.isHubOwner },
+    { id: "facilities", label: "Facilities", icon: Building2, path: "/facilities", show: effectiveRoles.isHubOwner },
+  ], [effectiveRoles.isHubOwner]);
+
+  const navApp = useMemo(() => {
+    const canSeeApp = effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId));
+    const show = canSeeApp && isAppScope;
+    return [
+      { id: "app-attributes", label: "App Attributes", icon: Layers, path: "/app-attributes", show },
+      { id: "app-user-attributes", label: "App Users", icon: UserCog, path: "/app-user-attributes", show },
+      { id: "app-policies", label: "App Policies", icon: FileText, path: "/app-policies", show },
+      { id: "policy-tester", label: "Policy Tester", icon: FlaskConical, path: "/policy-tester", show },
+      { id: "audit", label: "Audit Trail", icon: BarChart2, path: "/audit", show },
+      { id: "coverage-gaps", label: "Coverage Gaps", icon: AlertTriangle, path: "/coverage-gaps", show },
+      { id: "app-resources", label: "App Resources", icon: Boxes, path: "/app-resources", show },
+    ];
+  }, [effectiveRoles.isHubOwner, effectiveRoles.isAppOwner, effectiveRoles.appOwnerOf, selectedAppId, isAppScope]);
+
+  const navResources = useMemo(() => [
+    { id: "resources", label: "Resources", icon: FolderOpen, path: "/resources", show: effectiveRoles.isHubOwner || effectiveRoles.isAppOwner },
+  ], [effectiveRoles.isHubOwner, effectiveRoles.isAppOwner]);
+
   // Auto-select when an App Owner (non-Hub-Owner) has exactly one owned app
   useEffect(() => {
     if (
@@ -136,7 +175,7 @@ export const DashboardPage = () => {
       const app = apps[0];
       selectApp(app.key, app.name ?? app.key, app.id);
     }
-  }, [apps, effectiveRoles.isAppOwner, effectiveRoles.isHubOwner, selectedAppKey]);
+  }, [apps, effectiveRoles.isAppOwner, effectiveRoles.isHubOwner, selectedAppKey, selectApp]);
 
   if (loading || !rolesReady) {
     return (
@@ -149,137 +188,7 @@ export const DashboardPage = () => {
     );
   }
 
-  const isGlobalScope = scope === "global";
-  const isAppScope = scope === "app" && !!selectedAppKey;
-
-  // ── Nav item definitions ────────────────────────────────────────
-  const navPersonal = [
-    {
-      id: "my-profile",
-      label: "My Profile",
-      icon: User,
-      path: "/my-profile",
-      show: true,
-    },
-  ];
-
-  const navAdmin = [
-    {
-      id: "account-approvals",
-      label: "Account Approvals",
-      icon: ShieldCheck,
-      path: "/account-approvals",
-      show: effectiveRoles.isHubOwner,
-    },
-    {
-      id: "access-approvals",
-      label: "Access Approvals",
-      icon: ClipboardList,
-      path: "/access-approvals",
-      show: effectiveRoles.isHubOwner || effectiveRoles.isAppOwner,
-    },
-  ];
-
-  const navGlobal = [
-    {
-      id: "users",
-      label: "Users",
-      icon: Users,
-      path: "/users",
-      show: effectiveRoles.isHubOwner,
-    },
-    {
-      id: "hub-attributes",
-      label: "Hub Attributes",
-      icon: Tag,
-      path: "/hub-attributes",
-      show: effectiveRoles.isHubOwner,
-    },
-{
-      id: "global-policies",
-      label: "Global Policies",
-      icon: Globe2,
-      path: "/global-policies",
-      show: effectiveRoles.isHubOwner,
-    },
-    {
-      id: "applications",
-      label: "Applications",
-      icon: AppWindow,
-      path: "/applications",
-      show: effectiveRoles.isHubOwner,
-    },
-    {
-      id: "facilities",
-      label: "Facilities",
-      icon: Building2,
-      path: "/facilities",
-      show: effectiveRoles.isHubOwner,
-    },
-  ];
-
-  const navApp = [
-    {
-      id: "app-attributes",
-      label: "App Attributes",
-      icon: Layers,
-      path: "/app-attributes",
-      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
-    },
-    {
-      id: "app-user-attributes",
-      label: "App Users",
-      icon: UserCog,
-      path: "/app-user-attributes",
-      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
-    },
-    {
-      id: "app-policies",
-      label: "App Policies",
-      icon: FileText,
-      path: "/app-policies",
-      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
-    },
-    {
-      id: "policy-tester",
-      label: "Policy Tester",
-      icon: FlaskConical,
-      path: "/policy-tester",
-      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
-    },
-    {
-      id: "audit",
-      label: "Audit Trail",
-      icon: BarChart2,
-      path: "/audit",
-      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
-    },
-    {
-      id: "coverage-gaps",
-      label: "Coverage Gaps",
-      icon: AlertTriangle,
-      path: "/coverage-gaps",
-      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
-    },
-    {
-      id: "app-resources",
-      label: "App Resources",
-      icon: Boxes,
-      path: "/app-resources",
-      show: (effectiveRoles.isHubOwner || (effectiveRoles.isAppOwner && effectiveRoles.appOwnerOf.includes(selectedAppId))) && isAppScope,
-    },
-  ];
-
-  const navResources = [
-    {
-      id: "resources",
-      label: "Resources",
-      icon: FolderOpen,
-      path: "/resources",
-      show: effectiveRoles.isHubOwner || effectiveRoles.isAppOwner,
-    },
-  ];
-
+  // isActive depends on location.pathname (changes on navigation) — keep it cheap
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 

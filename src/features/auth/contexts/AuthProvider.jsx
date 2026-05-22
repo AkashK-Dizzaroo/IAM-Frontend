@@ -56,14 +56,14 @@ export function AuthProvider({ children }) {
   // (e.g. focus/blur events firing during the navigation).
   const oauthRedirectInFlightRef = useRef(false);
 
-  const clearSession = () => {
+  const clearSession = useCallback(() => {
     sessionStorage.clear();
     queryClient.clear();
     setUser(null);
     setIsAuthenticated(false);
     clearUserFromStorage();
     logger.setUser('anonymous');
-  };
+  }, []);
 
   const triggerLogin = useCallback(() => {
     if (oauthRedirectInFlightRef.current) return;
@@ -96,8 +96,9 @@ export function AuthProvider({ children }) {
       if (redirectOnFailure) triggerLogin();
       return false;
     }
-  }, [triggerLogin]);
+  }, [clearSession, triggerLogin]);
 
+  // 1. Initial mount verification
   useEffect(() => {
     const initializeAuth = async () => {
       // Don't pre-empt the OAuth callback page — let it complete its exchange,
@@ -113,7 +114,21 @@ export function AuthProvider({ children }) {
     initializeAuth();
   }, [verifySession]);
 
+  // 2. Global 401 listener — catches expired sessions mid-use without polling.
+  // apiClient dispatches "iam:session-expired" on every 401 response, so any
+  // API call (users list, policy fetch, etc.) will instantly clear state and
+  // redirect rather than leaving the UI in a broken half-authenticated state.
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      if (isInOAuthFlowPath()) return;
+      console.warn("[IAM] Global session expiration caught. Redirecting to login.");
+      clearSession();
+      triggerLogin();
+    };
 
+    window.addEventListener("iam:session-expired", handleSessionExpired);
+    return () => window.removeEventListener("iam:session-expired", handleSessionExpired);
+  }, [clearSession, triggerLogin]);
 
   const rolesReady = true;
 
@@ -137,7 +152,7 @@ export function AuthProvider({ children }) {
     };
   }, [user]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await apiClient.post("/auth/logout").catch(() => {});
     } finally {
@@ -158,31 +173,35 @@ export function AuthProvider({ children }) {
         /* ignore */
       }
 
-      if (typeof window !== "undefined" && window.opener && !window.opener.closed) {
-        try {
-          window.opener.location.href = logoutUrl;
-        } catch {
-          /* ignore */
+      if (typeof window !== "undefined") {
+        if (window.opener && !window.opener.closed) {
+          try {
+            window.opener.location.href = logoutUrl;
+          } catch {
+            /* ignore */
+          }
+          window.close();
+        } else if (!window.closed) {
+          window.location.href = logoutUrl;
         }
-        window.close();
-      }
-      if (typeof window !== "undefined" && !window.closed) {
-        window.location.href = logoutUrl;
       }
     }
-  };
+  }, [clearSession]);
+
+  const contextValue = useMemo(
+    () => ({
+      user,
+      loading,
+      isAuthenticated,
+      logout,
+      effectiveRoles,
+      rolesReady,
+    }),
+    [user, loading, isAuthenticated, logout, effectiveRoles, rolesReady]
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        isAuthenticated,
-        logout,
-        effectiveRoles,
-        rolesReady,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

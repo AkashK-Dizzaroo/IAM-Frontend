@@ -310,7 +310,8 @@ export function AbacUsersPage() {
 
   const isOpen = dialogMode !== null;
   const isEditing = isOpen && dialogMode !== 'create';
-  const editUserId = isEditing ? (dialogMode.id || dialogMode._id) : null;
+  const rawEditUserId = isEditing ? (dialogMode.id || dialogMode._id) : null;
+  const editUserId = rawEditUserId && rawEditUserId !== 'null' && rawEditUserId !== 'undefined' ? rawEditUserId : null;
 
   // ── user attrs query (edit mode) ──────────────────────────────────────────
   const { data: userAttrsData, refetch: refetchUserAttrs } = useQuery({
@@ -545,7 +546,7 @@ export function AbacUsersPage() {
                 const userStatus = getHubAttr(user, 'user_status');
                 const org = getHubAttr(user, 'organization');
                 const { globalRoles, isAppOwner } = getUserRoleSummary(user);
-                const lastLogin = user.lastLogin ?? user.last_login ?? user.metadata?.lastLoginAt ?? user.metadata?.lastLogin ?? null;
+                const lastLogin = user.lastLoginAt ?? user.lastLogin ?? user.last_login ?? user.metadata?.lastLoginAt ?? user.metadata?.lastLogin ?? null;
                 const assignedApps = getAssignedApps(user, allAppNames);
                 return (
                   <tr key={user.id || user._id} className="hover:bg-gray-50">
