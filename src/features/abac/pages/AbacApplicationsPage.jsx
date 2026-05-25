@@ -10,13 +10,14 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { AppWindow, Pencil, Plus } from 'lucide-react';
+import { AppWindow, Pencil, Plus, Copy, Check, RefreshCw } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { IconPickerField } from '@/components/ui/IconPickerField';
 
@@ -45,6 +46,32 @@ function normalizeList(axiosRes) {
   return [];
 }
 
+function CopyField({ label, value, onCopy, copiedField }) {
+  const copied = copiedField === label;
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 font-mono break-all select-all">
+          {value}
+        </code>
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard.writeText(value).catch(() => {});
+            onCopy(label);
+            setTimeout(() => onCopy(null), 2000);
+          }}
+          className="shrink-0 p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors"
+          title="Copy"
+        >
+          {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function AbacApplicationsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -52,6 +79,9 @@ export function AbacApplicationsPage() {
   const isHubOwner = effectiveRoles.isHubOwner;
 
   const [panel, setPanel] = useState(null);
+  const [createdCredentials, setCreatedCredentials] = useState(null);
+  const [copiedField, setCopiedField] = useState(null);
+  const [rotatedSecret, setRotatedSecret] = useState(null);
   const [form, setForm] = useState({
     name: '',
     key: '',
@@ -59,9 +89,11 @@ export function AbacApplicationsPage() {
     baseUrl: '',
     isVisibleInHub: true,
     isActive: true,
+    supportsLevel2: false,
     iconKey: 'shield',
     features: '',
     combiningStrategy: 'deny_overrides',
+    ssoRedirectUris: '',
   });
 
   // Owner selection state
@@ -143,9 +175,11 @@ export function AbacApplicationsPage() {
       baseUrl: '',
       isVisibleInHub: true,
       isActive: true,
+      supportsLevel2: false,
       iconKey: 'shield',
       features: '',
       combiningStrategy: 'deny_overrides',
+      ssoRedirectUris: '',
     });
     setSelectedOwners([]);
     setOwnerSearch('');
@@ -154,6 +188,7 @@ export function AbacApplicationsPage() {
   };
 
   const openEdit = (app) => {
+    setRotatedSecret(null);
     setForm({
       name: app.name ?? '',
       key: app.key ?? '',
@@ -161,11 +196,15 @@ export function AbacApplicationsPage() {
       baseUrl: app.baseUrl ?? '',
       isVisibleInHub: app.isVisibleInHub !== false,
       isActive: app.isActive !== false,
+      supportsLevel2: app.supportsLevel2 === true,
       iconKey: app.iconKey ?? 'shield',
       features: Array.isArray(app.features)
         ? app.features.join(', ')
         : '',
       combiningStrategy: app.combiningStrategy ?? 'deny_overrides',
+      ssoRedirectUris: Array.isArray(app.ssoRedirectUris)
+        ? app.ssoRedirectUris.join('\n')
+        : '',
     });
     setSelectedOwners(
       Array.isArray(app.owners)
@@ -184,13 +223,18 @@ export function AbacApplicationsPage() {
 
   const createMutation = useMutation({
     mutationFn: (payload) => apiClient.post('/applications', payload),
-    onSuccess: () => {
-      toast({ title: 'Application registered' });
+    onSuccess: (res) => {
+      const data = res?.data?.data ?? res?.data ?? {};
       queryClient.invalidateQueries({ queryKey: ['applications'] });
       queryClient.invalidateQueries({ queryKey: ['abac', 'applications'] });
       queryClient.invalidateQueries({ queryKey: ['abac', 'users'] });
       refetch();
       closePanel();
+      setCreatedCredentials({
+        clientId: data.ssoClientId ?? data.key,
+        clientSecret: data.clientSecret,
+        redirectUris: Array.isArray(data.ssoRedirectUris) ? data.ssoRedirectUris : [],
+      });
     },
     onError: (err) =>
       toast({
@@ -269,6 +313,7 @@ export function AbacApplicationsPage() {
         baseUrl: form.baseUrl?.trim() || '',
         isVisibleInHub: form.isVisibleInHub,
         isActive: form.isActive,
+        supportsLevel2: form.supportsLevel2,
         iconKey: form.iconKey || null,
         features: form.features
           .split(',')
@@ -276,6 +321,10 @@ export function AbacApplicationsPage() {
           .filter(Boolean),
         combiningStrategy: form.combiningStrategy,
         ownerIds: selectedOwners.map((o) => o._id),
+        ssoRedirectUris: form.ssoRedirectUris
+          .split('\n')
+          .map((u) => u.trim())
+          .filter(Boolean),
       });
     } else if (panel && panel !== 'create') {
       const id = panel._id || panel.id;
@@ -287,6 +336,7 @@ export function AbacApplicationsPage() {
           baseUrl: form.baseUrl?.trim() || '',
           isVisibleInHub: form.isVisibleInHub,
           isActive: form.isActive,
+          supportsLevel2: form.supportsLevel2,
           iconKey: form.iconKey || null,
           features: form.features
             .split(',')
@@ -294,6 +344,10 @@ export function AbacApplicationsPage() {
             .filter(Boolean),
           combiningStrategy: form.combiningStrategy,
           ownerIds: selectedOwners.map((o) => o._id),
+          ssoRedirectUris: form.ssoRedirectUris
+            .split('\n')
+            .map((u) => u.trim())
+            .filter(Boolean),
         },
       });
     }
@@ -471,6 +525,34 @@ export function AbacApplicationsPage() {
         </div>
       )}
 
+      <Dialog open={createdCredentials !== null} onOpenChange={(o) => { if (!o) setCreatedCredentials(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Application registered</DialogTitle>
+            <DialogDescription>
+              Save these OAuth credentials now — the client secret will <strong>not</strong> be shown again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <CopyField label="Client ID" value={createdCredentials?.clientId ?? ''} onCopy={setCopiedField} copiedField={copiedField} />
+            <CopyField label="Client Secret" value={createdCredentials?.clientSecret ?? ''} onCopy={setCopiedField} copiedField={copiedField} />
+            {createdCredentials?.redirectUris?.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-gray-500">Redirect URIs</p>
+                <ul className="text-xs font-mono text-gray-700 space-y-0.5">
+                  {createdCredentials.redirectUris.map((u) => (
+                    <li key={u} className="bg-gray-50 rounded px-2 py-1">{u}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button onClick={() => setCreatedCredentials(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={panel !== null} onOpenChange={(o) => { if (!o) closePanel(); }}>
         <DialogContent className="max-w-xl flex flex-col max-h-[90vh]">
           <DialogHeader className="shrink-0">
@@ -568,6 +650,20 @@ export function AbacApplicationsPage() {
                       checked={form.isActive}
                       onCheckedChange={(v) =>
                         setForm((p) => ({ ...p, isActive: v }))
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Supports Level 2</Label>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Enable when the app has a two-level resource hierarchy (e.g. Study → Site)
+                      </p>
+                    </div>
+                    <Switch
+                      checked={form.supportsLevel2}
+                      onCheckedChange={(v) =>
+                        setForm((p) => ({ ...p, supportsLevel2: v }))
                       }
                     />
                   </div>
@@ -686,6 +782,66 @@ export function AbacApplicationsPage() {
                   during ABAC evaluation. Global policies always use
                   deny_overrides regardless of this setting.
                 </div>
+              </div>
+
+              <div className="border-t border-gray-100 pt-4">
+                <h3 className="text-sm font-medium text-gray-900">OAuth / SSO</h3>
+                <p className="text-xs text-gray-500 mt-0.5 mb-3">
+                  {panel === 'create'
+                    ? 'Client ID and secret are auto-generated. You will see them once after saving.'
+                    : 'Client ID matches the app key. Update redirect URIs or rotate the secret below.'}
+                </p>
+                {panel !== 'create' && (
+                  <div className="mb-3 space-y-1">
+                    <Label className="text-xs text-gray-500">Client ID</Label>
+                    <div className="font-mono text-sm bg-gray-50 border border-gray-200 rounded px-3 py-2 text-gray-700 select-all">
+                      {panel?.key ?? panel?.ssoClientId ?? ''}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label>Redirect URIs</Label>
+                  <Textarea
+                    rows={3}
+                    value={form.ssoRedirectUris}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, ssoRedirectUris: e.target.value }))
+                    }
+                    placeholder={'https://app.example.com/callback\nhttps://app.example.com/silent-renew'}
+                    className="font-mono text-xs"
+                  />
+                  <p className="text-xs text-gray-500">One URI per line</p>
+                </div>
+                {panel !== 'create' && (
+                  <div className="mt-3">
+                    {rotatedSecret ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                        <p className="text-xs font-medium text-amber-800">New secret — copy now, it will not be shown again</p>
+                        <CopyField label="Client Secret" value={rotatedSecret} onCopy={setCopiedField} copiedField={copiedField} />
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                        onClick={() => {
+                          const id = panel?._id || panel?.id;
+                          if (!id) return;
+                          apiClient.post(`/applications/${id}/rotate-secret`)
+                            .then((res) => {
+                              const secret = res?.data?.clientSecret;
+                              if (secret) setRotatedSecret(secret);
+                            })
+                            .catch(() => toast({ title: 'Error', description: 'Failed to rotate secret', variant: 'destructive' }));
+                        }}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                        Rotate client secret
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
           </div>
 
