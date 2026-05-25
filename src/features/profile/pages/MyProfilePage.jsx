@@ -95,7 +95,7 @@ export const MyProfilePage = () => {
   } = useQuery({
     queryKey: ["userAssignments"],
     queryFn: async () => {
-      const uid = user?.id || user?.user_id;
+      const uid = user?.id;
       const response = await profileService.getUserRolesAndResources(uid);
       return response.data;
     },

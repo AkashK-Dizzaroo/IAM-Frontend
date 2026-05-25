@@ -221,7 +221,7 @@ export const UserManagementTable = () => {
     if (!user) return "Unknown User";
     if (user.firstName || user.lastName)
       return `${user.firstName || ""} ${user.lastName || ""}`.trim();
-    return user.name || user.email || "Unknown User";
+    return user.email || "Unknown User";
   };
 
   const formatDate = (date) => {
