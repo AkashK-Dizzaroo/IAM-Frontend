@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/features/auth";
 import { resourceService } from "../api/resourceService";
 import { applicationService } from "@/features/applications";
+import { QK } from "@/lib/queryKeys";
 import { useResourceForm } from "../hooks/useResourceForm";
 import {
   Dialog,
@@ -107,31 +108,30 @@ export function ResourceRegistrationModal({
   } = useResourceForm();
 
   const { data: applicationsResponse } = useQuery({
-    queryKey: ["applications-modal"],
+    queryKey: QK.applicationsModal,
     queryFn: () => applicationService.getApplications(),
     enabled: open,
+    staleTime: 5 * 60_000,
   });
 
   const applications = applicationsResponse?.data ?? applicationsResponse ?? [];
 
   const { data: attrDefsResponse } = useQuery({
-    queryKey: ["resource-attribute-definitions"],
+    queryKey: QK.resourceAttrDefs,
     queryFn: () => resourceService.listAttributeDefinitions(),
     enabled: open,
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
   });
   const attrDefs = attrDefsResponse?.data ?? [];
 
   const { data: allResourcesResponse } = useQuery({
-    queryKey: ["all-resources-modal"],
+    queryKey: QK.resourcesAll,
     queryFn: async () => {
-      const res = await resourceService.getResources({
-        limit: 10000,
-        page: 1,
-      });
+      const res = await resourceService.getResources({ limit: 10000, page: 1 });
       return res?.data ?? [];
     },
     enabled: open,
+    staleTime: 2 * 60_000,
   });
 
   const allResources = allResourcesResponse?.data ?? allResourcesResponse ?? [];
@@ -214,8 +214,8 @@ export function ResourceRegistrationModal({
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Resource created successfully" });
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
-      queryClient.invalidateQueries({ queryKey: ["all-resources-modal"] });
+      queryClient.invalidateQueries({ queryKey: ['resources', 'list'] });
+      queryClient.invalidateQueries({ queryKey: QK.resourcesAll });
       onSuccess?.();
       handleClose();
     },

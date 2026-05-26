@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { abacService } from '@/features/abac/api/abacService';
 import { resourceService } from '@/features/resources';
+import { QK } from '@/lib/queryKeys';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -35,10 +36,10 @@ function UserDropdown({ selectedUser, onSelect, open: dialogOpen }) {
 
   // Load all active users upfront; filter client-side
   const { data, isFetching } = useQuery({
-    queryKey: ['abac', 'users', 'all-active'],
+    queryKey: QK.usersAllActive,
     queryFn: () => abacService.listUsers({ limit: 500, status: 'active' }),
     enabled: !!dialogOpen,
-    staleTime: 60_000,
+    staleTime: 2 * 60_000,
   });
   const allUsers = useMemo(() => {
     const raw = data?.data?.data ?? data?.data ?? [];
@@ -421,10 +422,10 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
   }, [optionalPickerOpen]);
 
   const { data: resourcesData } = useQuery({
-    queryKey: ['abac', 'studyResources', appKey, appId],
+    queryKey: QK.studyResources(appKey, appId),
     queryFn: () => resourceService.getResources({ applicationId: appId, limit: 1000, isActive: 'true' }),
     enabled: !!appId && open,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
   const resources = useMemo(() => {
     const raw = resourcesData?.data ?? resourcesData?.resources ?? [];
@@ -513,7 +514,7 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
         title: 'User assigned',
         description: `${selectedUser?.displayName || selectedUser?.email} has been assigned and notified by email.`,
       });
-      queryClient.invalidateQueries({ queryKey: ['abac', 'appUsers', appKey] });
+      queryClient.invalidateQueries({ queryKey: QK.appUsers(appKey) });
       onClose();
     },
     onError: (err) =>

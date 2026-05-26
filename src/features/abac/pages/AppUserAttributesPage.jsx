@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { QK } from '@/lib/queryKeys';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -435,15 +436,17 @@ export function AppUserAttributesPage() {
   const [removingIds, setRemovingIds] = useState(new Set());
 
   const { data: usersData, isLoading: loadingUsers } = useQuery({
-    queryKey: ['abac', 'users', 'appUserAttrsPicker'],
+    queryKey: QK.usersAttrsPicker,
     queryFn: () => abacService.listUsers({ limit: 200 }),
+    staleTime: 60_000,
   });
   const allUsers = normalizeList(usersData);
 
   const { data: appTeamData } = useQuery({
-    queryKey: ['appTeam', selectedAppKey],
+    queryKey: QK.appTeam(selectedAppKey),
     queryFn: () => userService.getAppTeamUsers(selectedAppKey),
     enabled: !!selectedAppKey && showOnlyAssigned,
+    staleTime: 60_000,
   });
   const assignedUserIds = useMemo(() => {
     const entries = appTeamData?.data ?? [];
@@ -457,17 +460,18 @@ export function AppUserAttributesPage() {
   const selectedUser = users.find((u) => getUserId(u) === selectedUserId);
 
   const { data: attrDefsData } = useQuery({
-    queryKey: ['abac', 'appAttributes', selectedAppKey],
+    queryKey: QK.appAttributes(selectedAppKey),
     queryFn: () => abacService.listAppAttrDefs(selectedAppKey),
     enabled: !!selectedAppKey,
+    staleTime: 5 * 60_000,
   });
   const attributeDefs = normalizeList(attrDefsData);
 
   const { data: activePoliciesData } = useQuery({
-    queryKey: ['abac', 'appPolicies', selectedAppKey, 'active'],
+    queryKey: QK.appPolicies(selectedAppKey, 'active'),
     queryFn: () => abacService.listAppPolicies(selectedAppKey, { status: 'active' }),
     enabled: !!selectedAppKey,
-    staleTime: 60_000,
+    staleTime: 2 * 60_000,
   });
   const referencedKeys = useMemo(() => {
     const policies = activePoliciesData?.data?.data ?? activePoliciesData?.data ?? [];
@@ -481,16 +485,17 @@ export function AppUserAttributesPage() {
   }, [activePoliciesData]);
 
   const { data: userAttrsData, isLoading: loadingUserAttrs } = useQuery({
-    queryKey: ['abac', 'appUserAttributes', selectedAppKey, selectedUserId],
+    queryKey: QK.appUserAttributes(selectedAppKey, selectedUserId),
     queryFn: () => abacService.listAppUserAttrs(selectedAppKey, selectedUserId),
     enabled: !!selectedAppKey && !!selectedUserId,
+    staleTime: 30_000,
   });
   const userAttributes = normalizeList(userAttrsData);
 
   const { data: applicationsData } = useQuery({
-    queryKey: ['abac', 'applications', 'forStudyAccess'],
+    queryKey: QK.appsForStudyAccess,
     queryFn: () => abacService.getApplications(),
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
   const applications = normalizeList(applicationsData);
   const selectedApplication = applications.find(
@@ -500,7 +505,7 @@ export function AppUserAttributesPage() {
   );
 
   const { data: resourcesData } = useQuery({
-    queryKey: ['abac', 'studyResources', selectedAppKey, selectedApplication?.id],
+    queryKey: QK.studyResources(selectedAppKey, selectedApplication?.id),
     queryFn: () =>
       resourceService.getResources({
         applicationId: selectedApplication?.id,
@@ -508,7 +513,7 @@ export function AppUserAttributesPage() {
         isActive: 'true',
       }),
     enabled: !!selectedAppKey,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const studyOptions = useMemo(() => {
@@ -540,7 +545,7 @@ export function AppUserAttributesPage() {
 
   const invalidateUserAttrs = () =>
     queryClient.invalidateQueries({
-      queryKey: ['abac', 'appUserAttributes', selectedAppKey, selectedUserId],
+      queryKey: QK.appUserAttributes(selectedAppKey, selectedUserId),
     });
 
   const assignMutation = useMutation({

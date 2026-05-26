@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { resourceService } from "../api/resourceService";
+import { QK } from "@/lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -70,7 +71,7 @@ export function AppResourcesTab({ application }) {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["resources-by-app", applicationId, levelFilter, statusFilter],
+    queryKey: QK.resourcesByApp(applicationId),
     queryFn: async () => {
       const params = {};
       if (levelFilter !== "all") params.level = levelFilter;
@@ -153,8 +154,8 @@ export function AppResourcesTab({ application }) {
     mutationFn: ({ resourceId }) => resourceService.unlinkResourceFromApp(resourceId, applicationId),
     onSuccess: (_, { resourceName }) => {
       toast({ title: "Unlinked", description: `"${resourceName}" removed from this application` });
-      queryClient.invalidateQueries({ queryKey: ["resources-by-app", applicationId] });
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.invalidateQueries({ queryKey: QK.resourcesByApp(applicationId) });
+      queryClient.invalidateQueries({ queryKey: ['resources'] });
     },
     onError: (err) => {
       toast({ title: "Error", description: err?.message ?? "Failed to unlink resource", variant: "destructive" });

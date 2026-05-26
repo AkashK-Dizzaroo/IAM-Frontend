@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { QK } from '@/lib/queryKeys';
 import { abacService } from '@/features/abac/api/abacService';
 import { userService } from '@/features/users/api/userService';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -241,16 +242,17 @@ export function AbacUsersPage() {
     return () => clearTimeout(debounceRef.current);
   }, [search]);
 
+  const queryClient = useQueryClient();
+
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['abac', 'users', debouncedSearch],
+    queryKey: QK.users(debouncedSearch),
     queryFn: () => abacService.listUsers({ search: debouncedSearch, limit: 50 }),
-    staleTime: 0,
-    refetchOnWindowFocus: true,
+    staleTime: 30_000,
   });
   const users = data?.data?.data ?? data?.data ?? [];
 
   const { data: attrDefsData } = useQuery({
-    queryKey: ['abac', 'hubAttrDefs'],
+    queryKey: QK.hubAttributes,
     queryFn: abacService.listHubAttrDefs,
     staleTime: 5 * 60_000,
   });
@@ -259,7 +261,7 @@ export function AbacUsersPage() {
   );
 
   const { data: appsData } = useQuery({
-    queryKey: ['abac', 'applications'],
+    queryKey: QK.applications,
     queryFn: abacService.getApplications,
     staleTime: 5 * 60_000,
   });
@@ -315,7 +317,7 @@ export function AbacUsersPage() {
 
   // ── user attrs query (edit mode) ──────────────────────────────────────────
   const { data: userAttrsData, refetch: refetchUserAttrs } = useQuery({
-    queryKey: ['abac', 'userAttrs', editUserId],
+    queryKey: QK.userAttrs(editUserId),
     queryFn: () => abacService.listHubUserAttrs(editUserId),
     enabled: !!editUserId,
     staleTime: 10_000,

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Pencil, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { QK } from '@/lib/queryKeys';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -483,9 +484,10 @@ export function AppAttributesPage() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['abac', 'appAttributes', selectedApp?.key],
+    queryKey: QK.appAttributes(selectedApp?.key),
     queryFn: () => abacService.listAppAttrDefs(selectedApp.key),
     enabled: !!selectedApp?.key,
+    staleTime: 5 * 60_000,
   });
 
   const rawData = data?.data?.data ?? data?.data ?? [];
@@ -493,10 +495,10 @@ export function AppAttributesPage() {
 
   // Fetch active policies to detect which attr keys are referenced
   const { data: policiesData } = useQuery({
-    queryKey: ['abac', 'appPolicies', selectedApp?.key, 'active'],
+    queryKey: QK.appPolicies(selectedApp?.key, 'active'),
     queryFn: () => abacService.listAppPolicies(selectedApp.key, { status: 'active' }),
     enabled: !!selectedApp?.key,
-    staleTime: 60_000,
+    staleTime: 2 * 60_000,
   });
 
   const referencedKeys = useMemo(() => {
@@ -547,7 +549,7 @@ export function AppAttributesPage() {
     mutationFn: (payload) => abacService.createAppAttrDef(selectedApp?.key, payload),
     onSuccess: () => {
       toast({ title: 'Attribute created' });
-      queryClient.invalidateQueries({ queryKey: ['abac', 'appAttributes', selectedApp.key] });
+      queryClient.invalidateQueries({ queryKey: QK.appAttributes(selectedApp.key) });
       setShowCreate(false);
       setCreateForm({ ...EMPTY_FORM });
     },
@@ -563,7 +565,7 @@ export function AppAttributesPage() {
     mutationFn: ({ id, payload }) => abacService.updateAppAttrDef(selectedApp?.key, id, payload),
     onSuccess: () => {
       toast({ title: 'Attribute updated' });
-      queryClient.invalidateQueries({ queryKey: ['abac', 'appAttributes', selectedApp.key] });
+      queryClient.invalidateQueries({ queryKey: QK.appAttributes(selectedApp.key) });
       setEditTarget(null);
     },
     onError: (err) =>
@@ -578,7 +580,7 @@ export function AppAttributesPage() {
     mutationFn: (id) => abacService.deleteAppAttrDef(selectedApp?.key, id),
     onSuccess: () => {
       toast({ title: 'Attribute deleted' });
-      queryClient.invalidateQueries({ queryKey: ['abac', 'appAttributes', selectedApp.key] });
+      queryClient.invalidateQueries({ queryKey: QK.appAttributes(selectedApp.key) });
       setDeleteTarget(null);
     },
     onError: (err) =>
@@ -603,7 +605,7 @@ export function AppAttributesPage() {
       });
       setBulkDeleteOpen(false);
       setSelectedIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ['abac', 'appAttributes', selectedApp.key] });
+      queryClient.invalidateQueries({ queryKey: QK.appAttributes(selectedApp.key) });
     } catch (err) {
       toast({
         title: 'Bulk delete failed',
@@ -724,7 +726,7 @@ export function AppAttributesPage() {
       }
 
       await queryClient.invalidateQueries({
-        queryKey: ['abac', 'appAttributes', selectedApp.key],
+        queryKey: QK.appAttributes(selectedApp.key),
       });
       toast({
         title: 'Import complete',
@@ -744,7 +746,7 @@ export function AppAttributesPage() {
       });
       if (created > 0) {
         await queryClient.invalidateQueries({
-          queryKey: ['abac', 'appAttributes', selectedApp.key],
+          queryKey: QK.appAttributes(selectedApp.key),
         });
       }
     } finally {

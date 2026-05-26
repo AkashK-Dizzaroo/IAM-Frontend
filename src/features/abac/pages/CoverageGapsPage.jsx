@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAbacScope } from '../contexts/AbacScopeContext';
 import { abacService } from '../api/abacService';
+import { QK } from '@/lib/queryKeys';
 
 /**
  * Backend GET /api/v1/apps/:key/coverage-gaps returns:
@@ -34,16 +35,17 @@ export function CoverageGapsPage() {
   const navigate = useNavigate();
 
   const { data: gapsRes, isLoading, isError, error } = useQuery({
-    queryKey: ['abac', 'coverageGaps', selectedAppKey],
+    queryKey: QK.coverageGaps(selectedAppKey),
     queryFn: () => abacService.getCoverageGaps(selectedAppKey),
     enabled: !!selectedAppKey,
+    staleTime: 60_000,
   });
 
   const { data: attrDefsRes } = useQuery({
-    queryKey: ['abac', 'appAttrDefs', selectedAppKey],
+    queryKey: QK.appAttributes(selectedAppKey),
     queryFn: () => abacService.listAppAttrDefs(selectedAppKey),
     enabled: !!selectedAppKey,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const body = gapsRes?.data;

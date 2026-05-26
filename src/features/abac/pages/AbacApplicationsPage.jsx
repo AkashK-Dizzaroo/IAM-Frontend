@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/apiClient';
 import { abacService } from '@/features/abac/api/abacService';
+import { QK } from '@/lib/queryKeys';
 import { useAuth } from '@/features/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -136,15 +137,15 @@ export function AbacApplicationsPage() {
   const removeOwner = (id) => setSelectedOwners((prev) => prev.filter((o) => o._id !== id));
 
   const { data: mongoRes, isLoading, refetch } = useQuery({
-    queryKey: ['applications'],
+    queryKey: QK.applicationsRaw,
     queryFn: () => apiClient.get('/applications'),
     staleTime: 30_000,
   });
 
   const { data: abacRes } = useQuery({
-    queryKey: ['abac', 'applications'],
+    queryKey: QK.applications,
     queryFn: abacService.getApplications,
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
   });
 
   const apps = useMemo(() => normalizeList(mongoRes), [mongoRes]);
@@ -225,9 +226,9 @@ export function AbacApplicationsPage() {
     mutationFn: (payload) => apiClient.post('/applications', payload),
     onSuccess: (res) => {
       const data = res?.data?.data ?? res?.data ?? {};
-      queryClient.invalidateQueries({ queryKey: ['applications'] });
-      queryClient.invalidateQueries({ queryKey: ['abac', 'applications'] });
-      queryClient.invalidateQueries({ queryKey: ['abac', 'users'] });
+      queryClient.invalidateQueries({ queryKey: QK.applicationsRaw });
+      queryClient.invalidateQueries({ queryKey: QK.applications });
+      queryClient.invalidateQueries({ queryKey: QK.users() });
       refetch();
       closePanel();
       setCreatedCredentials({
@@ -249,9 +250,9 @@ export function AbacApplicationsPage() {
       apiClient.patch(`/applications/${id}`, payload),
     onSuccess: () => {
       toast({ title: 'Application updated' });
-      queryClient.invalidateQueries({ queryKey: ['applications'] });
-      queryClient.invalidateQueries({ queryKey: ['abac', 'applications'] });
-      queryClient.invalidateQueries({ queryKey: ['abac', 'users'] });
+      queryClient.invalidateQueries({ queryKey: QK.applicationsRaw });
+      queryClient.invalidateQueries({ queryKey: QK.applications });
+      queryClient.invalidateQueries({ queryKey: QK.users() });
       refetch();
       closePanel();
     },

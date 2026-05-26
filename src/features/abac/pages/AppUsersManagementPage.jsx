@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { abacService } from '@/features/abac/api/abacService';
 import { resourceService } from '@/features/resources';
+import { QK } from '@/lib/queryKeys';
 import { useAbacScope } from '../contexts/AbacScopeContext';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -124,7 +125,7 @@ export function AppUsersManagementPage() {
   }, [search]);
 
   const { data: usersData, isLoading, refetch: refetchUsers } = useQuery({
-    queryKey: ['abac', 'appUsers', selectedAppKey],
+    queryKey: QK.appUsers(selectedAppKey),
     queryFn: () => abacService.listAppUsers(selectedAppKey),
     enabled: !!selectedAppKey,
     staleTime: 30_000,
@@ -132,7 +133,7 @@ export function AppUsersManagementPage() {
   const allUsers = usersData?.data?.data ?? usersData?.data ?? [];
 
   const { data: attrDefsData } = useQuery({
-    queryKey: ['abac', 'appAttributes', selectedAppKey],
+    queryKey: QK.appAttributes(selectedAppKey),
     queryFn: () => abacService.listAppAttrDefs(selectedAppKey),
     enabled: !!selectedAppKey,
     staleTime: 5 * 60_000,
@@ -144,7 +145,7 @@ export function AppUsersManagementPage() {
 
   // Fetch the application record to get its id for the resource query
   const { data: applicationsData } = useQuery({
-    queryKey: ['abac', 'applications', 'forStudyAccess'],
+    queryKey: QK.appsForStudyAccess,
     queryFn: () => abacService.getApplications(),
     enabled: !!selectedAppKey,
     staleTime: 5 * 60_000,
@@ -154,7 +155,7 @@ export function AppUsersManagementPage() {
   );
 
   const { data: resourcesData } = useQuery({
-    queryKey: ['abac', 'studyResources', selectedAppKey, selectedApplication?.id],
+    queryKey: QK.studyResources(selectedAppKey, selectedApplication?.id),
     queryFn: () =>
       resourceService.getResources({ applicationId: selectedApplication?.id, limit: 1000, isActive: 'true' }),
     enabled: !!selectedApplication?.id,

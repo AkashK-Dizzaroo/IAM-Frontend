@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { abacService } from '@/features/abac/api/abacService';
+import { QK } from '@/lib/queryKeys';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -82,17 +83,19 @@ export function HubAttributesPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
+  const queryClient = useQueryClient();
+
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['abac', 'hubAttrDefs'],
+    queryKey: QK.hubAttributes,
     queryFn: abacService.listHubAttrDefs,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
   const defs = data?.data?.data ?? data?.data ?? [];
 
   const { data: globalPoliciesData } = useQuery({
-    queryKey: ['abac', 'globalPolicies', 'active'],
+    queryKey: QK.globalPolicies('active'),
     queryFn: () => abacService.listGlobalPolicies({ status: 'active' }),
-    staleTime: 60_000,
+    staleTime: 2 * 60_000,
   });
 
   const referencedKeys = useMemo(() => {

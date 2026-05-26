@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/features/auth";
 import { resourceService } from "../api/resourceService";
 import { applicationService } from "@/features/applications";
+import { QK } from "@/lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -60,11 +61,12 @@ export function ResourceManagementTab() {
   const [deleteLinkedApps, setDeleteLinkedApps] = useState([]);
 
   const { data: applicationsData } = useQuery({
-    queryKey: ["applications-resources"],
+    queryKey: QK.applicationsModal,
     queryFn: async () => {
       const response = await applicationService.getApplications();
       return response?.data ?? response ?? [];
     },
+    staleTime: 5 * 60_000,
   });
 
   const applications = applicationsData ?? [];
@@ -75,7 +77,7 @@ export function ResourceManagementTab() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["resources", applicationFilter, levelFilter, statusFilter, searchTerm],
+    queryKey: QK.resources({ applicationFilter, levelFilter, statusFilter, searchTerm }),
     queryFn: async () => {
       const params = { limit: 1000, page: 1 };
       if (applicationFilter && applicationFilter !== "all") params.applicationId = applicationFilter;
@@ -140,7 +142,7 @@ export function ResourceManagementTab() {
       setDeleteTarget(null);
       setDeleteLinkedApps([]);
       toast({ title: "Success", description: `"${deleteTarget.name}" permanently deleted` });
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.invalidateQueries({ queryKey: ['resources'] });
     } catch (err) {
       const details = err?.details ?? err?.data?.details;
       if (details?.type === 'linked_applications' && details?.applications?.length > 0) {
@@ -161,7 +163,7 @@ export function ResourceManagementTab() {
     try {
       await resourceService.addApplicationToResource(resourceId, appId);
       toast({ title: "Success", description: "Your application added to this resource" });
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.invalidateQueries({ queryKey: ['resources'] });
     } catch (err) {
       toast({
         title: "Error",
@@ -206,7 +208,7 @@ export function ResourceManagementTab() {
     setIsBulkDeleting(false);
     setBulkDeleteOpen(false);
     setSelectedIds(new Set());
-    queryClient.invalidateQueries({ queryKey: ["resources"] });
+    queryClient.invalidateQueries({ queryKey: ['resources'] });
     if (failed > 0) {
       toast({ title: `${ids.length - failed} deleted, ${failed} failed`, description: 'Some resources could not be deleted (may have children).', variant: 'destructive' });
     } else {
@@ -880,7 +882,7 @@ export function ResourceManagementTab() {
         resource={editingResource}
         onSuccess={() => {
           setEditingResource(null);
-          queryClient.invalidateQueries({ queryKey: ["resources"] });
+          queryClient.invalidateQueries({ queryKey: ['resources'] });
         }}
       />
     </div>

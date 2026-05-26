@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { QK } from '@/lib/queryKeys';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -902,9 +903,9 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
       abacService.updateAppPolicy(appKey, policy.id, data),
     onSuccess: () => {
       toast({ title: 'Policy saved' });
-      queryClient.invalidateQueries(['abac', 'appPolicy', appKey, policy.id]);
-      queryClient.invalidateQueries(['abac', 'appPolicies', appKey]);
-      queryClient.invalidateQueries(['abac', 'appPolicyVersions', appKey, policy.id]);
+      queryClient.invalidateQueries({ queryKey: QK.appPolicy(policy.id) });
+      queryClient.invalidateQueries({ queryKey: ['abac', 'appPolicies', appKey] });
+      queryClient.invalidateQueries({ queryKey: QK.appPolicyVersions(appKey, policy.id) });
     },
     onError: (err) => toast({
       title: 'Save failed',
@@ -918,8 +919,8 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
       abacService.setAppPolicyStatus(appKey, policy.id, status),
     onSuccess: (_, status) => {
       toast({ title: `Policy ${status}` });
-      queryClient.invalidateQueries(['abac', 'appPolicies', appKey]);
-      queryClient.invalidateQueries(['abac', 'appPolicy', appKey, policy.id]);
+      queryClient.invalidateQueries({ queryKey: ['abac', 'appPolicies', appKey] });
+      queryClient.invalidateQueries({ queryKey: QK.appPolicy(policy.id) });
     },
     onError: (err) => toast({
       title: 'Status change failed',
@@ -933,9 +934,9 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
       abacService.rollbackAppPolicy(appKey, policy.id, version),
     onSuccess: () => {
       toast({ title: 'Rolled back successfully' });
-      queryClient.invalidateQueries(['abac', 'appPolicy', appKey, policy.id]);
-      queryClient.invalidateQueries(['abac', 'appPolicies', appKey]);
-      queryClient.invalidateQueries(['abac', 'appPolicyVersions', appKey, policy.id]);
+      queryClient.invalidateQueries({ queryKey: QK.appPolicy(policy.id) });
+      queryClient.invalidateQueries({ queryKey: ['abac', 'appPolicies', appKey] });
+      queryClient.invalidateQueries({ queryKey: QK.appPolicyVersions(appKey, policy.id) });
     },
     onError: (err) => toast({
       title: 'Rollback failed',
@@ -948,7 +949,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
     mutationFn: () => abacService.deleteAppPolicy(appKey, policy.id),
     onSuccess: () => {
       toast({ title: 'Policy deleted permanently' });
-      queryClient.invalidateQueries(['abac', 'appPolicies', appKey]);
+      queryClient.invalidateQueries({ queryKey: ['abac', 'appPolicies', appKey] });
       onDelete?.();
     },
     onError: (err) => toast({
@@ -1234,7 +1235,7 @@ function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose,
     },
     onSuccess: (res) => {
       toast({ title: 'Policy created as draft' });
-      queryClient.invalidateQueries(['abac', 'appPolicies', appKey]);
+      queryClient.invalidateQueries({ queryKey: ['abac', 'appPolicies', appKey] });
       onCreated(
         res.data?.data?.id ?? res.data?.data?._id ?? res.data?.id
       );
@@ -1369,16 +1370,16 @@ function HubGlobalConfigTab({ appName }) {
   const [expandedId, setExpandedId] = useState(null);
 
   const { data: globalPoliciesData, isLoading: policiesLoading } = useQuery({
-    queryKey: ['abac', 'globalPolicies', 'active'],
+    queryKey: QK.globalPolicies('active'),
     queryFn: () => abacService.listGlobalPolicies({ status: 'active' }),
-    staleTime: 60_000,
+    staleTime: 2 * 60_000,
   });
   const globalPolicies = globalPoliciesData?.data?.data ?? globalPoliciesData?.data ?? [];
 
   const { data: hubAttrsData, isLoading: attrsLoading } = useQuery({
-    queryKey: ['abac', 'hubAttributes'],
+    queryKey: QK.hubAttributes,
     queryFn: () => abacService.listHubAttrDefs(),
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
   const hubAttributes = hubAttrsData?.data?.data ?? hubAttrsData?.data ?? [];
 
@@ -1592,12 +1593,12 @@ function AppPoliciesContent({ appKey, appName }) {
   const [showCreatePanel, setShowCreatePanel] = useState(false);
 
   const { data: policiesData, isLoading: listLoading } = useQuery({
-    queryKey: ['abac', 'appPolicies', appKey, listFilter],
+    queryKey: QK.appPolicies(appKey, listFilter),
     queryFn: () => abacService.listAppPolicies(
       appKey,
       listFilter !== 'all' ? { status: listFilter } : {}
     ),
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,
   });
   const policies = policiesData?.data?.data ?? policiesData?.data ?? [];
 
@@ -1608,7 +1609,7 @@ function AppPoliciesContent({ appKey, appName }) {
   );
 
   const { data: selectedData } = useQuery({
-    queryKey: ['abac', 'appPolicy', appKey, selectedPolicyId],
+    queryKey: QK.appPolicy(selectedPolicyId),
     queryFn: () => abacService.getAppPolicy(appKey, selectedPolicyId),
     enabled: !!selectedPolicyId,
     staleTime: 10_000,
@@ -1617,15 +1618,15 @@ function AppPoliciesContent({ appKey, appName }) {
     selectedData?.data?.data ?? selectedData?.data ?? null;
 
   const { data: appAttrsData } = useQuery({
-    queryKey: ['abac', 'appAttributes', appKey],
+    queryKey: QK.appAttributes(appKey),
     queryFn: () => abacService.listAppAttrDefs(appKey),
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const { data: hubAttrsData } = useQuery({
-    queryKey: ['abac', 'hubAttributes'],
+    queryKey: QK.hubAttributes,
     queryFn: () => abacService.listHubAttrDefs(),
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const hubDefs = (hubAttrsData?.data?.data ?? hubAttrsData?.data ?? []).map(a => ({ ...a, _source: 'hub' }));
@@ -1633,10 +1634,10 @@ function AppPoliciesContent({ appKey, appName }) {
   const attributeDefs = [...hubDefs, ...appDefs];
 
   const { data: versionsData } = useQuery({
-    queryKey: ['abac', 'appPolicyVersions', appKey, selectedPolicyId],
+    queryKey: QK.appPolicyVersions(appKey, selectedPolicyId),
     queryFn: () => abacService.getAppPolicyVersions(appKey, selectedPolicyId),
     enabled: !!selectedPolicyId,
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,
   });
   const versions = versionsData?.data?.data ?? versionsData?.data ?? [];
 

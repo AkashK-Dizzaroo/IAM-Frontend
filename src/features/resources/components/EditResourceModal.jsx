@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { resourceService } from "../api/resourceService";
+import { QK } from "@/lib/queryKeys";
 import {
   Dialog,
   DialogContent,
@@ -29,18 +30,19 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
   const [overrides, setOverrides] = useState([]);
 
   const { data: attrDefsResponse } = useQuery({
-    queryKey: ["resource-attribute-definitions"],
+    queryKey: QK.resourceAttrDefs,
     queryFn: () => resourceService.listAttributeDefinitions(),
     enabled: open,
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
   });
   const attrDefs = attrDefsResponse?.data ?? [];
 
   const resourceId = resource?._id ?? resource?.id;
   const { data: existingAttrsResponse } = useQuery({
-    queryKey: ["resource-attributes", resourceId],
+    queryKey: QK.resourceAttrs(resourceId),
     queryFn: () => resourceService.getResourceAttributes(resourceId),
     enabled: open && !!resourceId,
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -121,9 +123,9 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Resource updated successfully" });
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
-      queryClient.invalidateQueries({ queryKey: ["all-resources-modal"] });
-      queryClient.invalidateQueries({ queryKey: ["resource-attributes", resourceId] });
+      queryClient.invalidateQueries({ queryKey: ['resources', 'list'] });
+      queryClient.invalidateQueries({ queryKey: QK.resourcesAll });
+      queryClient.invalidateQueries({ queryKey: QK.resourceAttrs(resourceId) });
       onSuccess?.();
       onOpenChange(false);
     },

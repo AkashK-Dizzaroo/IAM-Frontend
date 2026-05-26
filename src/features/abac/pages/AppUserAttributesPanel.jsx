@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { abacService } from '@/features/abac/api/abacService';
 import { resourceService } from '@/features/resources';
+import { QK } from '@/lib/queryKeys';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -268,20 +269,20 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
   const userId = user?.id;
 
   const { data: applicationsData } = useQuery({
-    queryKey: ['abac', 'applications', 'forStudyAccess'],
+    queryKey: QK.appsForStudyAccess,
     queryFn: () => abacService.getApplications(),
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
   const selectedApplication = (applicationsData?.data?.data ?? applicationsData?.data ?? []).find(
     (a) => a?.key === appKey
   );
 
   const { data: resourcesData } = useQuery({
-    queryKey: ['abac', 'studyResources', appKey, selectedApplication?.id],
+    queryKey: QK.studyResources(appKey, selectedApplication?.id),
     queryFn: () =>
       resourceService.getResources({ applicationId: selectedApplication?.id, limit: 1000, isActive: 'true' }),
     enabled: !!selectedApplication?.id,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
   const resources = useMemo(() => {
     const raw = resourcesData?.data ?? resourcesData?.resources ?? [];
@@ -289,7 +290,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
   }, [resourcesData]);
 
   const { data: userAttrsData, isLoading: loadingAttrs } = useQuery({
-    queryKey: ['abac', 'appUserAttributes', appKey, userId],
+    queryKey: QK.appUserAttributes(appKey, userId),
     queryFn: () => abacService.listAppUserAttrs(appKey, userId),
     enabled: !!appKey && !!userId && open,
     staleTime: 10_000,
@@ -369,8 +370,8 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
     mutationFn: (payload) => abacService.assignAppUser(appKey, payload),
     onSuccess: () => {
       toast({ title: 'User updated', description: 'Attributes saved successfully.' });
-      queryClient.invalidateQueries({ queryKey: ['abac', 'appUsers', appKey] });
-      queryClient.invalidateQueries({ queryKey: ['abac', 'appUserAttributes', appKey, userId] });
+      queryClient.invalidateQueries({ queryKey: QK.appUsers(appKey) });
+      queryClient.invalidateQueries({ queryKey: QK.appUserAttributes(appKey, userId) });
       onAttributeChanged?.();
       setIsDirty(false);
       onClose();

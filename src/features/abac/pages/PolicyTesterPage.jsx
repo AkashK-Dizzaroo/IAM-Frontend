@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { QK } from '@/lib/queryKeys';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -117,7 +118,7 @@ function UserSearchPicker({ onSelect }) {
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   const { data, isFetching } = useQuery({
-    queryKey: ['abac', 'users', debouncedSearch],
+    queryKey: QK.users(debouncedSearch),
     queryFn: () => abacService.listUsers({ search: debouncedSearch, limit: 20 }),
     staleTime: 30_000,
   });
@@ -169,7 +170,7 @@ function ResourceSearchPicker({ onSelect, applicationId }) {
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   const { data, isFetching } = useQuery({
-    queryKey: ['resources', 'byApp', applicationId, debouncedSearch],
+    queryKey: [...QK.resourcesByApp(applicationId), debouncedSearch],
     queryFn: () => resourceService.getResources({ applicationId, search: debouncedSearch, limit: 30 }),
     enabled: !!applicationId,
     staleTime: 30_000,
@@ -219,14 +220,14 @@ function SubjectAttributesPreview({ userId, appKey }) {
   const [open, setOpen] = useState(false);
 
   const { data: hubData, isFetching: hubFetching } = useQuery({
-    queryKey: ['abac', 'hubUserAttrs', userId],
+    queryKey: QK.hubUserAttrs(userId),
     queryFn: () => abacService.listHubUserAttrs(userId),
     enabled: !!userId && open,
     staleTime: 30_000,
   });
 
   const { data: appData, isFetching: appFetching } = useQuery({
-    queryKey: ['abac', 'appUserAttrs', appKey, userId],
+    queryKey: QK.appUserAttrs(appKey, userId),
     queryFn: () => abacService.listAppUserAttrs(appKey, userId),
     enabled: !!userId && !!appKey && open,
     staleTime: 30_000,
@@ -794,13 +795,13 @@ export function PolicyTesterPage() {
   // ── Attr definitions ───────────────────────────────────────────────────────
 
   const { data: hubAttrData } = useQuery({
-    queryKey: ['abac', 'hubAttrDefs'],
+    queryKey: QK.hubAttributes,
     queryFn: () => abacService.listHubAttrDefs(),
-    staleTime: 120_000,
+    staleTime: 5 * 60_000,
   });
 
   const { data: appAttrData } = useQuery({
-    queryKey: ['abac', 'appAttributes', selectedAppKey],
+    queryKey: QK.appAttributes(selectedAppKey),
     queryFn: () => abacService.listAppAttrDefs(selectedAppKey),
     enabled: !!selectedAppKey,
     staleTime: 120_000,

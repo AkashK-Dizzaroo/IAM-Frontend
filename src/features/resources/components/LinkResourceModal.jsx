@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { resourceService } from "../api/resourceService";
+import { QK } from "@/lib/queryKeys";
 import {
   Dialog,
   DialogContent,
@@ -33,18 +34,20 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
   const [linkingId, setLinkingId] = useState(null);
   const [expandedIds, setExpandedIds] = useState(new Set());
 
-  // Fetch all resources (global list)
+  // Fetch all resources (global list) — reuses QK.resourcesAll cache when open
   const { data: allResponse, isLoading } = useQuery({
-    queryKey: ["resources-link-modal"],
+    queryKey: QK.resourcesAll,
     queryFn: () => resourceService.getResources({ limit: 10000, page: 1 }),
     enabled: open && !!applicationId,
+    staleTime: 2 * 60_000,
   });
 
   // Fetch resources already linked to this app so we can exclude them
   const { data: linkedResponse } = useQuery({
-    queryKey: ["resources-by-app", applicationId],
+    queryKey: QK.resourcesByApp(applicationId),
     queryFn: () => resourceService.getResourcesByApplication(applicationId),
     enabled: open && !!applicationId,
+    staleTime: 30_000,
   });
 
   const allResources = useMemo(() => {
@@ -143,9 +146,9 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
           ? `"${resource.name}" and its parent container linked to this application`
           : `"${resource.name}" linked to this application`,
       });
-      queryClient.invalidateQueries({ queryKey: ["resources-by-app", applicationId] });
-      queryClient.invalidateQueries({ queryKey: ["resources-link-modal"] });
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.invalidateQueries({ queryKey: QK.resourcesByApp(applicationId) });
+      queryClient.invalidateQueries({ queryKey: QK.resourcesAll });
+      queryClient.invalidateQueries({ queryKey: ['resources', 'list'] });
       onSuccess?.();
     },
     onError: (err) => {
