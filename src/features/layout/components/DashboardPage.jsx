@@ -177,6 +177,15 @@ export const DashboardPage = () => {
     }
   }, [apps, effectiveRoles.isAppOwner, effectiveRoles.isHubOwner, selectedAppKey, selectApp]);
 
+  // Sync scope to URL: if the current path belongs to Hub Management, ensure
+  // the scope is "global" so the correct sidebar section is shown.
+  const GLOBAL_SCOPE_PATHS = ["/users", "/hub-attributes", "/global-policies", "/applications", "/facilities", "/resources"];
+  useEffect(() => {
+    if (scope === "app" && GLOBAL_SCOPE_PATHS.some((p) => location.pathname === p || location.pathname.startsWith(p + "/"))) {
+      selectGlobal();
+    }
+  }, [location.pathname, scope, selectGlobal]);
+
   if (loading || !rolesReady) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
