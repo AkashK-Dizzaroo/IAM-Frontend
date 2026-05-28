@@ -10,6 +10,13 @@ import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
 import { useAbacScope } from '../contexts/AbacScopeContext';
@@ -1222,6 +1229,17 @@ function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose,
     effect: 'ALLOW',
     conditions: DEFAULT_CONDITIONS,
   });
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+
+  const isFormDirty = form.name.trim() !== '' || form.description.trim() !== '' || form.conditions.conditions.length > 0;
+
+  const handleCancel = () => {
+    if (isFormDirty) {
+      setShowDiscardDialog(true);
+    } else {
+      onClose();
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: () => {
@@ -1249,6 +1267,7 @@ function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose,
   });
 
   return (
+    <>
     <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
       <div className="
         px-6 py-4 bg-white border-b border-gray-100
@@ -1258,7 +1277,7 @@ function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose,
           {createTitle}
         </h2>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={handleCancel}>
             Cancel
           </Button>
           <Button
@@ -1359,6 +1378,32 @@ function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose,
         </div>
       </div>
     </div>
+
+    <Dialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Discard changes?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-gray-600">
+          You have unsaved changes. They will be lost if you close without saving.
+        </p>
+        <DialogFooter className="gap-2 pt-2">
+          <Button variant="outline" onClick={() => setShowDiscardDialog(false)}>
+            Keep editing
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setShowDiscardDialog(false);
+              onClose();
+            }}
+          >
+            Discard
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

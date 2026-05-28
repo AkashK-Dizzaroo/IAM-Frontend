@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { resourceService } from "../api/resourceService";
@@ -28,6 +28,8 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
   const [nameError, setNameError] = useState("");
   const [attrValues, setAttrValues] = useState({});
   const [overrides, setOverrides] = useState([]);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const originalRef = useRef({ name: "", description: "", attrValues: {}, overrides: [] });
 
   const { data: attrDefsResponse } = useQuery({
     queryKey: QK.resourceAttrDefs,
@@ -47,14 +49,16 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
 
   useEffect(() => {
     if (open && resource) {
-      setName(resource.name ?? "");
+      const nameVal = resource.name ?? "";
       const meta = resource.metadata;
-      const desc =
+      const descVal =
         meta instanceof Map
           ? meta.get("description") ?? ""
           : meta?.description ?? "";
-      setDescription(desc);
+      setName(nameVal);
+      setDescription(descVal);
       setNameError("");
+      originalRef.current = { name: nameVal, description: descVal, attrValues: {}, overrides: [] };
     }
   }, [open, resource]);
 
@@ -91,6 +95,7 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
 
     setAttrValues(common);
     setOverrides(appOverrides);
+    originalRef.current = { ...originalRef.current, attrValues: common, overrides: appOverrides };
   }, [open, existingAttrsResponse, attrDefs, resource]);
 
   const addOverride = () => {
@@ -103,6 +108,21 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
 
   const removeOverride = (index) =>
     setOverrides((prev) => prev.filter((_, i) => i !== index));
+
+  const isDirty = (
+    name !== originalRef.current.name ||
+    description !== originalRef.current.description ||
+    JSON.stringify(attrValues) !== JSON.stringify(originalRef.current.attrValues) ||
+    JSON.stringify(overrides) !== JSON.stringify(originalRef.current.overrides)
+  );
+
+  const handleCancel = () => {
+    if (isDirty) {
+      setShowDiscardDialog(true);
+    } else {
+      onOpenChange(false);
+    }
+  };
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: async () => {
@@ -148,7 +168,8 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !showDiscardDialog) handleCancel(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Resource</DialogTitle>
@@ -371,7 +392,7 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={handleCancel}
             disabled={isPending}
           >
             Cancel
@@ -385,5 +406,31 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Discard changes?</DialogTitle>
+          <DialogDescription>
+            You have unsaved changes. They will be lost if you close without saving.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => setShowDiscardDialog(false)}>
+            Keep editing
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setShowDiscardDialog(false);
+              onOpenChange(false);
+            }}
+          >
+            Discard
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

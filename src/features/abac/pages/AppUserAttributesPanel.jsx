@@ -265,6 +265,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
   const [rows, setRows] = useState([{ ...EMPTY_ROW }]);
   const [attrValues, setAttrValues] = useState({});
   const [isDirty, setIsDirty] = useState(false);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
   const userId = user?.id;
 
@@ -423,8 +424,17 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
   const hasAttributes = Object.values(attrValues).some((v) => v !== undefined && v !== '' && v !== null);
   const canSave = isDirty && (hasValidRow || hasAttributes) && !saveMutation.isPending;
 
+  const handleClose = () => {
+    if (isDirty) {
+      setShowDiscardDialog(true);
+    } else {
+      onClose();
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <>
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !showDiscardDialog) handleClose(); }}>
       <DialogContent className="max-w-2xl w-full max-h-[90vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-6 py-4 border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-3">
@@ -534,7 +544,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
         </div>
 
         <DialogFooter className="px-6 py-4 border-t border-gray-100 shrink-0">
-          <Button type="button" variant="outline" onClick={onClose} disabled={saveMutation.isPending}>
+          <Button type="button" variant="outline" onClick={handleClose} disabled={saveMutation.isPending}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!canSave}>
@@ -547,5 +557,31 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Discard changes?</DialogTitle>
+          <DialogDescription>
+            You have unsaved changes. They will be lost if you close without saving.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => setShowDiscardDialog(false)}>
+            Keep editing
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setShowDiscardDialog(false);
+              onClose();
+            }}
+          >
+            Discard
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

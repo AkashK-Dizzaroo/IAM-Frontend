@@ -77,6 +77,8 @@ export function HubAttributesPage() {
   const [enumInput, setEnumInput] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [namespaceTab, setNamespaceTab] = useState('subject');
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [originalFormData, setOriginalFormData] = useState(EMPTY_FORM);
 
   // ── Bulk-select state ──────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -142,24 +144,38 @@ export function HubAttributesPage() {
 
   const openCreate = () => {
     resetForm();
-    setFormData({ ...EMPTY_FORM, namespace: namespaceTab });
+    const initial = { ...EMPTY_FORM, namespace: namespaceTab };
+    setFormData(initial);
+    setOriginalFormData(initial);
     setDialogMode('create');
   };
 
   const openEdit = (def) => {
-    setFormData({
+    const initial = {
       key: def.key || '',
       displayName: def.displayName || '',
       namespace: def.namespace || 'subject',
       dataType: def.dataType || 'string',
       constraints: def.constraints || {},
       isRequired: def.isRequired || false,
-    });
+    };
+    setFormData(initial);
+    setOriginalFormData(initial);
     setEnumInput('');
     setDialogMode(def);
   };
 
   const closeDialog = () => setDialogMode(null);
+
+  const isFormDirty = JSON.stringify(formData) !== JSON.stringify(originalFormData);
+
+  const handleCancelDialog = () => {
+    if (isFormDirty) {
+      setShowDiscardDialog(true);
+    } else {
+      closeDialog();
+    }
+  };
 
   const isOpen = dialogMode !== null;
   const isEditing = isOpen && dialogMode !== 'create';
@@ -580,7 +596,7 @@ export function HubAttributesPage() {
       )}
 
       {/* ── Create / Edit Dialog ── */}
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !showDiscardDialog) handleCancelDialog(); }}>
         <DialogContent className="max-w-3xl w-full max-h-[85vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 py-5 border-b border-gray-100 shrink-0">
             <DialogTitle className="text-base font-semibold text-gray-900">
@@ -786,7 +802,7 @@ export function HubAttributesPage() {
           </div>
 
           <DialogFooter className="px-6 py-4 border-t border-gray-100 shrink-0">
-            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button variant="outline" onClick={handleCancelDialog}>Cancel</Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Attribute'}
             </Button>
@@ -824,6 +840,32 @@ export function HubAttributesPage() {
               disabled={isBulkDeleting}
             >
               {isBulkDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Discard changes confirmation dialog ── */}
+      <Dialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Discard changes?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            You have unsaved changes. They will be lost if you close without saving.
+          </p>
+          <DialogFooter className="gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowDiscardDialog(false)}>
+              Keep editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setShowDiscardDialog(false);
+                closeDialog();
+              }}
+            >
+              Discard
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -477,6 +477,8 @@ export function AppAttributesPage() {
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [isImporting, setIsImporting]       = useState(false);
   const [importStatus, setImportStatus]     = useState(null);
+  const [showEditDiscardDialog, setShowEditDiscardDialog] = useState(false);
+  const [originalEditForm, setOriginalEditForm] = useState({ ...EMPTY_FORM });
 
   // ── Bulk-select state ──────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -782,8 +784,20 @@ export function AppAttributesPage() {
   };
 
   const openEdit = (attr) => {
+    const initial = formFromAttr(attr);
     setEditTarget(attr);
-    setEditForm(formFromAttr(attr));
+    setEditForm(initial);
+    setOriginalEditForm(initial);
+  };
+
+  const isEditFormDirty = JSON.stringify(editForm) !== JSON.stringify(originalEditForm);
+
+  const handleCancelEdit = () => {
+    if (isEditFormDirty) {
+      setShowEditDiscardDialog(true);
+    } else {
+      setEditTarget(null);
+    }
   };
 
   // Summary list for the confirmation dialog (max 5 shown).
@@ -905,7 +919,7 @@ export function AppAttributesPage() {
       </Dialog>
 
       {/* ── Edit Dialog ── */}
-      <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }}>
+      <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o && !showEditDiscardDialog) handleCancelEdit(); }}>
         <DialogContent className="max-w-2xl flex flex-col max-h-[90vh]">
           <DialogHeader className="shrink-0">
             <DialogTitle>
@@ -918,7 +932,7 @@ export function AppAttributesPage() {
                 <AttributeForm form={editForm} setForm={setEditForm} mode="edit" allAttributes={attributes} />
               </div>
               <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2 shrink-0">
-                <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+                <Button variant="outline" onClick={handleCancelEdit}>Cancel</Button>
                 <Button
                   onClick={handleUpdate}
                   disabled={updateMutation.isPending || !editForm.display_name.trim()}
@@ -928,6 +942,32 @@ export function AppAttributesPage() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit discard confirmation dialog ── */}
+      <Dialog open={showEditDiscardDialog} onOpenChange={setShowEditDiscardDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Discard changes?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            You have unsaved changes. They will be lost if you close without saving.
+          </p>
+          <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-2">
+            <Button variant="outline" onClick={() => setShowEditDiscardDialog(false)}>
+              Keep editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setShowEditDiscardDialog(false);
+                setEditTarget(null);
+              }}
+            >
+              Discard
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { QK } from '@/lib/queryKeys';
 import { abacService } from '@/features/abac/api/abacService';
@@ -83,16 +83,23 @@ function getUserRoleSummary(user) {
   const roles = getHubRolesList(user);
   let globalRoles = roles.filter((r) => GLOBAL_ROLES.includes(r));
 
-  const isAppOwner = (user.applicationMembers ?? []).length > 0;
-  const hasPlainAppAccess = (user.accessRequests ?? []).length > 0;
+  const ownedAppKeys = new Set(
+    (user.applicationMembers ?? []).map((m) => m.application?.key || m.application?.name).filter(Boolean)
+  );
+  const isAppOwner = ownedAppKeys.size > 0;
+
+  // Access requests for apps NOT already owned by this user
+  const hasPlainAppAccessOnly = (user.accessRequests ?? []).some((r) => {
+    const key = r.application?.key || r.application?.name;
+    return key && !ownedAppKeys.has(key);
+  });
 
   // Only hide USER when HUB_OWNER is present (they have implicit access to everything).
-  // Keep USER visible alongside APP_OWNER when the user also has plain app access,
-  // so the HUB Role column reflects both roles per spec.
+  // Hide USER alongside APP_OWNER when all app access is through ownership (no additional plain access).
   if (globalRoles.includes('HUB_OWNER')) {
     globalRoles = globalRoles.filter((r) => r !== 'USER' && r !== 'APP_OWNER');
-  } else if (globalRoles.includes('APP_OWNER') && !hasPlainAppAccess) {
-    // Pure app owner with no plain-user access — hide redundant USER badge
+  } else if (globalRoles.includes('APP_OWNER') && !hasPlainAppAccessOnly) {
+    // App owner with no plain-user-only app access — hide redundant USER badge
     globalRoles = globalRoles.filter((r) => r !== 'USER');
   }
 
@@ -279,9 +286,13 @@ export function AbacUsersPage() {
 
   // ── edit form state ───────────────────────────────────────────────────────
   const [editFormData, setEditFormData] = useState({ firstName: '', lastName: '', email: '' });
+  const [editOriginalData, setEditOriginalData] = useState({ firstName: '', lastName: '' });
   const [editNewAttr, setEditNewAttr] = useState({ attributeDefId: '', value: '' });
   // null = no pending change; 'grant' = will assign HUB_OWNER on save; 'revoke' = will remove on save
   const [pendingHubOwner, setPendingHubOwner] = useState(null);
+  // attribute keys queued for deletion — applied only on Save
+  const [pendingDeleteKeys, setPendingDeleteKeys] = useState(new Set());
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
   const resetCreate = useCallback(() => {
     createFormRef.current = { fields: {}, attrValues: {} };
@@ -294,29 +305,59 @@ export function AbacUsersPage() {
   };
 
   const openEdit = (user) => {
-    setEditFormData({
+    const data = {
       firstName: user.firstName || '',
       lastName: user.lastName || '',
       email: user.email || '',
-    });
+    };
+    setEditFormData(data);
+    setEditOriginalData({ firstName: data.firstName, lastName: data.lastName });
     setEditNewAttr({ attributeDefId: '', value: '' });
     setPendingHubOwner(null);
+    setPendingDeleteKeys(new Set());
     setSubmitted(false);
     setDialogMode(user);
   };
 
+  const isOpen = dialogMode !== null;
+  const isEditing = isOpen && dialogMode !== 'create';
+
   const closeDialog = useCallback(() => {
     setDialogMode(null);
+    setShowDiscardDialog(false);
+    setPendingDeleteKeys(new Set());
     resetCreate();
   }, [resetCreate]);
 
-  const isOpen = dialogMode !== null;
-  const isEditing = isOpen && dialogMode !== 'create';
+  const handleCancelClick = useCallback(() => {
+    if (!isEditing) {
+      // For create, check if the form ref has any filled fields
+      const { fields, attrValues } = createFormRef.current;
+      const hasContent = Object.values(fields).some((v) => v && String(v).trim() !== '') ||
+        Object.values(attrValues).some((v) => v !== '' && v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0));
+      if (hasContent) {
+        setShowDiscardDialog(true);
+        return;
+      }
+      closeDialog();
+      return;
+    }
+    // For edit: check if name fields changed or there's a pending hub owner change or unsaved new attr
+    const nameChanged =
+      editFormData.firstName !== editOriginalData.firstName ||
+      editFormData.lastName !== editOriginalData.lastName;
+    const hasNewAttr = editNewAttr.attributeDefId !== '';
+    if (nameChanged || pendingHubOwner !== null || hasNewAttr || pendingDeleteKeys.size > 0) {
+      setShowDiscardDialog(true);
+      return;
+    }
+    closeDialog();
+  }, [isEditing, editFormData, editOriginalData, editNewAttr, pendingHubOwner, pendingDeleteKeys, closeDialog]);
   const rawEditUserId = isEditing ? (dialogMode.id || dialogMode._id) : null;
   const editUserId = rawEditUserId && rawEditUserId !== 'null' && rawEditUserId !== 'undefined' ? rawEditUserId : null;
 
   // ── user attrs query (edit mode) ──────────────────────────────────────────
-  const { data: userAttrsData, refetch: refetchUserAttrs } = useQuery({
+  const { data: userAttrsData, refetch: refetchUserAttrs, isLoading: userAttrsLoading } = useQuery({
     queryKey: QK.userAttrs(editUserId),
     queryFn: () => abacService.listHubUserAttrs(editUserId),
     enabled: !!editUserId,
@@ -459,7 +500,22 @@ export function AbacUsersPage() {
         toast({ title: 'Unsaved attribute', description: 'Click Add before saving, or clear the field.', variant: 'destructive' });
         return;
       }
-      // Apply pending hub_roles change first (if any), then save core fields
+      // Apply pending attribute deletions
+      if (pendingDeleteKeys.size > 0) {
+        Promise.allSettled(
+          Array.from(pendingDeleteKeys).map((key) =>
+            abacService.deleteHubUserAttr(editUserId, key)
+          )
+        ).then((results) => {
+          const failed = results.filter((r) => r.status === 'rejected');
+          if (failed.length > 0) {
+            toast({ title: `${failed.length} attribute(s) failed to delete`, variant: 'destructive' });
+          }
+          setPendingDeleteKeys(new Set());
+          refetchUserAttrs();
+        });
+      }
+      // Apply pending hub_roles change (if any)
       if (pendingHubOwner === 'grant') {
         abacService.setHubUserAttr(editUserId, { attribute_key: 'hub_roles', value: ['HUB_OWNER'] })
           .then(() => { setPendingHubOwner(null); refetchUserAttrs(); })
@@ -655,8 +711,28 @@ export function AbacUsersPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Discard Changes Confirmation Dialog ── */}
+      <Dialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Discard changes?</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes. Are you sure you want to cancel? All changes will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDiscardDialog(false)}>
+              Keep editing
+            </Button>
+            <Button variant="destructive" onClick={closeDialog}>
+              Discard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Edit/Create Dialog ── */}
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !showDiscardDialog) handleCancelClick(); }}>
         <DialogContent className="max-w-2xl w-full max-h-[85vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 py-5 border-b border-gray-100 shrink-0">
             <DialogTitle className="text-base font-semibold text-gray-900">
@@ -699,12 +775,13 @@ export function AbacUsersPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Email <span className="text-red-500">*</span></Label>
+                  <Label>Email</Label>
                   <Input
                     type="email"
                     value={editFormData.email}
-                    onChange={(e) => setEditFormData((p) => ({ ...p, email: e.target.value }))}
-                    placeholder="jane@example.com"
+                    readOnly
+                    disabled
+                    className="bg-gray-50 text-gray-500 cursor-not-allowed"
                   />
                 </div>
 
@@ -716,7 +793,9 @@ export function AbacUsersPage() {
                       <p className="text-xs text-gray-500 mt-0.5">Assign or remove identity attribute values for this user.</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {(() => {
+                      {userAttrsLoading ? (
+                        <div className="h-7 w-28 rounded bg-gray-100 animate-pulse" />
+                      ) : (() => {
                         const hubRolesAttr = userAttrs.find((a) => (a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key) === 'hub_roles');
                         const currentRoles = Array.isArray(hubRolesAttr?.value) ? hubRolesAttr.value : typeof hubRolesAttr?.value === 'string' && hubRolesAttr.value ? [hubRolesAttr.value] : [];
                         const isHubOwnerInDb = currentRoles.includes('HUB_OWNER');
@@ -743,7 +822,7 @@ export function AbacUsersPage() {
                           </Button>
                         );
                       })()}
-                      <Badge variant="outline" className="text-xs text-gray-500">{userAttrs.length} assigned</Badge>
+                      <Badge variant="outline" className="text-xs text-gray-500">{userAttrs.length - pendingDeleteKeys.size} assigned</Badge>
                     </div>
                   </div>
 
@@ -776,28 +855,44 @@ export function AbacUsersPage() {
                       <div className="space-y-2">
                         {displayAttrs.map((attr) => {
                           const key = attr._synthetic ? attr.key : (attr.attributeKey || attr.attribute_key || attr.attributeDef?.key || attr.key || '?');
-                          const isPending = attr.isPending || (key === 'hub_roles' && pendingHubOwner === 'revoke');
+                          const isPendingChange = attr.isPending || (key === 'hub_roles' && pendingHubOwner === 'revoke');
+                          const isPendingDelete = pendingDeleteKeys.has(key);
                           return (
                             <div
                               key={attr.id || key}
-                              className={`flex items-center justify-between border rounded-md px-3 py-2 ${isPending ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100'}`}
+                              className={`flex items-center justify-between border rounded-md px-3 py-2 ${
+                                isPendingDelete ? 'bg-red-50 border-red-200 opacity-60' :
+                                isPendingChange ? 'bg-amber-50 border-amber-200' :
+                                'bg-gray-50 border-gray-100'
+                              }`}
                             >
                               <div className="flex items-center gap-2 min-w-0">
                                 <Badge variant="outline" className="shrink-0 font-mono text-xs">{key}</Badge>
-                                <span className={`text-sm font-mono truncate ${isPending ? 'text-amber-700' : 'text-gray-700'}`}>
+                                <span className={`text-sm font-mono truncate ${
+                                  isPendingDelete ? 'line-through text-red-400' :
+                                  isPendingChange ? 'text-amber-700' :
+                                  'text-gray-700'
+                                }`}>
                                   {pendingHubOwner === 'revoke' && key === 'hub_roles'
                                     ? <><s>HUB_OWNER</s>{' → USER'}</>
                                     : String(attr.value ?? '')}
                                 </span>
-                                {isPending && (
+                                {isPendingDelete && (
+                                  <span className="text-xs text-red-500 italic">(will be deleted)</span>
+                                )}
+                                {isPendingChange && !isPendingDelete && (
                                   <span className="text-xs text-amber-600 italic">(pending)</span>
                                 )}
                               </div>
                               {key !== 'hub_roles' && (
                                 <Button
                                   variant="ghost" size="sm"
-                                  className="text-gray-400 hover:text-red-500 shrink-0 h-7 w-7 p-0"
-                                  onClick={() => deleteAttrMutation.mutate({ userId: editUserId, attributeKey: key })}
+                                  className={`shrink-0 h-7 w-7 p-0 ${isPendingDelete ? 'text-red-400 hover:text-gray-500' : 'text-gray-400 hover:text-red-500'}`}
+                                  onClick={() => setPendingDeleteKeys((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(key)) next.delete(key); else next.add(key);
+                                    return next;
+                                  })}
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
@@ -869,7 +964,7 @@ export function AbacUsersPage() {
                 </p>
               ) : null;
             })()}
-            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button variant="outline" onClick={handleCancelClick}>Cancel</Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving
                 ? (createMutation.isPending ? 'Creating…' : 'Saving…')

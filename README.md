@@ -169,7 +169,9 @@ IAM-Frontend/
     │   │   ├── config/resourceTypeConfig.js    # Resource type definitions and metadata
     │   │   ├── hooks/useResourceForm.js        # Form state helper
     │   │   ├── index.js
-    │   │   └── pages/ResourceManagementPage.jsx
+    │   │   └── pages/
+    │   │       ├── ResourceManagementPage.jsx   # Global resource management (Hub Owner)
+    │   │       └── AppResourcesPage.jsx         # App-scoped resource management (/app-resources)
     │   ├── roles/
     │   │   ├── api/permissionService.js        # Permission helpers
     │   │   ├── api/roleService.js              # Role helpers
@@ -187,6 +189,9 @@ IAM-Frontend/
     │           ├── AccountRequestsPage.jsx      # Account approval queue
     │           ├── UserProfileManagementPage.jsx  # (Legacy; redirected to /users)
     │           └── UsersPage.jsx                # (Legacy; superseded by AbacUsersPage)
+    │   ├── facilities/
+    │   │   ├── api/facilityService.js           # /facilities CRUD (list, get, create, update, delete)
+    │   │   └── index.js
     ├── hooks/
     │   └── use-toast.js                        # Toast hook wired to Radix toast
     ├── lib/
@@ -249,6 +254,8 @@ All authenticated app routes are nested under `/` and wrapped by **`ProtectedRou
 | `/app-policies` | `AppPoliciesPage` | Hub Owner or App Owner — app scope |
 | `/policy-tester` | `PolicyTesterPage` | Hub Owner or App Owner — app scope |
 | `/coverage-gaps` | `CoverageGapsPage` | Hub Owner or App Owner — app scope |
+| `/app-resources` | `AppResourcesPage` | Hub Owner or App Owner — app-scoped resource management |
+| `/facilities` | `FacilitiesPage` | Hub Owner — facility registry |
 
 ### Default redirect (index route)
 
@@ -307,8 +314,9 @@ The sidebar is **collapsible** (state persisted to `localStorage` as `iam_sideba
 | **Administration** | `isHubOwner \|\| isAppOwner` | Account Approvals (Hub Owner/IT Support only), Access Approvals (Hub Owner/IT Support/App Owner) |
 | **Application selector** | `isHubOwner \|\| isAppOwner` | Inline `<select>` listing all ABAC apps + "Hub Management" option for Hub Owners |
 | **Hub Config** | `isHubOwner && scope === 'global'` | Users, Hub Attributes, Global Policies, Applications |
-| **`{AppName}` Settings** | `(isHubOwner \|\| isAppOwner) && scope === 'app' && app selected` | App Attributes, App Users, App Policies, Policy Tester, Audit Trail, Coverage Gaps |
+| **`{AppName}` Settings** | `(isHubOwner \|\| isAppOwner) && scope === 'app' && app selected` | App Attributes, App Users, App Policies, Policy Tester, Audit Trail, Coverage Gaps, App Resources |
 | **Resources** | `isHubOwner \|\| isAppOwner` | Resources |
+| **Facilities** | `isHubOwner` | Facility registry |
 
 **Auto-select:** If the signed-in user is an App Owner (but not Hub Owner) and owns exactly one app, `DashboardPage` calls `selectApp()` on first load to automatically enter app scope.
 
@@ -345,6 +353,7 @@ Scope selection (including `key`, `name`, and `id`) is persisted to `localStorag
 | **Resources** | `features/resources/api/resourceService.js` | `/resources` CRUD and application linkage. |
 | **Applications** | `features/applications/api/applicationService.js` | `/applications` reads for non-ABAC flows. |
 | **Roles** | `features/roles/api/{roleService,permissionService}.js` | Legacy RBAC helpers; not in active nav. |
+| **Facilities** | `features/facilities/api/facilityService.js` | `/facilities` CRUD — list (with search/filter/pagination), get, create, update, delete. |
 
 **Response envelope:** Backend responses use `{ success, data }`. Components and React Query `queryFn`s normalize nested `data` where needed (e.g. `normalizeApplicationsList` in `DashboardPage.jsx`).
 
@@ -413,7 +422,7 @@ Vite exposes only variables prefixed with **`VITE_`**. Copy **`env.example`** to
 | **`VITE_API_URL`** | Yes (production) | Backend origin **without** trailing slash or `/api` (e.g. `https://api.example.com`). In dev, `apiClient` uses `/api` (same-origin Vite proxy); `VITE_API_URL` is used for absolute URL construction via `getApiBaseURL()`. Falls back to `http://localhost:4001` in dev if unset. |
 | **`VITE_HUB_URL`** | Yes | Hub base URL for redirects and "Back to Hub". Falls back to `https://hub.dizzaroo.com` in production if unset or invalid (guards against unexpanded pipeline variable placeholders like `$(var)`); dev falls back to `http://localhost:5000`. |
 | **`VITE_GOOGLE_CLIENT_ID`** | **Yes at runtime** | Google OAuth Web client ID. Missing or empty causes the app to render a configuration error page. |
-| `VITE_DEV_MODE` | Optional | Set to `"true"` to suppress Hub login redirects on 401 (same effect as `localStorage.setItem("dev_mode", "true")`). |
+| `VITE_DEV_MODE` | Optional | Set to `"true"` to suppress Hub login redirects on 401 (same as `localStorage.setItem("dev_mode", "true")`). Useful for local dev without the Hub running. |
 
 **`config/env.js` URL helpers:**
 

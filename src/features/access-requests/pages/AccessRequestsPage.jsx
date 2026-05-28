@@ -321,22 +321,23 @@ export const AccessRequestsPage = () => {
   const [statusFilter, setStatusFilter] = useState('pending');
   const [modal, setModal] = useState(null); // { request, action }
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['access-requests', 'all', statusFilter],
-    queryFn: () => accessRequestService.getAllAccessRequests({
-      ...(statusFilter !== 'all' && { status: statusFilter }),
-      limit: 200,
-    }),
+  const { data: allData, isLoading, isError, refetch } = useQuery({
+    queryKey: ['access-requests', 'all'],
+    queryFn: () => accessRequestService.getAllAccessRequests({ limit: 500 }),
     select: (res) => {
       const rows = res?.data ?? res?.data?.data ?? [];
       return Array.isArray(rows) ? rows : [];
     },
+    staleTime: 30_000,
   });
 
-  const rows = data ?? [];
+  const rows = (allData ?? []).filter((r) =>
+    statusFilter === 'all' || (r.status || '').toLowerCase() === statusFilter
+  );
 
-  const counts = rows.reduce((acc, r) => {
-    acc[r.status] = (acc[r.status] ?? 0) + 1;
+  const counts = (allData ?? []).reduce((acc, r) => {
+    const s = (r.status || '').toLowerCase();
+    acc[s] = (acc[s] ?? 0) + 1;
     return acc;
   }, {});
 
@@ -428,33 +429,33 @@ export const AccessRequestsPage = () => {
       </div>
 
       {/* Status filter tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {STATUS_FILTERS.map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors
-              ${statusFilter === s
-                ? 'bg-indigo-600 text-white border-indigo-600'
-                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
-          >
-            {s.charAt(0).toUpperCase() + s.slice(1)}
-            {s !== 'all' && counts[s] != null && (
-              <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5
-                ${statusFilter === s ? 'bg-white/30 text-white' : 'bg-gray-100 text-gray-600'}`}>
-                {counts[s]}
+      <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
+        <TabsList
+          className="grid w-full h-auto p-1 gap-1 bg-gray-100/80"
+          style={{ gridTemplateColumns: `repeat(${STATUS_FILTERS.length}, minmax(0, 1fr))` }}
+          aria-label="Request status"
+        >
+          {STATUS_FILTERS.map((s) => (
+            <TabsTrigger
+              key={s}
+              value={s}
+              className="flex items-center justify-center gap-1.5 py-2.5 text-sm data-[state=active]:shadow-sm"
+            >
+              <span className="font-medium">{s.charAt(0).toUpperCase() + s.slice(1)}</span>
+              <span
+                className={`min-w-[1.25rem] rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${
+                  statusFilter === s
+                    ? 'bg-primary/15 text-primary'
+                    : 'bg-gray-200/80 text-gray-600'
+                }`}
+              >
+                {s === 'all' ? (allData?.length ?? 0) : (counts[s] ?? 0)}
               </span>
-            )}
-            {s === 'all' && (
-              <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5
-                ${statusFilter === s ? 'bg-white/30 text-white' : 'bg-gray-100 text-gray-600'}`}>
-                {rows.length > 0 ? rows.length : data?.length ?? 0}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
+        <TabsContent value={statusFilter} className="mt-0 pt-4 focus-visible:outline-none">
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto">
@@ -546,6 +547,11 @@ export const AccessRequestsPage = () => {
                             Note: {req.reviewNotes}
                           </p>
                         )}
+                        {!isPending && req.reviewedBy && (
+                          <p className="text-xs text-gray-400 mt-1">
+                            By {[req.reviewedBy.firstName, req.reviewedBy.lastName].filter(Boolean).join(' ') || req.reviewedBy.email}
+                          </p>
+                        )}
                       </td>
 
                       {/* Date */}
@@ -573,11 +579,7 @@ export const AccessRequestsPage = () => {
                             </button>
                           </div>
                         ) : (
-                          <span className="text-gray-400 text-xs">
-                            {req.reviewedBy
-                              ? `By ${[req.reviewedBy.firstName, req.reviewedBy.lastName].filter(Boolean).join(' ') || req.reviewedBy.email}`
-                              : '—'}
-                          </span>
+                          <span className="text-gray-400 text-xs">—</span>
                         )}
                       </td>
                     </tr>
@@ -588,6 +590,8 @@ export const AccessRequestsPage = () => {
           </table>
         </div>
       </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Review modal */}
       {modal && (
