@@ -6,10 +6,10 @@ import { consumePkceVerifier, consumeOAuthState } from "@/features/auth/utils/oa
  *
  * The Hub IdP redirects the browser here with ?code=&state=. We:
  *   1. Verify state matches the value we stored before /authorize.
- *   2. Forward code + state + the PKCE verifier to /api/oauth/iam/callback on the same origin.
- *      Vite proxies that path to the Hub backend in dev; in prod the Static Web App config maps
- *      /api/* to the API origin. The backend exchanges the code server-side using IAM's
- *      client_secret and sets HttpOnly cookies on the IAM origin, then 302s to /.
+ *   2. Forward code + state + the PKCE verifier to the backend's /api/oauth/iam/callback endpoint.
+ *      In dev, Vite proxies /api to http://localhost:4001. In prod, this uses VITE_API_URL.
+ *      The backend exchanges the code server-side using IAM's client_secret and sets HttpOnly
+ *      cookies on the backend's origin, then 302s back to /.
  */
 let processingCallback = false;
 
@@ -36,7 +36,13 @@ export default function OAuthCallbackPage() {
 
     const cb = new URLSearchParams({ code, state });
     if (verifier) cb.append("code_verifier", verifier);
-    window.location.replace(`/api/oauth/iam/callback?${cb.toString()}`);
+
+    // In dev, use relative path (Vite proxies to backend). In prod, use absolute API URL.
+    const apiUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || '';
+    const callbackUrl = apiUrl
+      ? `${apiUrl}/api/oauth/iam/callback?${cb.toString()}`
+      : `/api/oauth/iam/callback?${cb.toString()}`;
+    window.location.replace(callbackUrl);
   }, []);
 
   return (
