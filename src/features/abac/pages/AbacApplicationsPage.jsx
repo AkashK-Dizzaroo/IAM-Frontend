@@ -145,7 +145,7 @@ export function AbacApplicationsPage() {
   const { data: abacRes } = useQuery({
     queryKey: QK.applications,
     queryFn: abacService.getApplications,
-    staleTime: 5 * 60_000,
+    staleTime: 2 * 60_000,
   });
 
   const apps = useMemo(() => normalizeList(mongoRes), [mongoRes]);

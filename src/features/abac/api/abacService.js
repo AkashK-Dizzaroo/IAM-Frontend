@@ -127,6 +127,10 @@ export const abacService = {
   // Audit
   listAuditLogs: (appKey, params) =>
     apiClient.get(v1(`/apps/${appKey}/audit`), { params }),
+  // Centralized, cross-application audit trail (Hub Owner only).
+  // Returns rows for every application plus hub/platform-level (null app) actions.
+  listGlobalAuditLogs: (params) =>
+    apiClient.get(v1('/audit/global'), { params }),
   getAuditStats: (appKey, params) =>
     apiClient.get(v1(`/apps/${appKey}/audit/stats`), { params }),
   getCoverageGaps: (appKey) =>

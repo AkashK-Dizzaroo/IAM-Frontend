@@ -90,14 +90,14 @@ export function HubAttributesPage() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: abacService.listHubAttrDefs,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
   const defs = data?.data?.data ?? data?.data ?? [];
 
   const { data: globalPoliciesData } = useQuery({
     queryKey: QK.globalPolicies('active'),
     queryFn: () => abacService.listGlobalPolicies({ status: 'active' }),
-    staleTime: 2 * 60_000,
+    staleTime: 0,
   });
 
   const referencedKeys = useMemo(() => {

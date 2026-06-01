@@ -144,6 +144,8 @@ export const DashboardPage = () => {
     { id: "global-policies", label: "Global Policies", icon: Globe2, path: "/global-policies", show: effectiveRoles.isHubOwner },
     { id: "applications", label: "Applications", icon: AppWindow, path: "/applications", show: effectiveRoles.isHubOwner },
     { id: "facilities", label: "Facilities", icon: Building2, path: "/facilities", show: effectiveRoles.isHubOwner },
+    // Centralized audit trail across all applications + hub-level actions (Hub Owner).
+    { id: "audit", label: "Audit Trail", icon: BarChart2, path: "/audit", show: effectiveRoles.isHubOwner },
   ], [effectiveRoles.isHubOwner]);
 
   const navApp = useMemo(() => {
@@ -154,7 +156,6 @@ export const DashboardPage = () => {
       { id: "app-user-attributes", label: "App Users", icon: UserCog, path: "/app-user-attributes", show },
       { id: "app-policies", label: "App Policies", icon: FileText, path: "/app-policies", show },
       { id: "policy-tester", label: "Policy Tester", icon: FlaskConical, path: "/policy-tester", show },
-      { id: "audit", label: "Audit Trail", icon: BarChart2, path: "/audit", show },
       { id: "coverage-gaps", label: "Coverage Gaps", icon: AlertTriangle, path: "/coverage-gaps", show },
       { id: "app-resources", label: "App Resources", icon: Boxes, path: "/app-resources", show },
     ];
@@ -179,7 +180,7 @@ export const DashboardPage = () => {
 
   // Sync scope to URL: if the current path belongs to Hub Management, ensure
   // the scope is "global" so the correct sidebar section is shown.
-  const GLOBAL_SCOPE_PATHS = ["/users", "/hub-attributes", "/global-policies", "/applications", "/facilities", "/resources"];
+  const GLOBAL_SCOPE_PATHS = ["/users", "/hub-attributes", "/global-policies", "/applications", "/facilities", "/resources", "/audit"];
   useEffect(() => {
     if (scope === "app" && GLOBAL_SCOPE_PATHS.some((p) => location.pathname === p || location.pathname.startsWith(p + "/"))) {
       selectGlobal();

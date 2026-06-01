@@ -501,34 +501,150 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
 // ConditionJsonPreview
 // ---------------------------------------------------------------------------
 
-function ConditionJsonPreview({ tree }) {
+function ConditionJsonEditor({ tree, onChange, disabled }) {
   const [open, setOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [parseError, setParseError] = useState('');
+
+  const jsonStr = JSON.stringify(tree, null, 2);
+
+  const enterEdit = () => {
+    setDraft(jsonStr);
+    setParseError('');
+    setEditMode(true);
+  };
+
+  const exitEdit = () => {
+    setEditMode(false);
+    setParseError('');
+  };
+
+  const handleChange = (text) => {
+    setDraft(text);
+    setParseError('');
+  };
+
+  const parseConditionInput = (text) => {
+    try {
+      return normalizeConditions(JSON.parse(text));
+    } catch (_) { /* fall through */ }
+
+    const trimmed = text.trim();
+    try {
+      const wrapped = JSON.parse(`{${trimmed}}`);
+      if (wrapped.conditions !== undefined) {
+        return normalizeConditions(wrapped.conditions);
+      }
+    } catch (_) { /* fall through */ }
+
+    throw new SyntaxError('Could not parse as a condition tree. Paste the full condition object or just the tree value.');
+  };
+
+  const handlePaste = (e) => {
+    if (disabled) return;
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text');
+    try {
+      const normalized = parseConditionInput(pasted);
+      onChange(normalized);
+      setDraft(JSON.stringify(normalized, null, 2));
+      setParseError('');
+    } catch {
+      setDraft(pasted);
+    }
+  };
+
+  const applyDraft = () => {
+    try {
+      const normalized = parseConditionInput(draft);
+      onChange(normalized);
+      setParseError('');
+      setEditMode(false);
+    } catch (err) {
+      setParseError(`Invalid JSON: ${err.message}`);
+    }
+  };
+
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="
-          w-full flex items-center justify-between
-          px-3 py-2 bg-gray-50 text-xs font-medium
-          text-gray-600 hover:bg-gray-100 transition-colors
-        "
-      >
-        <span className="font-mono">Condition JSON</span>
-        <span className={`transition-transform duration-150
-          ${open ? 'rotate-180' : ''}`}>
-          ▾
-        </span>
-      </button>
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => { setOpen(o => !o); if (editMode) exitEdit(); }}
+          className="flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 transition-colors"
+        >
+          <span className="font-mono">Condition JSON</span>
+          <span className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`}>▾</span>
+        </button>
+        {open && !disabled && (
+          <div className="flex items-center gap-1">
+            {editMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={applyDraft}
+                  className="px-2 py-0.5 text-[11px] font-semibold bg-primary text-white rounded hover:bg-primary/90 transition-colors"
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  onClick={exitEdit}
+                  className="px-2 py-0.5 text-[11px] font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={enterEdit}
+                className="px-2 py-0.5 text-[11px] font-medium text-primary border border-primary/30 rounded hover:bg-primary/5 transition-colors"
+              >
+                Edit JSON
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       {open && (
-        <pre className="
-          px-3 py-3 text-[11px] font-mono
-          text-gray-700 bg-white overflow-x-auto
-          border-t border-gray-200
-          max-h-40 overflow-y-auto
-        ">
-          {JSON.stringify(tree, null, 2)}
-        </pre>
+        <div className="border-t border-gray-200">
+          {editMode ? (
+            <div className="relative">
+              <textarea
+                value={draft}
+                onChange={e => handleChange(e.target.value)}
+                onPaste={handlePaste}
+                spellCheck={false}
+                className="
+                  w-full px-3 py-3 text-[11px] font-mono
+                  text-gray-900 bg-white resize-none
+                  focus:outline-none focus:ring-1 focus:ring-primary/30
+                  min-h-[120px] max-h-64
+                "
+                placeholder='Paste condition JSON here, e.g. {"operator":"AND","conditions":[...]}'
+                style={{ overflowY: 'auto' }}
+              />
+              {parseError && (
+                <div className="px-3 pb-2 text-[11px] text-red-500 font-medium">
+                  {parseError}
+                </div>
+              )}
+              <div className="px-3 pb-2 text-[10px] text-gray-400">
+                Paste JSON to auto-apply, or type and click Apply.
+              </div>
+            </div>
+          ) : (
+            <pre className="
+              px-3 py-3 text-[11px] font-mono
+              text-gray-700 bg-white overflow-x-auto
+              max-h-40 overflow-y-auto
+            ">
+              {jsonStr}
+            </pre>
+          )}
+        </div>
       )}
     </div>
   );
@@ -642,7 +758,7 @@ function ConditionTreeBuilder({ value, onChange, disabled, attributeDefs }) {
         Add Condition
       </button>
 
-      <ConditionJsonPreview tree={tree} />
+      <ConditionJsonEditor tree={tree} onChange={onChange} disabled={disabled} />
     </div>
   );
 }
@@ -1417,14 +1533,14 @@ function HubGlobalConfigTab({ appName }) {
   const { data: globalPoliciesData, isLoading: policiesLoading } = useQuery({
     queryKey: QK.globalPolicies('active'),
     queryFn: () => abacService.listGlobalPolicies({ status: 'active' }),
-    staleTime: 2 * 60_000,
+    staleTime: 0,
   });
   const globalPolicies = globalPoliciesData?.data?.data ?? globalPoliciesData?.data ?? [];
 
   const { data: hubAttrsData, isLoading: attrsLoading } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: () => abacService.listHubAttrDefs(),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
   const hubAttributes = hubAttrsData?.data?.data ?? hubAttrsData?.data ?? [];
 
@@ -1643,7 +1759,7 @@ function AppPoliciesContent({ appKey, appName }) {
       appKey,
       listFilter !== 'all' ? { status: listFilter } : {}
     ),
-    staleTime: 2 * 60_000,
+    staleTime: 0,
   });
   const policies = policiesData?.data?.data ?? policiesData?.data ?? [];
 
@@ -1665,13 +1781,13 @@ function AppPoliciesContent({ appKey, appName }) {
   const { data: appAttrsData } = useQuery({
     queryKey: QK.appAttributes(appKey),
     queryFn: () => abacService.listAppAttrDefs(appKey),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
 
   const { data: hubAttrsData } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: () => abacService.listHubAttrDefs(),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
 
   const hubDefs = (hubAttrsData?.data?.data ?? hubAttrsData?.data ?? []).map(a => ({ ...a, _source: 'hub' }));
@@ -1682,7 +1798,7 @@ function AppPoliciesContent({ appKey, appName }) {
     queryKey: QK.appPolicyVersions(appKey, selectedPolicyId),
     queryFn: () => abacService.getAppPolicyVersions(appKey, selectedPolicyId),
     enabled: !!selectedPolicyId,
-    staleTime: 2 * 60_000,
+    staleTime: 0,
   });
   const versions = versionsData?.data?.data ?? versionsData?.data ?? [];
 

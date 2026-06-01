@@ -797,14 +797,14 @@ export function PolicyTesterPage() {
   const { data: hubAttrData } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: () => abacService.listHubAttrDefs(),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
 
   const { data: appAttrData } = useQuery({
     queryKey: QK.appAttributes(selectedAppKey),
     queryFn: () => abacService.listAppAttrDefs(selectedAppKey),
     enabled: !!selectedAppKey,
-    staleTime: 120_000,
+    staleTime: 0,
   });
 
   const hubDefs = useMemo(() => {

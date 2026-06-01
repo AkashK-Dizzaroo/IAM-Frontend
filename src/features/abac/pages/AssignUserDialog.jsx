@@ -39,7 +39,7 @@ function UserDropdown({ selectedUser, onSelect, open: dialogOpen }) {
     queryKey: QK.usersAllActive,
     queryFn: () => abacService.listUsers({ limit: 500, status: 'active' }),
     enabled: !!dialogOpen,
-    staleTime: 2 * 60_000,
+    staleTime: 60_000,
   });
   const allUsers = useMemo(() => {
     const raw = data?.data?.data ?? data?.data ?? [];
@@ -425,7 +425,7 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
     queryKey: QK.studyResources(appKey, appId),
     queryFn: () => resourceService.getResources({ applicationId: appId, limit: 1000, isActive: 'true' }),
     enabled: !!appId && open,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
   const resources = useMemo(() => {
     const raw = resourcesData?.data ?? resourcesData?.resources ?? [];
@@ -515,6 +515,8 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
         description: `${selectedUser?.displayName || selectedUser?.email} has been assigned and notified by email.`,
       });
       queryClient.invalidateQueries({ queryKey: QK.appUsers(appKey) });
+      queryClient.invalidateQueries({ queryKey: QK.appUserAttributes(appKey, selectedUser?.id) });
+      queryClient.invalidateQueries({ queryKey: QK.appTeam(appKey) });
       onClose();
     },
     onError: (err) =>

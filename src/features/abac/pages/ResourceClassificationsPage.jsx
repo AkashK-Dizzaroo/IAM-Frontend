@@ -37,7 +37,7 @@ export function ResourceClassificationsPage() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['abac', 'classifications'],
     queryFn: abacService.listClassifications,
-    staleTime: 60_000,
+    staleTime: 2 * 60_000,
   });
   const classifications = data?.data?.data ?? data?.data ?? [];
   const sorted = [...classifications].sort(

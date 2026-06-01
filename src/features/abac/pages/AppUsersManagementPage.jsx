@@ -136,7 +136,7 @@ export function AppUsersManagementPage() {
     queryKey: QK.appAttributes(selectedAppKey),
     queryFn: () => abacService.listAppAttrDefs(selectedAppKey),
     enabled: !!selectedAppKey,
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
   });
   const attrDefs = attrDefsData?.data?.data ?? attrDefsData?.data ?? [];
   const totalDefs = attrDefs.filter(
@@ -148,7 +148,7 @@ export function AppUsersManagementPage() {
     queryKey: QK.appsForStudyAccess,
     queryFn: () => abacService.getApplications(),
     enabled: !!selectedAppKey,
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
   });
   const selectedApplication = (applicationsData?.data?.data ?? applicationsData?.data ?? []).find(
     (a) => a?.key === selectedAppKey
@@ -159,7 +159,7 @@ export function AppUsersManagementPage() {
     queryFn: () =>
       resourceService.getResources({ applicationId: selectedApplication?.id, limit: 1000, isActive: 'true' }),
     enabled: !!selectedApplication?.id,
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
   });
 
   // id → { name, level, parentId, parentName }

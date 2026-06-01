@@ -261,7 +261,7 @@ export function AbacUsersPage() {
   const { data: attrDefsData } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: abacService.listHubAttrDefs,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
   const attrDefs = (attrDefsData?.data?.data ?? attrDefsData?.data ?? []).filter(
     (d) => d.key !== 'hub_roles'
@@ -270,7 +270,7 @@ export function AbacUsersPage() {
   const { data: appsData } = useQuery({
     queryKey: QK.applications,
     queryFn: abacService.getApplications,
-    staleTime: 5 * 60_000,
+    staleTime: 2 * 60_000,
   });
   const allAppNames = (appsData?.data?.data ?? appsData?.data ?? []).map(
     (a) => a.name || a.key

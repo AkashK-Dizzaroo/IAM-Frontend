@@ -38,14 +38,14 @@ export function CoverageGapsPage() {
     queryKey: QK.coverageGaps(selectedAppKey),
     queryFn: () => abacService.getCoverageGaps(selectedAppKey),
     enabled: !!selectedAppKey,
-    staleTime: 60_000,
+    staleTime: 0,
   });
 
   const { data: attrDefsRes } = useQuery({
     queryKey: QK.appAttributes(selectedAppKey),
     queryFn: () => abacService.listAppAttrDefs(selectedAppKey),
     enabled: !!selectedAppKey,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
 
   const body = gapsRes?.data;

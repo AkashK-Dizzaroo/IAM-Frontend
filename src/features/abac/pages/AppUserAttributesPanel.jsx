@@ -272,7 +272,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
   const { data: applicationsData } = useQuery({
     queryKey: QK.appsForStudyAccess,
     queryFn: () => abacService.getApplications(),
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
   const selectedApplication = (applicationsData?.data?.data ?? applicationsData?.data ?? []).find(
     (a) => a?.key === appKey
@@ -283,7 +283,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
     queryFn: () =>
       resourceService.getResources({ applicationId: selectedApplication?.id, limit: 1000, isActive: 'true' }),
     enabled: !!selectedApplication?.id,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
   const resources = useMemo(() => {
     const raw = resourcesData?.data ?? resourcesData?.resources ?? [];
@@ -373,6 +373,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
       toast({ title: 'User updated', description: 'Attributes saved successfully.' });
       queryClient.invalidateQueries({ queryKey: QK.appUsers(appKey) });
       queryClient.invalidateQueries({ queryKey: QK.appUserAttributes(appKey, userId) });
+      queryClient.invalidateQueries({ queryKey: QK.appTeam(appKey) });
       onAttributeChanged?.();
       setIsDirty(false);
       onClose();

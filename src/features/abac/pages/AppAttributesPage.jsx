@@ -489,7 +489,7 @@ export function AppAttributesPage() {
     queryKey: QK.appAttributes(selectedApp?.key),
     queryFn: () => abacService.listAppAttrDefs(selectedApp.key),
     enabled: !!selectedApp?.key,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
 
   const rawData = data?.data?.data ?? data?.data ?? [];
@@ -500,7 +500,7 @@ export function AppAttributesPage() {
     queryKey: QK.appPolicies(selectedApp?.key, 'active'),
     queryFn: () => abacService.listAppPolicies(selectedApp.key, { status: 'active' }),
     enabled: !!selectedApp?.key,
-    staleTime: 2 * 60_000,
+    staleTime: 0,
   });
 
   const referencedKeys = useMemo(() => {
