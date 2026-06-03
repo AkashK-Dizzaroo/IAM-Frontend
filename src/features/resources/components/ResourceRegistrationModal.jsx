@@ -109,12 +109,15 @@ export function ResourceRegistrationModal({
 
   const { data: applicationsResponse } = useQuery({
     queryKey: QK.applicationsModal,
-    queryFn: () => applicationService.getApplications(),
+    queryFn: async () => {
+      const response = await applicationService.getApplications();
+      return response?.data ?? response ?? [];
+    },
     enabled: open,
     staleTime: 5 * 60_000,
   });
 
-  const applications = applicationsResponse?.data ?? applicationsResponse ?? [];
+  const applications = applicationsResponse ?? [];
 
   const { data: attrDefsResponse } = useQuery({
     queryKey: QK.resourceAttrDefs,

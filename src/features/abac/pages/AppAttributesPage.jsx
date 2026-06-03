@@ -25,6 +25,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { abacService } from '../api/abacService';
+import { applicationService } from '@/features/applications/api/applicationService';
 import { useAbacScope } from '../contexts/AbacScopeContext';
 import { BulkImportDialog } from './BulkImportDialog';
 
@@ -479,6 +480,9 @@ export function AppAttributesPage() {
   const [importStatus, setImportStatus]     = useState(null);
   const [showEditDiscardDialog, setShowEditDiscardDialog] = useState(false);
   const [originalEditForm, setOriginalEditForm] = useState({ ...EMPTY_FORM });
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [conflictingApps, setConflictingApps] = useState([]);
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
 
   // ── Bulk-select state ──────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -494,6 +498,17 @@ export function AppAttributesPage() {
 
   const rawData = data?.data?.data ?? data?.data ?? [];
   const attributes = Array.isArray(rawData) ? rawData : [];
+
+  // All applications — used for duplicate resource-attr key check
+  const { data: allAppsData } = useQuery({
+    queryKey: QK.applicationsModal,
+    queryFn: async () => {
+      const res = await applicationService.getApplications();
+      return res?.data ?? res ?? [];
+    },
+    staleTime: 5 * 60_000,
+  });
+  const allApps = Array.isArray(allAppsData) ? allAppsData : [];
 
   // Fetch active policies to detect which attr keys are referenced
   const { data: policiesData } = useQuery({
@@ -628,9 +643,43 @@ export function AppAttributesPage() {
     );
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!createForm.attribute_name.trim() || !createForm.display_name.trim()) return;
-    createMutation.mutate(buildPayload(createForm));
+    const payload = buildPayload(createForm);
+
+    if (createForm.namespace === 'resource') {
+      const otherApps = allApps.filter(
+        (a) => String(a.key ?? a._key ?? '') !== String(selectedApp.key),
+      );
+      const newKey = createForm.attribute_name.trim().toLowerCase();
+
+      setIsCheckingDuplicates(true);
+      try {
+        const results = await Promise.all(
+          otherApps.map((app) =>
+            abacService.listAppAttrDefs(app.key ?? app._key).then((r) => {
+              const defs = r?.data?.data ?? r?.data ?? [];
+              const match = Array.isArray(defs) &&
+                defs.some(
+                  (d) => d.namespace === 'resource' && d.key?.toLowerCase() === newKey,
+                );
+              return match ? (app.name ?? app.key ?? app._key) : null;
+            }).catch(() => null),
+          ),
+        );
+
+        const conflicts = results.filter(Boolean);
+        if (conflicts.length > 0) {
+          setConflictingApps(conflicts);
+          setShowDuplicateWarning(true);
+          return;
+        }
+      } finally {
+        setIsCheckingDuplicates(false);
+      }
+    }
+
+    createMutation.mutate(payload);
   };
 
   /**
@@ -908,11 +957,12 @@ export function AppAttributesPage() {
               onClick={handleCreate}
               disabled={
                 createMutation.isPending ||
+                isCheckingDuplicates ||
                 !createForm.attribute_name.trim() ||
                 !createForm.display_name.trim()
               }
             >
-              {createMutation.isPending ? 'Saving…' : 'Save Attribute'}
+              {isCheckingDuplicates ? 'Checking…' : createMutation.isPending ? 'Saving…' : 'Save Attribute'}
             </Button>
           </div>
         </DialogContent>
@@ -1014,6 +1064,54 @@ export function AppAttributesPage() {
               {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Duplicate resource-attr key warning ── */}
+      <Dialog
+        open={showDuplicateWarning}
+        onOpenChange={(o) => {
+          if (!o) {
+            setShowDuplicateWarning(false);
+            setConflictingApps([]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Duplicate Resource Attribute Key</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-gray-700">
+            <p>
+              The key{' '}
+              <span className="font-mono font-medium">
+                {createForm.attribute_name.trim()}
+              </span>{' '}
+              already exists as a resource attribute in:
+            </p>
+            <ul className="space-y-1 pl-2">
+              {conflictingApps.map((name, i) => (
+                <li key={i} className="flex items-center gap-1.5">
+                  <span className="text-amber-500">⚠</span>
+                  <span className="font-medium">{name}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">
+              Each resource attribute key must be unique across all applications.
+              Please choose a different key name.
+            </p>
+          </div>
+          <DialogFooter className="mt-2">
+            <Button
+              onClick={() => {
+                setShowDuplicateWarning(false);
+                setConflictingApps([]);
+              }}
+            >
+              OK
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

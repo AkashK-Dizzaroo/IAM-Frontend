@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { resourceService } from "../api/resourceService";
+import { abacService } from "@/features/abac/api/abacService";
 import { QK } from "@/lib/queryKeys";
 import {
   Dialog,
@@ -15,9 +16,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, X } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 const MAX_DESCRIPTION = 500;
+const RESERVED_ATTR_KEYS = new Set(['isactive', 'is_active', 'status', 'resource_status']);
 
 export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
   const { toast } = useToast();
@@ -25,21 +27,58 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [isActive, setIsActive] = useState(true);
   const [nameError, setNameError] = useState("");
-  const [attrValues, setAttrValues] = useState({});
-  const [overrides, setOverrides] = useState([]);
+  const [attrValues, setAttrValues] = useState({});       // { [hubDefId]: value }
+  const [appAttrValues, setAppAttrValues] = useState({}); // { [appId]: { [appDefId]: value } }
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  const originalRef = useRef({ name: "", description: "", attrValues: {}, overrides: [] });
 
+  const originalRef = useRef({
+    name: "", description: "", isActive: true, attrValues: {}, appAttrValues: {},
+  });
+
+  const resourceId = resource?._id ?? resource?.id;
+  const linkedApps = resource?.assignedApplications ?? [];
+
+  // Hub resource attribute definitions
   const { data: attrDefsResponse } = useQuery({
     queryKey: QK.resourceAttrDefs,
     queryFn: () => resourceService.listAttributeDefinitions(),
     enabled: open,
     staleTime: 10 * 60_000,
   });
-  const attrDefs = attrDefsResponse?.data ?? [];
+  const allAttrDefs = attrDefsResponse?.data ?? [];
+  const attrDefs = allAttrDefs.filter(
+    (d) => !RESERVED_ATTR_KEYS.has(d.key?.toLowerCase?.() ?? ""),
+  );
 
-  const resourceId = resource?._id ?? resource?.id;
+  // App resource attribute definitions — one query per linked app
+  const appAttrDefQueries = useQueries({
+    queries: linkedApps.map((app) => {
+      const appKey = app.key;
+      return {
+        queryKey: [...QK.appAttributes(appKey), 'resourceDefs'],
+        queryFn: () =>
+          abacService.listAppAttrDefs(appKey).then((r) => ({
+            appId: String(app._id ?? app.id),
+            defs: (r?.data?.data ?? r?.data ?? []).filter((d) => d.namespace === "resource"),
+          })),
+        enabled: open && !!appKey,
+        staleTime: 5 * 60_000,
+      };
+    }),
+  });
+
+  // Build { [appId]: [def, ...] } from query results
+  const appAttrDefs = useMemo(() => {
+    const map = {};
+    for (const q of appAttrDefQueries) {
+      if (q.data) map[q.data.appId] = q.data.defs;
+    }
+    return map;
+  }, [appAttrDefQueries]);
+
+  // Existing attribute values for this resource
   const { data: existingAttrsResponse } = useQuery({
     queryKey: QK.resourceAttrs(resourceId),
     queryFn: () => resourceService.getResourceAttributes(resourceId),
@@ -47,74 +86,59 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
     staleTime: 30_000,
   });
 
+  // Initialize basic fields from resource prop
   useEffect(() => {
     if (open && resource) {
       const nameVal = resource.name ?? "";
       const meta = resource.metadata;
       const descVal =
-        meta instanceof Map
-          ? meta.get("description") ?? ""
-          : meta?.description ?? "";
+        meta instanceof Map ? meta.get("description") ?? "" : meta?.description ?? "";
+      const activeVal = resource.isActive !== false;
       setName(nameVal);
       setDescription(descVal);
+      setIsActive(activeVal);
       setNameError("");
-      originalRef.current = { name: nameVal, description: descVal, attrValues: {}, overrides: [] };
+      originalRef.current = {
+        ...originalRef.current,
+        name: nameVal,
+        description: descVal,
+        isActive: activeVal,
+      };
     }
   }, [open, resource]);
 
+  // Initialize attribute values from server response
   useEffect(() => {
     if (!open || !resource) return;
     const rows = existingAttrsResponse?.data ?? [];
     const common = {};
-    const appOverrides = [];
+    const appValues = {};
+
     for (const row of rows) {
       if (!row.applicationId) {
         common[row.attributeDefId] = row.value;
       } else {
-        appOverrides.push({
-          appId: row.applicationId,
-          attributeDefId: row.attributeDefId,
-          value: row.value,
-        });
-      }
-    }
-
-    // Fall back to resource.metadata for any attribute not returned by the /attributes endpoint.
-    // metadata keys are snake_case (e.g. "resource_status"), matched against def.key.
-    if (attrDefs.length > 0 && resource?.metadata) {
-      const meta =
-        typeof resource.metadata === "string"
-          ? JSON.parse(resource.metadata)
-          : resource.metadata;
-      for (const def of attrDefs) {
-        if (common[def.id] === undefined && def.key && meta[def.key] !== undefined) {
-          common[def.id] = meta[def.key];
-        }
+        const appId = String(row.applicationId);
+        if (!appValues[appId]) appValues[appId] = {};
+        appValues[appId][row.attributeDefId] = row.value;
       }
     }
 
     setAttrValues(common);
-    setOverrides(appOverrides);
-    originalRef.current = { ...originalRef.current, attrValues: common, overrides: appOverrides };
-  }, [open, existingAttrsResponse, attrDefs, resource]);
+    setAppAttrValues(appValues);
+    originalRef.current = {
+      ...originalRef.current,
+      attrValues: common,
+      appAttrValues: appValues,
+    };
+  }, [open, existingAttrsResponse, resource]);
 
-  const addOverride = () => {
-    const firstDefId = attrDefs[0]?.id ?? "";
-    setOverrides((prev) => [...prev, { appId: "", attributeDefId: firstDefId, value: "" }]);
-  };
-
-  const updateOverride = (index, patch) =>
-    setOverrides((prev) => prev.map((o, i) => (i === index ? { ...o, ...patch } : o)));
-
-  const removeOverride = (index) =>
-    setOverrides((prev) => prev.filter((_, i) => i !== index));
-
-  const isDirty = (
+  const isDirty =
     name !== originalRef.current.name ||
     description !== originalRef.current.description ||
+    isActive !== originalRef.current.isActive ||
     JSON.stringify(attrValues) !== JSON.stringify(originalRef.current.attrValues) ||
-    JSON.stringify(overrides) !== JSON.stringify(originalRef.current.overrides)
-  );
+    JSON.stringify(appAttrValues) !== JSON.stringify(originalRef.current.appAttrValues);
 
   const handleCancel = () => {
     if (isDirty) {
@@ -129,33 +153,50 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
       await resourceService.updateResource(resourceId, {
         name: name.trim(),
         description,
+        isActive,
       });
-      const commonEntries = attrDefs
-        .filter((def) => attrValues[def.id] !== undefined && attrValues[def.id] !== "")
-        .map((def) => ({ attributeDefId: def.id, value: attrValues[def.id] }));
-      const overrideEntries = overrides
-        .filter((o) => o.attributeDefId && o.value !== "" && o.value !== undefined)
-        .map((o) => ({ attributeDefId: o.attributeDefId, value: o.value, applicationId: o.appId }));
-      const allEntries = [...commonEntries, ...overrideEntries];
+
+      // Hub entries — always send all defs; null = delete from DB
+      const hubEntries = attrDefs.map((def) => ({
+        attributeDefId: def.id,
+        value:
+          attrValues[def.id] !== undefined && attrValues[def.id] !== ""
+            ? attrValues[def.id]
+            : null,
+      }));
+
+      // App entries — all defs for each app; null = delete from DB
+      const appEntries = [];
+      for (const app of linkedApps) {
+        const appId = String(app._id ?? app.id);
+        const defs = appAttrDefs[appId] ?? [];
+        for (const def of defs) {
+          const val = appAttrValues[appId]?.[def.id];
+          appEntries.push({
+            attributeDefId: def.id,
+            value: val !== undefined && val !== "" ? val : null,
+            applicationId: appId,
+          });
+        }
+      }
+
+      const allEntries = [...hubEntries, ...appEntries];
       if (allEntries.length > 0) {
         await resourceService.upsertResourceAttributes(resourceId, allEntries);
       }
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Resource updated successfully" });
-      queryClient.invalidateQueries({ queryKey: ['resources', 'list'] });
+      queryClient.invalidateQueries({ queryKey: ["resources", "list"] });
       queryClient.invalidateQueries({ queryKey: QK.resourcesAll });
       queryClient.invalidateQueries({ queryKey: QK.resourceAttrs(resourceId) });
       onSuccess?.();
       onOpenChange(false);
     },
     onError: (error) => {
-      if (
-        error?.status === 409 ||
-        error?.message?.includes("already exists")
-      ) {
+      if (error?.status === 409 || error?.message?.includes("already exists")) {
         setNameError(
-          "This name is already used by another resource. Choose a different name."
+          "This name is already used by another resource. Choose a different name.",
         );
       } else {
         toast({
@@ -167,270 +208,268 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
     },
   });
 
+  const renderAttrInput = (def, value, onChange, sizeClass = "") => {
+    if (def.dataType === "boolean") {
+      return (
+        <select
+          className={`w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ${sizeClass}`}
+          value={value === undefined ? "" : String(value)}
+          onChange={(e) =>
+            onChange(e.target.value === "" ? undefined : e.target.value === "true")
+          }
+          disabled={isPending}
+        >
+          <option value="">— not set —</option>
+          <option value="true">true</option>
+          <option value="false">false</option>
+        </select>
+      );
+    }
+    if (def.dataType === "enum" && def.constraints?.allowedValues?.length > 0) {
+      return (
+        <select
+          className={`w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ${sizeClass}`}
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value || undefined)}
+          disabled={isPending}
+        >
+          <option value="">— not set —</option>
+          {def.constraints.allowedValues.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+      );
+    }
+    return (
+      <Input
+        className={sizeClass}
+        type={def.dataType === "number" ? "number" : "text"}
+        placeholder={
+          def.dataType === "datetime"
+            ? "e.g. 2025-01-01T00:00:00Z"
+            : `Enter ${def.displayName.toLowerCase()}`
+        }
+        value={value ?? ""}
+        onChange={(e) =>
+          onChange(
+            def.dataType === "number"
+              ? e.target.value === ""
+                ? undefined
+                : Number(e.target.value)
+              : e.target.value || undefined,
+          )
+        }
+        disabled={isPending}
+      />
+    );
+  };
+
   return (
     <>
-    <Dialog open={open} onOpenChange={(o) => { if (!o && !showDiscardDialog) handleCancel(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Resource</DialogTitle>
-          <DialogDescription>
-            Update resource details. Name must be globally unique.
-          </DialogDescription>
-        </DialogHeader>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (!o && !showDiscardDialog) handleCancel();
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Resource</DialogTitle>
+            <DialogDescription>
+              Update resource details. Name must be globally unique.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div>
-            <Label htmlFor="edit-name" className="text-sm font-medium mb-1 block">
-              Resource Name *
-            </Label>
-            <Input
-              id="edit-name"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setNameError("");
-              }}
-              placeholder="Enter resource name"
-              disabled={isPending}
-            />
-            {nameError && (
-              <p className="text-sm text-destructive mt-1">{nameError}</p>
+          <div className="space-y-4 py-4">
+            {/* Name */}
+            <div>
+              <Label htmlFor="edit-name" className="text-sm font-medium mb-1 block">
+                Resource Name *
+              </Label>
+              <Input
+                id="edit-name"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setNameError("");
+                }}
+                placeholder="Enter resource name"
+                disabled={isPending}
+              />
+              {nameError && (
+                <p className="text-sm text-destructive mt-1">{nameError}</p>
+              )}
+            </div>
+
+            {/* Description */}
+            <div>
+              <Label htmlFor="edit-desc" className="text-sm font-medium mb-1 block">
+                Description
+              </Label>
+              <Textarea
+                id="edit-desc"
+                value={description}
+                onChange={(e) => {
+                  if (e.target.value.length <= MAX_DESCRIPTION)
+                    setDescription(e.target.value);
+                }}
+                placeholder="Describe this resource (optional)..."
+                rows={3}
+                disabled={isPending}
+              />
+              <p
+                className={`text-xs mt-1 text-right ${
+                  description.length >= MAX_DESCRIPTION
+                    ? "text-destructive"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {description.length}/{MAX_DESCRIPTION}
+              </p>
+            </div>
+
+            {/* Resource Status */}
+            <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+              <div>
+                <Label className="text-sm font-medium">Resource Status</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Inactive resources are hidden from all applications.
+                </p>
+              </div>
+              <Switch
+                checked={isActive}
+                onCheckedChange={setIsActive}
+                disabled={isPending}
+              />
+            </div>
+
+            {/* Common Attributes (hub resource defs) */}
+            {attrDefs.length > 0 && (
+              <div className="space-y-4 pt-2">
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                  Attributes
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-medium text-gray-600">Common Attributes</p>
+                    <p className="text-xs text-muted-foreground">
+                      These values apply across all assigned applications.
+                    </p>
+                  </div>
+                  {attrDefs.map((def) => (
+                    <div key={def.id}>
+                      <Label className="text-sm font-medium mb-1 block">
+                        {def.displayName}
+                        {def.isRequired && (
+                          <span className="text-destructive ml-1">*</span>
+                        )}
+                      </Label>
+                      {renderAttrInput(def, attrValues[def.id], (val) =>
+                        setAttrValues((p) => ({ ...p, [def.id]: val })),
+                      )}
+                      {def.description && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {def.description}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* App-specific Attributes (per linked app, AppAttributeDefinition namespace=resource) */}
+            {linkedApps.some(
+              (app) => (appAttrDefs[String(app._id ?? app.id)] ?? []).length > 0,
+            ) && (
+              <div className="space-y-4 pt-2">
+                {attrDefs.length === 0 && (
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                    Attributes
+                  </h3>
+                )}
+                {linkedApps.map((app) => {
+                  const appId = String(app._id ?? app.id);
+                  const defs = appAttrDefs[appId] ?? [];
+                  if (defs.length === 0) return null;
+                  return (
+                    <div key={appId} className="space-y-3 pt-3 border-t border-gray-100">
+                      <div>
+                        <p className="text-xs font-medium text-gray-600">
+                          {app.name ?? app.key} Attributes
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Attributes specific to {app.name ?? app.key}.
+                        </p>
+                      </div>
+                      {defs.map((def) => {
+                        const val = appAttrValues[appId]?.[def.id];
+                        return (
+                          <div key={def.id}>
+                            <Label className="text-sm font-medium mb-1 block">
+                              {def.displayName}
+                              {def.isRequired && (
+                                <span className="text-destructive ml-1">*</span>
+                              )}
+                            </Label>
+                            {renderAttrInput(def, val, (newVal) =>
+                              setAppAttrValues((p) => ({
+                                ...p,
+                                [appId]: { ...(p[appId] ?? {}), [def.id]: newVal },
+                              })),
+                            )}
+                            {def.description && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {def.description}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 
-          <div>
-            <Label htmlFor="edit-desc" className="text-sm font-medium mb-1 block">
-              Description
-            </Label>
-            <Textarea
-              id="edit-desc"
-              value={description}
-              onChange={(e) => {
-                if (e.target.value.length <= MAX_DESCRIPTION) setDescription(e.target.value);
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancel} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button onClick={() => save()} disabled={isPending || !name.trim()}>
+              {isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Discard changes?</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes. They will be lost if you close without saving.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowDiscardDialog(false)}>
+              Keep editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setShowDiscardDialog(false);
+                onOpenChange(false);
               }}
-              placeholder="Describe this resource (optional)..."
-              rows={3}
-              disabled={isPending}
-            />
-            <p className={`text-xs mt-1 text-right ${description.length >= MAX_DESCRIPTION ? "text-destructive" : "text-muted-foreground"}`}>
-              {description.length}/{MAX_DESCRIPTION}
-            </p>
-          </div>
-        </div>
-
-          {attrDefs.length > 0 && (
-            <div className="space-y-4 pt-2">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                Attributes
-              </h3>
-
-              {/* Common attributes (applicationId = null) */}
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs font-medium text-gray-600">Common Attributes</p>
-                  <p className="text-xs text-muted-foreground">
-                    These values apply across all assigned applications.
-                  </p>
-                </div>
-                {attrDefs.map((def) => (
-                  <div key={def.id}>
-                    <Label className="text-sm font-medium mb-1 block">
-                      {def.displayName}
-                      {def.isRequired && <span className="text-destructive ml-1">*</span>}
-                    </Label>
-                    {def.dataType === "boolean" ? (
-                      <select
-                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={attrValues[def.id] === undefined ? "" : String(attrValues[def.id])}
-                        onChange={(e) =>
-                          setAttrValues((p) => ({ ...p, [def.id]: e.target.value === "" ? "" : e.target.value === "true" }))
-                        }
-                        disabled={isPending}
-                      >
-                        <option value="">— not set —</option>
-                        <option value="true">true</option>
-                        <option value="false">false</option>
-                      </select>
-                    ) : def.dataType === "enum" && def.constraints?.allowedValues?.length > 0 ? (
-                      <select
-                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={attrValues[def.id] ?? ""}
-                        onChange={(e) =>
-                          setAttrValues((p) => ({ ...p, [def.id]: e.target.value }))
-                        }
-                        disabled={isPending}
-                      >
-                        <option value="">— not set —</option>
-                        {def.constraints.allowedValues.map((v) => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Input
-                        type={def.dataType === "number" ? "number" : "text"}
-                        placeholder={def.dataType === "datetime" ? "e.g. 2025-01-01T00:00:00Z" : `Enter ${def.displayName.toLowerCase()}`}
-                        value={attrValues[def.id] ?? ""}
-                        onChange={(e) =>
-                          setAttrValues((p) => ({
-                            ...p,
-                            [def.id]: def.dataType === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value,
-                          }))
-                        }
-                        disabled={isPending}
-                      />
-                    )}
-                    {def.description && (
-                      <p className="text-xs text-muted-foreground mt-1">{def.description}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* App-specific overrides */}
-              {overrides.length > 0 && (
-                <div className="space-y-3 pt-3 border-t border-gray-100">
-                  <div>
-                    <p className="text-xs font-medium text-gray-600">
-                      Application-Specific Overrides
-                      <span className="ml-1 text-muted-foreground font-normal">(optional)</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Override a common attribute value for a specific application.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    {overrides.map((override, i) => {
-                      const def = attrDefs.find((d) => d.id === override.attributeDefId);
-                      return (
-                        <div key={i} className="flex items-start gap-2 p-3 rounded-md border border-gray-100 bg-gray-50">
-                          <div className="flex-1 grid grid-cols-2 gap-2">
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Attribute</p>
-                              <select
-                                className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                                value={override.attributeDefId}
-                                onChange={(e) => updateOverride(i, { attributeDefId: e.target.value, value: "" })}
-                                disabled={isPending}
-                              >
-                                {attrDefs.map((d) => (
-                                  <option key={d.id} value={d.id}>{d.displayName}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Value</p>
-                              {def?.dataType === "boolean" ? (
-                                <select
-                                  className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                                  value={override.value === undefined ? "" : String(override.value)}
-                                  onChange={(e) => updateOverride(i, { value: e.target.value === "" ? "" : e.target.value === "true" })}
-                                  disabled={isPending}
-                                >
-                                  <option value="">— not set —</option>
-                                  <option value="true">true</option>
-                                  <option value="false">false</option>
-                                </select>
-                              ) : def?.dataType === "enum" && def?.constraints?.allowedValues?.length > 0 ? (
-                                <select
-                                  className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                                  value={override.value ?? ""}
-                                  onChange={(e) => updateOverride(i, { value: e.target.value })}
-                                  disabled={isPending}
-                                >
-                                  <option value="">— not set —</option>
-                                  {def.constraints.allowedValues.map((v) => (
-                                    <option key={v} value={v}>{v}</option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <Input
-                                  className="h-8 text-xs"
-                                  type={def?.dataType === "number" ? "number" : "text"}
-                                  value={override.value ?? ""}
-                                  onChange={(e) =>
-                                    updateOverride(i, {
-                                      value: def?.dataType === "number"
-                                        ? (e.target.value === "" ? "" : Number(e.target.value))
-                                        : e.target.value,
-                                    })
-                                  }
-                                  placeholder="Override value..."
-                                  disabled={isPending}
-                                />
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeOverride(i)}
-                            disabled={isPending}
-                            className="mt-5 text-gray-400 hover:text-red-500 shrink-0 disabled:opacity-50"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addOverride}
-                    disabled={isPending}
-                  >
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    Add Override
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={handleCancel}
-            disabled={isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() => save()}
-            disabled={isPending || !name.trim()}
-          >
-            {isPending ? "Saving..." : "Save Changes"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <Dialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Discard changes?</DialogTitle>
-          <DialogDescription>
-            You have unsaved changes. They will be lost if you close without saving.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => setShowDiscardDialog(false)}>
-            Keep editing
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              setShowDiscardDialog(false);
-              onOpenChange(false);
-            }}
-          >
-            Discard
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            >
+              Discard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
