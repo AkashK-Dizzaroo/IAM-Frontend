@@ -635,7 +635,7 @@ export function ResourceManagementTab() {
                         <td className="px-4 py-3 text-sm text-gray-600">
                           {getResourceHierarchy(r)}
                         </td>
-                        <td className="px-4 py-3 text-sm font-mono text-xs text-gray-700">
+                        <td className="px-4 py-3 text-sm font-mono text-gray-700">
                           {universalId}
                         </td>
                         <td className="px-4 py-3">
