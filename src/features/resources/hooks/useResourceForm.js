@@ -71,8 +71,7 @@ export function useResourceForm() {
       level: creationLevel,
       parentResource,
       assignedApplications: l1Apps.map((app) => app._id ?? app.id),
-      isActive: true,
-      metadata: meta,
+      metadata: { resource_status: 'active', ...meta },
     };
   }, [creationLevel, l1Apps, selectedL2, resourceName, description, isL2Locked]);
 

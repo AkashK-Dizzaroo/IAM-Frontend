@@ -257,7 +257,7 @@ export function AppResourcesTab({ application }) {
     const isL2 = node.level === 2;
     const id = node._id ?? node.id;
     const uid = node.resourceExternalId ?? node.externalId ?? "—";
-    const active = node.isActive !== false;
+    const active = (node.resource_status ?? node.metadata?.resource_status ?? 'active') !== 'inactive';
     const classification = node.metadata?.classification ?? null;
 
     return (
@@ -468,7 +468,7 @@ export function AppResourcesTab({ application }) {
                   resources.map((r) => {
                     const id = r._id ?? r.id;
                     const uid = r.resourceExternalId ?? r.externalId ?? "—";
-                    const active = r.isActive !== false;
+                    const active = (r.resource_status ?? r.metadata?.resource_status ?? 'active') !== 'inactive';
                     const boundApps = (r.assignedApplications ?? [])
                       .map((a) => a?.name ?? a?.key ?? null)
                       .filter(Boolean);

@@ -212,7 +212,7 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-sm font-medium text-gray-900 truncate">{node.name}</span>
               <Badge variant="outline" className="text-[10px] px-1 h-4 shrink-0">L{node.level}</Badge>
-              {node.isActive === false && (
+              {(node.resource_status ?? node.metadata?.resource_status) === 'inactive' && (
                 <Badge className="bg-red-100 text-red-700 text-[10px] px-1 h-4 shrink-0">Inactive</Badge>
               )}
             </div>

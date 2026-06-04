@@ -93,7 +93,7 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
       const meta = resource.metadata;
       const descVal =
         meta instanceof Map ? meta.get("description") ?? "" : meta?.description ?? "";
-      const activeVal = resource.isActive !== false;
+      const activeVal = (resource.resource_status ?? resource.metadata?.resource_status ?? 'active') !== 'inactive';
       setName(nameVal);
       setDescription(descVal);
       setIsActive(activeVal);
@@ -153,8 +153,10 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
       await resourceService.updateResource(resourceId, {
         name: name.trim(),
         description,
-        isActive,
       });
+
+      // resource_status via attribute upsert (uses the hub attribute definition)
+      const statusEntry = { attributeKey: 'resource_status', value: isActive ? 'active' : 'inactive' };
 
       // Hub entries — always send all defs; null = delete from DB
       const hubEntries = attrDefs.map((def) => ({
@@ -180,10 +182,8 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
         }
       }
 
-      const allEntries = [...hubEntries, ...appEntries];
-      if (allEntries.length > 0) {
-        await resourceService.upsertResourceAttributes(resourceId, allEntries);
-      }
+      const allEntries = [statusEntry, ...hubEntries, ...appEntries];
+      await resourceService.upsertResourceAttributes(resourceId, allEntries);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Resource updated successfully" });

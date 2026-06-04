@@ -82,7 +82,7 @@ export function ResourceManagementTab() {
       const params = { limit: 1000, page: 1 };
       if (applicationFilter && applicationFilter !== "all") params.applicationId = applicationFilter;
       if (levelFilter && levelFilter !== "all") params.level = levelFilter;
-      if (statusFilter && statusFilter !== "all") params.isActive = statusFilter === "active";
+      if (statusFilter && statusFilter !== "all") params.isActive = statusFilter === "active" ? "true" : "false";
       if (searchTerm) params.search = searchTerm;
       return resourceService.getResources(params);
     },
@@ -329,7 +329,7 @@ export function ResourceManagementTab() {
 
     const rid = node._id || node.id;
     const universalId = node.resourceExternalId ?? node.externalId ?? "—";
-    const active = node.isActive !== false;
+    const active = (node.resource_status ?? node.metadata?.resource_status ?? 'active') !== 'inactive';
     const missingAppId = isAppOwner ? getMissingAppId(node) : null;
     const classification = node.metadata?.classification ?? null;
 
@@ -609,7 +609,7 @@ export function ResourceManagementTab() {
                     const boundApps = (r.assignedApplications ?? []).map(
                       (a) => a?.name ?? a?.key ?? null
                     ).filter(Boolean);
-                    const active = r.isActive !== false;
+                    const active = (r.resource_status ?? r.metadata?.resource_status ?? 'active') !== 'inactive';
                     const rid = r._id || r.id;
                     const missingAppId = isAppOwner ? getMissingAppId(r) : null;
                     const classification = r.metadata?.classification ?? null;
