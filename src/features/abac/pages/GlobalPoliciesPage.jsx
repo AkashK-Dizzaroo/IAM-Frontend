@@ -607,119 +607,402 @@ function ConditionJsonEditor({ tree, onChange, disabled }) {
 }
 
 // ---------------------------------------------------------------------------
-// ConditionTreeBuilder
+// Action attribute tree (hierarchical popover for action selection)
 // ---------------------------------------------------------------------------
 
-function ConditionTreeBuilder({ value, onChange, disabled, attributeDefs }) {
-  const tree = normalizeConditions(value);
+function buildActionTree(actionAttrs) {
+  const roots = actionAttrs.filter(a => !a.parentId);
+  const childMap = {};
+  actionAttrs.forEach(a => {
+    if (a.parentId) {
+      if (!childMap[a.parentId]) childMap[a.parentId] = [];
+      childMap[a.parentId].push(a);
+    }
+  });
+  return { roots, childMap };
+}
 
-  const updateOperator = (operator) => {
-    if (disabled) return;
-    onChange({ ...tree, operator });
+function getLeafValues(attr, childMap) {
+  const children = childMap[attr.id] ?? [];
+  if (children.length > 0) return children.flatMap(c => getLeafValues(c, childMap));
+  let c = attr.constraints || {};
+  if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
+  if (Array.isArray(c.allowedValues) && c.allowedValues.length > 0) return c.allowedValues;
+  return [attr.key];
+}
+
+function ActionTreeNode({ attr, childMap, selectedActions, onChange, disabled, depth = 0 }) {
+  const [open, setOpen] = useState(true);
+  const children = childMap[attr.id] ?? [];
+  const leafValues = getLeafValues(attr, childMap);
+  const allSelected = leafValues.length > 0 && leafValues.every(v => selectedActions.includes(v));
+  const someSelected = !allSelected && leafValues.some(v => selectedActions.includes(v));
+
+  const toggle = () => {
+    if (allSelected) onChange(selectedActions.filter(v => !leafValues.includes(v)));
+    else onChange([...new Set([...selectedActions, ...leafValues])]);
   };
 
-  const updateCondition = (index, field, val) => {
-    if (disabled) return;
-    const updated = tree.conditions.map((c, i) =>
-      i === index ? { ...c, [field]: val } : c
+  let attrConstraints = attr.constraints || {};
+  if (typeof attrConstraints === 'string') { try { attrConstraints = JSON.parse(attrConstraints); } catch { attrConstraints = {}; } }
+
+  if (children.length === 0) {
+    const values = Array.isArray(attrConstraints.allowedValues) && attrConstraints.allowedValues.length > 0
+      ? attrConstraints.allowedValues : [attr.key];
+
+    if (values.length === 1 && values[0] === attr.key) {
+      const checked = selectedActions.includes(attr.key);
+      return (
+        <div className="flex items-center gap-2 py-0.5" style={{ paddingLeft: `${8 + depth * 16}px` }}>
+          <input type="checkbox" checked={checked} disabled={disabled}
+            onChange={() => onChange(checked ? selectedActions.filter(v => v !== attr.key) : [...selectedActions, attr.key])}
+            className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
+          />
+          <span className="text-xs text-gray-700">{attr.displayName || attr.key}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ paddingLeft: `${depth * 16}px` }}>
+        <div className="flex items-center gap-1 py-0.5 px-1">
+          <button type="button" onClick={() => setOpen(o => !o)} className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600 shrink-0 text-[10px]">
+            {open ? '▾' : '▸'}
+          </button>
+          <input type="checkbox" checked={allSelected} disabled={disabled}
+            ref={el => { if (el) el.indeterminate = someSelected; }}
+            onChange={toggle}
+            className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
+          />
+          <span className="text-xs font-medium text-gray-800">{attr.displayName || attr.key}</span>
+        </div>
+        {open && values.map(val => {
+          const checked = selectedActions.includes(val);
+          return (
+            <div key={val} className="flex items-center gap-2 py-0.5" style={{ paddingLeft: `${24 + depth * 16}px` }}>
+              <input type="checkbox" checked={checked} disabled={disabled}
+                onChange={() => onChange(checked ? selectedActions.filter(v => v !== val) : [...selectedActions, val])}
+                className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
+              />
+              <span className="text-xs text-gray-700">{val}</span>
+            </div>
+          );
+        })}
+      </div>
     );
-    onChange({ ...tree, conditions: updated });
-  };
-
-  const addCondition = () => {
-    if (disabled) return;
-    onChange({
-      ...tree,
-      conditions: [
-        ...tree.conditions,
-        { namespace: 'subject', key: '', op: 'eq', value: '' }
-      ]
-    });
-  };
-
-  const removeCondition = (index) => {
-    if (disabled || tree.conditions.length <= 0) return;
-    onChange({
-      ...tree,
-      conditions: tree.conditions.filter((_, i) => i !== index)
-    });
-  };
+  }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 font-medium">
-          Match
-        </span>
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-          {['AND', 'OR'].map(op => (
-            <button
-              key={op}
-              type="button"
-              disabled={disabled}
-              onClick={() => updateOperator(op)}
-              className={`
-                px-3 py-1 text-xs font-semibold
-                transition-colors
-                disabled:opacity-50 disabled:cursor-not-allowed
-                ${tree.operator === op
-                  ? 'bg-primary text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
-                }
-              `}
-            >
-              {op}
-            </button>
-          ))}
-        </div>
-        <span className="text-xs text-gray-500">
-          {tree.operator === 'AND'
-            ? 'all of the following conditions'
-            : 'any of the following conditions'
-          }
-        </span>
+    <div style={{ paddingLeft: `${depth * 16}px` }}>
+      <div className="flex items-center gap-1 py-0.5 px-1">
+        <button type="button" onClick={() => setOpen(o => !o)} className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600 shrink-0 text-[10px]">
+          {open ? '▾' : '▸'}
+        </button>
+        <input type="checkbox" checked={allSelected} disabled={disabled}
+          ref={el => { if (el) el.indeterminate = someSelected; }}
+          onChange={toggle}
+          className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
+        />
+        <span className="text-xs font-semibold text-gray-800">{attr.displayName || attr.key}</span>
       </div>
-
-      <div className="space-y-2">
-        {tree.conditions.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-            No conditions configured. This policy applies to all requests.
-          </div>
-        ) : (
-          tree.conditions.map((cond, index) => (
-            <ConditionRow
-              key={index}
-              condition={cond}
-              disabled={disabled}
-              attributeDefs={attributeDefs}
-              onChange={(field, val) => updateCondition(index, field, val)}
-              onRemove={() => removeCondition(index)}
-              canRemove={tree.conditions.length > 0}
-            />
-          ))
-        )}
-      </div>
-
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={addCondition}
-        className="
-          flex items-center gap-1.5 text-sm text-primary
-          hover:text-primary/80 font-medium transition-colors
-          disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-primary
-        "
-      >
-        <span className="text-lg leading-none">+</span>
-        Add Condition
-      </button>
-
-      <ConditionJsonEditor tree={tree} onChange={onChange} disabled={disabled} />
+      {open && children.map(child => (
+        <ActionTreeNode key={child.id} attr={child} childMap={childMap}
+          selectedActions={selectedActions} onChange={onChange} disabled={disabled} depth={depth + 1}
+        />
+      ))}
     </div>
   );
 }
 
-// TargetSection and ObligationsSection removed as per requirements
+function HierarchicalActionPopover({ actionAttrs, selectedActions, onChange, disabled }) {
+  // Global policies: only show values from root action attributes (those without a parentId)
+  const rootAttrs = actionAttrs.filter(a => !a.parentId);
+  const displayAttrs = rootAttrs.length > 0 ? rootAttrs : actionAttrs;
+
+  const allValues = displayAttrs.flatMap(attr => {
+    let c = attr.constraints || {};
+    if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
+    return Array.isArray(c.allowedValues) && c.allowedValues.length > 0 ? c.allowedValues : [attr.key];
+  });
+
+  if (allValues.length === 0) {
+    return (
+      <input disabled={disabled} type="text" placeholder="actions…"
+        value={selectedActions.join(', ')}
+        onChange={e => onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+        className="flex-1 min-w-0 text-xs border border-gray-200 rounded px-2 py-1.5 font-mono bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary"
+      />
+    );
+  }
+
+  const count = selectedActions.length;
+  const label = count === 0 ? 'Allowed actions…' : `${count} action${count !== 1 ? 's' : ''} selected`;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" disabled={disabled}
+          className="flex items-center gap-1.5 min-w-[140px] px-2 py-1.5 text-xs border border-gray-200 rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span className="flex-1 text-left truncate">{label}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-gray-400" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2 max-h-64 overflow-y-auto" align="start">
+        {allValues.length > 1 && (() => {
+          const allSelected = allValues.every(v => selectedActions.includes(v));
+          const someSelected = !allSelected && allValues.some(v => selectedActions.includes(v));
+          return (
+            <div className="flex items-center gap-2 py-0.5 px-1 border-b border-gray-100 mb-1 pb-1.5">
+              <input type="checkbox" checked={allSelected} disabled={disabled}
+                ref={el => { if (el) el.indeterminate = someSelected; }}
+                onChange={() => onChange(allSelected ? [] : [...allValues])}
+                className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
+              />
+              <span className="text-xs font-medium text-gray-700">Select all</span>
+            </div>
+          );
+        })()}
+        {allValues.map(val => {
+          const checked = selectedActions.includes(val);
+          return (
+            <div key={val} className="flex items-center gap-2 py-0.5 px-1">
+              <input type="checkbox" checked={checked} disabled={disabled}
+                onChange={() => onChange(checked ? selectedActions.filter(v => v !== val) : [...selectedActions, val])}
+                className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
+              />
+              <span className="text-xs text-gray-700">{val}</span>
+            </div>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PolicyConditionBuilder — unified builder (replaces tabs)
+// ---------------------------------------------------------------------------
+
+function isRoleActionPair(node) {
+  return (
+    node?.operator === 'AND' &&
+    Array.isArray(node.conditions) &&
+    node.conditions.length === 2 &&
+    node.conditions.some(c => 'op' in c && c.namespace !== 'action') &&
+    node.conditions.some(c => 'op' in c && c.namespace === 'action')
+  );
+}
+
+function RoleActionPairRow({ group, onChange, onRemove, disabled, attributeDefs, actionAttrs }) {
+  const nonActionCond = group.conditions.find(c => c.namespace !== 'action') ?? { namespace: 'subject', key: '', op: 'eq', value: '' };
+  const actionCond = group.conditions.find(c => c.namespace === 'action') ?? { namespace: 'action', key: 'name', op: 'in', value: [] };
+  const actionKey = 'action';
+
+  const updateNonAction = (field, val) => {
+    const updated = field === 'namespace' ? { ...nonActionCond, [field]: val, key: '' } : { ...nonActionCond, [field]: val };
+    onChange({ ...group, conditions: group.conditions.map(c => c.namespace !== 'action' ? updated : c) });
+  };
+
+  const updateActions = (vals) => {
+    onChange({ ...group, conditions: group.conditions.map(c => c.namespace === 'action' ? { ...actionCond, key: actionKey, value: vals } : c) });
+  };
+
+  const filteredAttrs = attributeDefs.filter(a => a.namespace === nonActionCond.namespace && a.namespace !== 'action');
+  const noValue = NO_VALUE_OPS.has(nonActionCond.op);
+  const isArrayOp = ARRAY_OPS.has(nonActionCond.op);
+  const selectedAttr = filteredAttrs.find(a => a.key === nonActionCond.key);
+  let constraints = selectedAttr?.constraints || {};
+  if (typeof constraints === 'string') { try { constraints = JSON.parse(constraints); } catch { constraints = {}; } }
+  const allowedValues = constraints.allowedValues;
+  const dataType = selectedAttr?.dataType;
+
+  const handleOpChange = (e) => {
+    const newOp = e.target.value;
+    if (ARRAY_OPS.has(newOp) && !isArrayOp) updateNonAction('value', nonActionCond.value ? [nonActionCond.value] : []);
+    else if (!ARRAY_OPS.has(newOp) && isArrayOp) updateNonAction('value', Array.isArray(nonActionCond.value) ? nonActionCond.value.join(', ') : '');
+    updateNonAction('op', newOp);
+  };
+
+  const selectCls = 'text-xs border border-gray-200 rounded px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary';
+
+  const valueInput = !noValue && (() => {
+    if (allowedValues && Array.isArray(allowedValues)) {
+      if (isArrayOp) return <MultiValueDropdown allowedValues={allowedValues} selectedValues={nonActionCond.value} disabled={disabled} onChange={vals => updateNonAction('value', vals)} />;
+      return (
+        <select disabled={disabled} value={nonActionCond.value ?? ''} onChange={e => updateNonAction('value', e.target.value)} className={`${selectCls} flex-1 min-w-0 text-gray-900`}>
+          <option value="">Select value...</option>
+          {allowedValues.map(v => <option key={v} value={v}>{v}</option>)}
+        </select>
+      );
+    }
+    if (dataType === 'boolean' && !isArrayOp) {
+      return (
+        <select disabled={disabled} value={String(nonActionCond.value ?? '')} onChange={e => updateNonAction('value', e.target.value === 'true')} className={`${selectCls} flex-1 min-w-0 text-gray-900`}>
+          <option value="">Select...</option>
+          <option value="true">True</option>
+          <option value="false">False</option>
+        </select>
+      );
+    }
+    return (
+      <input disabled={disabled} type={dataType === 'number' ? 'number' : 'text'} placeholder="value"
+        value={isArrayOp && Array.isArray(nonActionCond.value) ? nonActionCond.value.join(', ') : nonActionCond.value ?? ''}
+        onChange={e => {
+          const raw = e.target.value;
+          if (isArrayOp) { const arr = raw.split(',').map(s => s.trim()).filter(Boolean); updateNonAction('value', raw.trimEnd().endsWith(',') ? [...arr, ''] : arr); }
+          else updateNonAction('value', raw);
+        }}
+        className="flex-1 min-w-0 text-xs border border-gray-200 rounded px-2 py-1.5 font-mono bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary"
+      />
+    );
+  })();
+
+  return (
+    <div className="p-2.5 rounded-lg bg-indigo-50/40 border border-indigo-200 space-y-2">
+      {/* Row 1: condition fields + remove button */}
+      <div className="flex items-start gap-2">
+        <select disabled={disabled} value={nonActionCond.namespace} onChange={e => updateNonAction('namespace', e.target.value)} className={`${selectCls} shrink-0`}>
+          {NAMESPACES.filter(ns => ns !== 'action').map(ns => <option key={ns} value={ns}>{ns}</option>)}
+        </select>
+
+        {filteredAttrs.length > 0 ? (
+          <select disabled={disabled} value={nonActionCond.key} onChange={e => updateNonAction('key', e.target.value)} className={`${selectCls} flex-1 min-w-0 font-mono text-gray-900`}>
+            <option value="">Select attribute...</option>
+            {filteredAttrs.map(attr => <option key={attr.key} value={attr.key}>{attr.displayName || attr.key}</option>)}
+          </select>
+        ) : (
+          <input disabled={disabled} type="text" placeholder="attribute.key" value={nonActionCond.key}
+            onChange={e => updateNonAction('key', e.target.value)}
+            className="flex-1 min-w-0 text-xs border border-gray-200 rounded px-2 py-1.5 font-mono bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary"
+          />
+        )}
+
+        <select disabled={disabled} value={nonActionCond.op} onChange={handleOpChange} className={`${selectCls} shrink-0`}>
+          {OPERATORS.map(op => <option key={op} value={op}>{op}</option>)}
+        </select>
+
+        {!noValue && valueInput}
+
+        <button type="button" onClick={onRemove} disabled={disabled}
+          className="w-6 h-6 flex items-center justify-center shrink-0 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+        >×</button>
+      </div>
+
+      {/* Row 2: allowed actions */}
+      <div className="flex items-center gap-2 pl-0.5">
+        <span className="text-[11px] text-indigo-500 font-medium shrink-0">Allowed actions:</span>
+        <HierarchicalActionPopover
+          actionAttrs={actionAttrs}
+          selectedActions={Array.isArray(actionCond.value) ? actionCond.value : []}
+          onChange={updateActions}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ConditionGroupRenderer({ tree, onChange, disabled, attributeDefs, actionAttrs, depth = 0 }) {
+  const updateOperator = (op) => { if (!disabled) onChange({ ...tree, operator: op }); };
+  const updateChild = (i, newNode) => onChange({ ...tree, conditions: tree.conditions.map((c, idx) => idx === i ? newNode : c) });
+  const removeChild = (i) => onChange({ ...tree, conditions: tree.conditions.filter((_, idx) => idx !== i) });
+
+  const addLeaf = () => onChange({ ...tree, conditions: [...tree.conditions, { namespace: 'subject', key: '', op: 'eq', value: '' }] });
+  const addRoleActionPair = () => {
+    const actionKey = 'action';
+    onChange({ ...tree, conditions: [...tree.conditions, { operator: 'AND', conditions: [{ namespace: 'subject', key: '', op: 'eq', value: '' }, { namespace: 'action', key: actionKey, op: 'in', value: [] }] }] });
+  };
+  const addGroup = () => {
+    const actionKey = 'action';
+    const roleActionPair = { operator: 'AND', conditions: [{ namespace: 'subject', key: '', op: 'eq', value: '' }, { namespace: 'action', key: actionKey, op: 'in', value: [] }] };
+    onChange({ ...tree, conditions: [...tree.conditions, { operator: 'OR', conditions: [roleActionPair] }] });
+  };
+
+  return (
+    <div className={depth > 0 ? 'border-l-2 border-gray-200 pl-3 ml-2 mt-1' : ''}>
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex rounded-md border border-gray-200 overflow-hidden">
+          {['AND', 'OR'].map(op => (
+            <button key={op} type="button" disabled={disabled} onClick={() => updateOperator(op)}
+              className={`px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${tree.operator === op ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >{op}</button>
+          ))}
+        </div>
+        <span className="text-xs text-gray-400">
+          {tree.operator === 'AND' ? 'all conditions must match' : 'any condition must match'}
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        {tree.conditions.length === 0 && (
+          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-xs text-gray-400 text-center">
+            No conditions — add one below.
+          </div>
+        )}
+        {tree.conditions.map((child, i) => {
+          if (child && typeof child === 'object' && 'operator' in child && 'conditions' in child) {
+            if (isRoleActionPair(child)) {
+              return (
+                <RoleActionPairRow key={i} group={child}
+                  onChange={newGroup => updateChild(i, newGroup)}
+                  onRemove={() => removeChild(i)}
+                  disabled={disabled} attributeDefs={attributeDefs} actionAttrs={actionAttrs}
+                />
+              );
+            }
+            return (
+              <div key={i} className="rounded-lg border border-gray-200 bg-white p-2.5">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <ConditionGroupRenderer tree={child} onChange={newGroup => updateChild(i, newGroup)}
+                      disabled={disabled} attributeDefs={attributeDefs} actionAttrs={actionAttrs} depth={depth + 1}
+                    />
+                  </div>
+                  <button type="button" onClick={() => removeChild(i)} disabled={disabled}
+                    className="w-6 h-6 flex items-center justify-center shrink-0 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors mt-0.5"
+                  >×</button>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <ConditionRow key={i} condition={child}
+              onChange={(field, val) => updateChild(i, { ...child, [field]: val })}
+              onRemove={() => removeChild(i)} canRemove disabled={disabled} attributeDefs={attributeDefs}
+            />
+          );
+        })}
+      </div>
+
+      <div className="flex items-center gap-3 mt-2 flex-wrap">
+        <button type="button" disabled={disabled} onClick={addRoleActionPair}
+          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        ><span className="text-base leading-none">+</span> Role-Action Rule</button>
+        <button type="button" disabled={disabled} onClick={addLeaf}
+          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        ><span className="text-base leading-none">+</span> Condition</button>
+        {depth < 3 && (
+          <button type="button" disabled={disabled} onClick={addGroup}
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          ><span className="text-base leading-none">+</span> Group</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PolicyConditionBuilder({ value, onChange, disabled, attributeDefs }) {
+  const tree = normalizeConditions(value);
+  const actionAttrs = attributeDefs.filter(a => a.namespace === 'action');
+  return (
+    <div className="space-y-3">
+      <ConditionGroupRenderer tree={tree} onChange={onChange} disabled={disabled}
+        attributeDefs={attributeDefs} actionAttrs={actionAttrs} depth={0}
+      />
+      <ConditionJsonEditor tree={tree} onChange={onChange} disabled={disabled} />
+    </div>
+  );
+}
 
 
 
@@ -1246,16 +1529,12 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
 
           <Separator className="my-2" />
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div>
-              <Label className="text-xs text-gray-500 uppercase tracking-wider">
-                Conditions
-              </Label>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Leave empty to apply the effect to all requests.
-              </p>
+              <Label className="text-xs text-gray-500 uppercase tracking-wider">Conditions</Label>
+              <p className="text-xs text-gray-400 mt-0.5">Leave empty to apply the effect to all requests.</p>
             </div>
-            <ConditionTreeBuilder
+            <PolicyConditionBuilder
               value={form.conditions}
               onChange={conditions => setForm(f => ({ ...f, conditions }))}
               disabled={isArchived}
@@ -1437,14 +1716,10 @@ function PolicyCreatePanel({ onClose, onCreated, attributeDefs }) {
 
           <div className="space-y-3">
             <div>
-              <Label className="text-xs text-gray-500 uppercase tracking-wider">
-                Conditions
-              </Label>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Leave empty to apply the effect to all requests.
-              </p>
+              <Label className="text-xs text-gray-500 uppercase tracking-wider">Conditions</Label>
+              <p className="text-xs text-gray-400 mt-0.5">Leave empty to apply the effect to all requests.</p>
             </div>
-            <ConditionTreeBuilder
+            <PolicyConditionBuilder
               value={form.conditions}
               onChange={conditions => setForm(f => ({ ...f, conditions }))}
               attributeDefs={attributeDefs}
