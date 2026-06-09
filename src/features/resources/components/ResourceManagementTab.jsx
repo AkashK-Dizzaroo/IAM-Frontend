@@ -82,7 +82,7 @@ export function ResourceManagementTab() {
       const params = { limit: 1000, page: 1 };
       if (applicationFilter && applicationFilter !== "all") params.applicationId = applicationFilter;
       if (levelFilter && levelFilter !== "all") params.level = levelFilter;
-      if (statusFilter && statusFilter !== "all") params.isActive = statusFilter === "active" ? "true" : "false";
+      if (statusFilter && statusFilter !== "all") params.resource_status = statusFilter;
       if (searchTerm) params.search = searchTerm;
       return resourceService.getResources(params);
     },

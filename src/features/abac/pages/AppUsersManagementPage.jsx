@@ -157,7 +157,7 @@ export function AppUsersManagementPage() {
   const { data: resourcesData } = useQuery({
     queryKey: QK.studyResources(selectedAppKey, selectedApplication?.id),
     queryFn: () =>
-      resourceService.getResources({ applicationId: selectedApplication?.id, limit: 1000, isActive: 'true' }),
+      resourceService.getResources({ applicationId: selectedApplication?.id, limit: 1000, resource_status: 'active' }),
     enabled: !!selectedApplication?.id,
     staleTime: 30_000,
   });

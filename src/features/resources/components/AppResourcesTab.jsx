@@ -75,7 +75,7 @@ export function AppResourcesTab({ application }) {
     queryFn: async () => {
       const params = {};
       if (levelFilter !== "all") params.level = levelFilter;
-      if (statusFilter !== "all") params.isActive = statusFilter === "active" ? "true" : "false";
+      if (statusFilter !== "all") params.resource_status = statusFilter;
       return resourceService.getResourcesByApplication(applicationId, params);
     },
     enabled: !!applicationId,
