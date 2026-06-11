@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { abacService } from "@/features/abac/api/abacService";
+import { appAttributeService } from "@/features/app-attributes/api/appAttributeService";
 
 const EMPTY_ROW = { role: "", resourceId: "" };
 
@@ -112,7 +112,7 @@ export function RequestAccessModal({
   const appKey = application?.key ?? application?.appKey;
   const { data: attrDefsData, isLoading: attrDefsLoading } = useQuery({
     queryKey: ["appAttrDefs", appKey, "requestable"],
-    queryFn: () => abacService.listRequestableAppAttrDefs(appKey),
+    queryFn: () => appAttributeService.listRequestable(appKey),
     enabled: !!appKey && isOpen,
     staleTime: 60_000,
   });

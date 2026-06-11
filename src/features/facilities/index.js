@@ -1,1 +1,2 @@
-export { FacilitiesPage } from '../layout/pages/FacilitiesPage';
+export { FacilitiesPage } from "./FacilitiesPage";
+export { facilityService } from "./api/facilityService";

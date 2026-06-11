@@ -1,4 +1,4 @@
-import { useAbacScope } from "@/features/abac/contexts/AbacScopeContext";
+import { useAbacScope } from "@/features/scope";
 import { useQuery } from "@tanstack/react-query";
 import { applicationService } from "@/features/applications";
 import { AppResourcesTab } from "../components/AppResourcesTab";

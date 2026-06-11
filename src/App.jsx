@@ -6,7 +6,7 @@ import { AuthProvider, useAuth, ProtectedRoute } from "@/features/auth";
 import { AppShellSkeleton } from "@/components/ui/AppShellSkeleton";
 import { Toaster } from "@/components/ui/toaster";
 import { getValidHubUrl } from "@/config/env";
-import { AbacScopeProvider } from "@/features/abac/contexts/AbacScopeContext";
+import { AbacScopeProvider } from "@/features/scope";
 
 // Auth flow pages are needed immediately on load — keep them eager.
 import LogoutPage from "@/features/auth/components/LogoutPage";
@@ -20,21 +20,21 @@ import { DashboardPage } from "@/features/layout";
 // the user first navigates to that route.
 const MyProfilePage = lazy(() => import("@/features/profile/pages/MyProfilePage").then(m => ({ default: m.MyProfilePage })));
 const AccountRequestsPage = lazy(() => import("@/features/users/pages/AccountRequestsPage").then(m => ({ default: m.AccountRequestsPage })));
-const AbacUsersPage = lazy(() => import("@/features/abac/pages/AbacUsersPage").then(m => ({ default: m.AbacUsersPage })));
-const AbacApplicationsPage = lazy(() => import("@/features/abac/pages/AbacApplicationsPage").then(m => ({ default: m.AbacApplicationsPage })));
+const AbacUsersPage = lazy(() => import("@/features/users/AbacUsersPage").then(m => ({ default: m.AbacUsersPage })));
+const AbacApplicationsPage = lazy(() => import("@/features/applications/AbacApplicationsPage").then(m => ({ default: m.AbacApplicationsPage })));
 const AccessRequestsPage = lazy(() => import("@/features/access-requests/pages/AccessRequestsPage").then(m => ({ default: m.AccessRequestsPage })));
-const FacilitiesPage = lazy(() => import("@/features/layout/pages/FacilitiesPage").then(m => ({ default: m.FacilitiesPage })));
+const FacilitiesPage = lazy(() => import("@/features/facilities/FacilitiesPage").then(m => ({ default: m.FacilitiesPage })));
 const AuditPage = lazy(() => import("@/features/audit/pages/AuditPage").then(m => ({ default: m.AuditPage })));
 const ResourceManagementPage = lazy(() => import("@/features/resources/pages/ResourceManagementPage").then(m => ({ default: m.ResourceManagementPage })));
 const AppResourcesPage = lazy(() => import("@/features/resources/pages/AppResourcesPage").then(m => ({ default: m.AppResourcesPage })));
-const HubAttributesPage = lazy(() => import("@/features/abac/pages/HubAttributesPage").then(m => ({ default: m.HubAttributesPage })));
-const GlobalPoliciesPage = lazy(() => import("@/features/abac/pages/GlobalPoliciesPage").then(m => ({ default: m.GlobalPoliciesPage })));
-const AppAttributesPage = lazy(() => import("@/features/abac/pages/AppAttributesPage").then(m => ({ default: m.AppAttributesPage })));
-const AppUserAttributesPage = lazy(() => import("@/features/abac/pages/AppUserAttributesPage").then(m => ({ default: m.AppUserAttributesPage })));
-const AppUsersManagementPage = lazy(() => import("@/features/abac/pages/AppUsersManagementPage").then(m => ({ default: m.AppUsersManagementPage })));
-const AppPoliciesPage = lazy(() => import("@/features/abac/pages/AppPoliciesPage").then(m => ({ default: m.AppPoliciesPage })));
-const PolicyTesterPage = lazy(() => import("@/features/abac/pages/PolicyTesterPage").then(m => ({ default: m.PolicyTesterPage })));
-const CoverageGapsPage = lazy(() => import("@/features/abac/pages/CoverageGapsPage").then(m => ({ default: m.CoverageGapsPage })));
+const HubAttributesPage = lazy(() => import("@/features/hub-attributes/HubAttributesPage").then(m => ({ default: m.HubAttributesPage })));
+const GlobalPoliciesPage = lazy(() => import("@/features/global-policies/GlobalPoliciesPage").then(m => ({ default: m.GlobalPoliciesPage })));
+const AppAttributesPage = lazy(() => import("@/features/app-attributes/AppAttributesPage").then(m => ({ default: m.AppAttributesPage })));
+const AppUserAttributesPage = lazy(() => import("@/features/app-users/components/AppUserAttributesPage").then(m => ({ default: m.AppUserAttributesPage })));
+const AppUsersManagementPage = lazy(() => import("@/features/app-users/AppUsersManagementPage").then(m => ({ default: m.AppUsersManagementPage })));
+const AppPoliciesPage = lazy(() => import("@/features/app-policies/AppPoliciesPage").then(m => ({ default: m.AppPoliciesPage })));
+const PolicyTesterPage = lazy(() => import("@/features/policy-tester/PolicyTesterPage").then(m => ({ default: m.PolicyTesterPage })));
+const CoverageGapsPage = lazy(() => import("@/features/coverage-gaps/CoverageGapsPage").then(m => ({ default: m.CoverageGapsPage })));
 
 function AppRoutes() {
   const { loading, user, effectiveRoles } = useAuth();

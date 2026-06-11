@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow, format } from 'date-fns';
-import { abacService } from '../../abac/api/abacService';
+import { auditService } from '../api/auditService';
 import {
   Dialog,
   DialogContent,
@@ -107,7 +107,7 @@ export function AuditPage() {
   // Centralized, cross-application trail (Hub Owner). Always fresh — never cached.
   const { data: auditRes, isLoading, isError, error } = useQuery({
     queryKey: ['abac', 'audit', 'global'],
-    queryFn: () => abacService.listGlobalAuditLogs({ limit: 100 }),
+    queryFn: () => auditService.listGlobalLogs({ limit: 100 }),
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: 'always',

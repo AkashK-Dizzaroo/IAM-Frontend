@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { resourceService } from "../api/resourceService";
@@ -251,7 +251,7 @@ export function AppResourcesTab({ application }) {
 
   // ── Tree node renderer ───────────────────────────────────────────────────
 
-  const TreeNode = ({ node, depth = 0 }) => {
+  const renderTreeNode = (node, depth = 0) => {
     const isExpanded = expandedIds.has(node.treeId);
     const hasChildren = node.children?.length > 0;
     const isL2 = node.level === 2;
@@ -270,6 +270,7 @@ export function AppResourcesTab({ application }) {
             <div className="flex items-center w-6 justify-center">
               {hasChildren ? (
                 <button
+                  type="button"
                   onClick={() => toggleExpand(node.treeId)}
                   className="p-1 hover:bg-gray-200 rounded transition-colors"
                 >
@@ -316,7 +317,7 @@ export function AppResourcesTab({ application }) {
         {isExpanded && hasChildren && (
           <div className="animate-in slide-in-from-top-1 duration-200">
             {node.children.map((child) => (
-              <TreeNode key={child.treeId} node={child} depth={depth + 1} />
+              <Fragment key={child.treeId}>{renderTreeNode(child, depth + 1)}</Fragment>
             ))}
           </div>
         )}
@@ -437,10 +438,9 @@ export function AppResourcesTab({ application }) {
                       aria-label="Select all"
                     />
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Universal ID</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Resource Name</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Level</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Resource Hierarchy</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Universal ID</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Assigned Applications</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Classification</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
@@ -483,10 +483,9 @@ export function AppResourcesTab({ application }) {
                             className={selectedIds.size === 0 ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}
                           />
                         </td>
+                        <td className="px-4 py-3 text-xs font-mono text-gray-700">{uid}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 font-medium">{r.name ?? "—"}</td>
                         <td className="px-4 py-3 text-sm text-gray-700">L{r.level ?? "—"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{getHierarchyLabel(r)}</td>
-                        <td className="px-4 py-3 text-xs font-mono text-gray-700">{uid}</td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
                             {boundApps.length > 0
@@ -549,7 +548,7 @@ export function AppResourcesTab({ application }) {
                   No resources found for this application.
                 </div>
               ) : (
-                treeData.map((node) => <TreeNode key={node.treeId} node={node} />)
+                treeData.map((node) => <Fragment key={node.treeId}>{renderTreeNode(node)}</Fragment>)
               )}
             </div>
           </div>

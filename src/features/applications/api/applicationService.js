@@ -10,6 +10,15 @@ class ApplicationService {
     }
   }
 
+  async getAbacApplications() {
+    try {
+      const response = await apiClient.get("/v1/abac/applications");
+      return response;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
   async getApplicationById(id) {
     try {
       const response = await apiClient.get(`/applications/by-id/${id}`);

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { resourceService } from "../api/resourceService";
-import { abacService } from "@/features/abac/api/abacService";
+import { appAttributeService } from "@/features/app-attributes/api/appAttributeService";
 import { QK } from "@/lib/queryKeys";
 import {
   Dialog,
@@ -59,7 +59,7 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
       return {
         queryKey: [...QK.appAttributes(appKey), 'resourceDefs'],
         queryFn: () =>
-          abacService.listAppAttrDefs(appKey).then((r) => ({
+          appAttributeService.list(appKey).then((r) => ({
             appId: String(app._id ?? app.id),
             defs: (r?.data?.data ?? r?.data ?? []).filter((d) => d.namespace === "resource"),
           })),

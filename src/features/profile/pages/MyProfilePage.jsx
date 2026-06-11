@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/features/auth";
-import { getDisplayRole } from "@/lib/utils";
+import { getDisplayRole } from "@/lib/roles";
 import { profileService } from "../api/profileService";
 import {
   Card,

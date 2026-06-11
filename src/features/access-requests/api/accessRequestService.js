@@ -1,5 +1,4 @@
 import apiClient from "@/lib/apiClient";
-import { generateObjectId } from "@/lib/utils";
 
 class AccessRequestService {
   constructor() {

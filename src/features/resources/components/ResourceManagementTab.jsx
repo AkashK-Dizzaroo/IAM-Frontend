@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/features/auth";
@@ -320,7 +320,7 @@ export function ResourceManagementTab() {
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [resources, applications]);
 
-  const TreeNode = ({ node, level = 0 }) => {
+  const renderTreeNode = (node, level = 0) => {
     const isExpanded = expandedIds.has(node.treeId);
     const hasChildren = node.children && node.children.length > 0;
     const isApp = node.type === 'application';
@@ -343,6 +343,7 @@ export function ResourceManagementTab() {
             <div className="flex items-center w-6 justify-center">
               {hasChildren ? (
                 <button
+                  type="button"
                   onClick={() => toggleExpand(node.treeId)}
                   className="p-1 hover:bg-gray-200 rounded transition-colors"
                 >
@@ -446,7 +447,7 @@ export function ResourceManagementTab() {
         {isExpanded && hasChildren && (
           <div className="animate-in slide-in-from-top-1 duration-200">
             {node.children.map(child => (
-              <TreeNode key={child.treeId} node={child} level={level + 1} />
+              <Fragment key={child.treeId}>{renderTreeNode(child, level + 1)}</Fragment>
             ))}
           </div>
         )}
@@ -578,10 +579,9 @@ export function ResourceManagementTab() {
                       />
                     </th>
                   )}
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Universal ID</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Resource Name</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Level</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Resource Hierarchy</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Universal ID</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Assigned Applications</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Classification</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
@@ -626,17 +626,14 @@ export function ResourceManagementTab() {
                             />
                           </td>
                         )}
+                        <td className="px-4 py-3 text-sm font-mono text-gray-700">
+                          {universalId}
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-900 font-medium">
                           {r.name ?? "—"}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           L{r.level ?? "—"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {getResourceHierarchy(r)}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-mono text-gray-700">
-                          {universalId}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
@@ -759,7 +756,7 @@ export function ResourceManagementTab() {
                 <div className="p-8 text-center text-gray-500 text-sm">No hierarchical resources found</div>
               ) : (
                 treeData.map(app => (
-                  <TreeNode key={app.treeId} node={app} />
+                  <Fragment key={app.treeId}>{renderTreeNode(app)}</Fragment>
                 ))
               )}
             </div>
