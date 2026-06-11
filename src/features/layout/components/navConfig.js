@@ -15,6 +15,7 @@ import {
   Building2,
   Boxes,
   ShieldCheck,
+  UserCheck,
 } from "lucide-react";
 
 export function buildNavGroups({ effectiveRoles, isGlobalScope, isAppScope, selectedAppId }) {
@@ -33,6 +34,7 @@ export function buildNavGroups({ effectiveRoles, isGlobalScope, isAppScope, sele
     { id: "global-policies", label: "Global Policies", icon: Globe2, path: "/global-policies", show: effectiveRoles.isHubOwner },
     { id: "applications", label: "Applications", icon: AppWindow, path: "/applications", show: effectiveRoles.isHubOwner },
     { id: "facilities", label: "Facilities", icon: Building2, path: "/facilities", show: effectiveRoles.isHubOwner },
+    { id: "external-users", label: "External Users", icon: UserCheck, path: "/external-users", show: effectiveRoles.isHubOwner },
     { id: "audit", label: "Audit Trail", icon: BarChart2, path: "/audit", show: effectiveRoles.isHubOwner },
   ];
 
