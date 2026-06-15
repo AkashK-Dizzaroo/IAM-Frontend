@@ -846,15 +846,6 @@ function HierarchicalActionPopover({ actionAttrs, selectedActions, onChange, dis
 function TabTreeNode({ attr, childMap, selectedActions, onChange, disabled, depth = 0 }) {
   const [open, setOpen] = useState(true);
   const children = childMap[attr.id] ?? [];
-  const descendantKeys = getDescendantKeys(attr, childMap);
-  const allSelected = descendantKeys.length > 0 && descendantKeys.every(k => selectedActions.includes(k));
-  const someSelected = !allSelected && descendantKeys.some(k => selectedActions.includes(k));
-
-  const toggleAll = () => {
-    if (disabled) return;
-    if (allSelected) onChange(selectedActions.filter(k => !descendantKeys.includes(k)));
-    else onChange([...new Set([...selectedActions, ...descendantKeys])]);
-  };
 
   if (children.length === 0) {
     const checked = selectedActions.includes(attr.key);
@@ -874,6 +865,24 @@ function TabTreeNode({ attr, childMap, selectedActions, onChange, disabled, dept
     );
   }
 
+  // Parent node — its own key (the module/tab itself) is independent from its
+  // child stages, so it gets its own checkbox plus a separate "all children" toggle.
+  const descendantKeys = getDescendantKeys(attr, childMap);
+  const parentChecked = selectedActions.includes(attr.key);
+  const allChildrenSelected = descendantKeys.length > 0 && descendantKeys.every(k => selectedActions.includes(k));
+  const someChildrenSelected = !allChildrenSelected && descendantKeys.some(k => selectedActions.includes(k));
+
+  const toggleParent = () => {
+    if (disabled) return;
+    onChange(parentChecked ? selectedActions.filter(k => k !== attr.key) : [...selectedActions, attr.key]);
+  };
+
+  const toggleAllChildren = () => {
+    if (disabled) return;
+    if (allChildrenSelected) onChange(selectedActions.filter(k => !descendantKeys.includes(k)));
+    else onChange([...new Set([...selectedActions, ...descendantKeys])]);
+  };
+
   return (
     <div>
       <div
@@ -888,13 +897,28 @@ function TabTreeNode({ attr, childMap, selectedActions, onChange, disabled, dept
           <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
         </button>
         <div
-          className={`h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors cursor-pointer ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${allSelected ? 'bg-primary border-primary' : someSelected ? 'border-primary bg-white' : 'border-gray-300 bg-white hover:border-primary/50'}`}
-          onClick={toggleAll}
+          title="Select this module"
+          className={`h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors cursor-pointer ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${parentChecked ? 'bg-primary border-primary' : 'border-gray-300 bg-white hover:border-primary/50'}`}
+          onClick={toggleParent}
         >
-          {allSelected && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
-          {someSelected && <div className="h-1.5 w-1.5 rounded-sm bg-primary" />}
+          {parentChecked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
         </div>
-        <span className="text-xs font-semibold text-gray-800">{attr.displayName || attr.key}</span>
+        <span className={`text-xs font-semibold flex-1 ${parentChecked ? 'text-gray-900' : 'text-gray-800'}`}>{attr.displayName || attr.key}</span>
+        <button
+          type="button"
+          title="Select all child stages"
+          disabled={disabled}
+          onClick={toggleAllChildren}
+          className={`flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+            allChildrenSelected ? 'text-primary bg-primary/10' : someChildrenSelected ? 'text-primary' : 'text-gray-400 hover:text-primary hover:bg-primary/5'
+          }`}
+        >
+          <div className={`h-3 w-3 rounded-sm border flex items-center justify-center shrink-0 ${allChildrenSelected ? 'bg-primary border-primary' : someChildrenSelected ? 'border-primary' : 'border-gray-300'}`}>
+            {allChildrenSelected && <Check className="h-2 w-2 text-white" strokeWidth={3} />}
+            {someChildrenSelected && <div className="h-1 w-1 rounded-sm bg-primary" />}
+          </div>
+          All
+        </button>
       </div>
       {open && (
         <div className="border-l border-gray-100 ml-[20px]">
@@ -931,7 +955,10 @@ function ActionTabSelector({ actionAttrs, selectedActions, onChange, disabled })
   if (tabAttrs.length === 0) return null;
 
   const { roots, childMap } = buildActionTree(tabAttrs);
-  const allLeafKeys = [...new Set(actionAttrs.filter(a => tabAttrIds.has(a.id)).flatMap(attr => getDescendantKeys(attr, childMap)))];
+  // Selectable keys = every action_tab attribute's own key (parents AND leaves) —
+  // a parent can be selected on its own (as a matrix tab whose cells are its
+  // children) independently of selecting its children as their own tabs.
+  const allLeafKeys = [...new Set(actionAttrs.filter(a => tabAttrIds.has(a.id)).map(a => a.key))];
   const allSelected = allLeafKeys.length > 0 && allLeafKeys.every(k => selectedActions.includes(k));
   const count = selectedActions.filter(k => allLeafKeys.includes(k)).length;
 
@@ -959,7 +986,12 @@ function ActionTabSelector({ actionAttrs, selectedActions, onChange, disabled })
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-0 shadow-xl border border-gray-200 rounded-xl overflow-hidden" align="start" sideOffset={4}>
+      <PopoverContent
+        className="p-0 shadow-xl border border-gray-200 rounded-xl overflow-hidden"
+        style={{ width: 'var(--radix-popover-trigger-width)' }}
+        align="start"
+        sideOffset={4}
+      >
         <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
           <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Application Tabs</span>
           <button
@@ -1006,83 +1038,137 @@ function ActionTabSelector({ actionAttrs, selectedActions, onChange, disabled })
 // ---------------------------------------------------------------------------
 
 function getTabCellValues(tabAttr, allActionAttrs) {
-  const children = allActionAttrs.filter(a => a.parentId === tabAttr.id);
-  if (children.length > 0) {
-    return children.map(ch => ({ key: ch.key, label: ch.displayName || ch.key }));
-  }
   let c = tabAttr.constraints || {};
   if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
   if (Array.isArray(c.allowedValues) && c.allowedValues.length > 0) {
     return c.allowedValues.map(v => ({ key: String(v), label: String(v) }));
   }
+  const children = allActionAttrs.filter(a => a.parentId === tabAttr.id);
+  if (children.length > 0) {
+    return children.map(ch => ({ key: ch.key, label: ch.displayName || ch.key }));
+  }
   return null; // boolean (no values)
 }
 
+// Walks a conditions tree and returns the subset of allTabKeys referenced by
+// any `action` namespace leaf — used to detect which tabs a saved policy's
+// role-tab matrix covers, since `actions`/`target` aren't persisted separately.
+function extractTabKeysFromConditions(conditions, allTabKeys) {
+  const found = new Set();
+  const walk = (node) => {
+    if (!node) return;
+    if ('op' in node) {
+      if (node.namespace === 'action' && allTabKeys.includes(node.key)) found.add(node.key);
+      return;
+    }
+    if (Array.isArray(node.conditions)) node.conditions.forEach(walk);
+  };
+  walk(conditions);
+  return allTabKeys.filter(k => found.has(k));
+}
+
 // matrix[role][tabKey] = Set<string>
+// Reads BOTH shapes:
+//   new (compact): AND[ role=X, OR[ tabCond, tabCond, ... ] ]   or  AND[ role=X, tabCond ]
+//   legacy (flat): AND[ role=X, tabCond ]  repeated as siblings inside an outer OR
 function parseMatrixFromConditions(conditions, roleKey, tabKeys) {
   const matrix = {};
-  const processNode = (node) => {
-    if (!node) return;
-    if (node.operator === 'AND' && Array.isArray(node.conditions)) {
-      const roleLeaf = node.conditions.find(c => 'op' in c && c.namespace === 'subject' && c.key === roleKey);
-      const tabLeaf  = node.conditions.find(c => 'op' in c && c.namespace === 'action'  && tabKeys.includes(c.key));
-      if (roleLeaf && tabLeaf) {
-        const role = String(roleLeaf.value);
-        if (!matrix[role]) matrix[role] = {};
-        if (tabLeaf.op === 'in' && Array.isArray(tabLeaf.value)) {
-          matrix[role][tabLeaf.key] = new Set(tabLeaf.value.map(String));
-        } else {
-          matrix[role][tabLeaf.key] = new Set([String(tabLeaf.value)]);
-        }
-        return;
+
+  const addCell = (role, tabLeaf) => {
+    if (!matrix[role]) matrix[role] = {};
+    if (tabLeaf.op === 'in' && Array.isArray(tabLeaf.value)) {
+      matrix[role][tabLeaf.key] = new Set(tabLeaf.value.map(String));
+    } else {
+      matrix[role][tabLeaf.key] = new Set([String(tabLeaf.value)]);
+    }
+  };
+
+  const isTabLeaf = (c) => 'op' in c && c.namespace === 'action' && tabKeys.includes(c.key);
+
+  // A per-role group: AND[ role=X, <tabCond | OR[tabCond, ...]> ]
+  const processRoleGroup = (node) => {
+    if (!node || node.operator !== 'AND' || !Array.isArray(node.conditions)) return false;
+    const roleLeaf = node.conditions.find(c => 'op' in c && c.namespace === 'subject' && c.key === roleKey);
+    if (!roleLeaf) return false;
+    const role = String(roleLeaf.value);
+
+    const rest = node.conditions.filter(c => c !== roleLeaf);
+    for (const child of rest) {
+      if (isTabLeaf(child)) {
+        addCell(role, child);
+      } else if (child.operator === 'OR' && Array.isArray(child.conditions)) {
+        child.conditions.forEach(c => { if (isTabLeaf(c)) addCell(role, c); });
       }
     }
+    return true;
+  };
+
+  const processNode = (node) => {
+    if (!node) return;
+    if (processRoleGroup(node)) return;
     if (Array.isArray(node.conditions)) node.conditions.forEach(processNode);
   };
+
   if (conditions?.operator) processNode(conditions);
   return matrix;
 }
 
+// Builds the compact per-role shape:
+//   AND[ role=X, tabCond ]                       — role with a single tab
+//   AND[ role=X, OR[ tabCond, tabCond, ... ] ]   — role with multiple tabs
+// Multiple roles are wrapped in an outer OR.
 function buildConditionsFromMatrix(matrix, roleKey, roleOptions, tabKeys, tabCellValuesMap) {
-  const pairs = [];
+  const groups = [];
   roleOptions.forEach(role => {
+    const tabConds = [];
     tabKeys.forEach(tabKey => {
       const selected = matrix[role]?.[tabKey];
       if (!selected || selected.size === 0) return;
       const cellValues = tabCellValuesMap[tabKey];
-      const actionCond = cellValues
-        ? { namespace: 'action', key: tabKey, op: 'in',  value: [...selected] }
-        : { namespace: 'action', key: tabKey, op: 'eq',  value: 'true' };
-      pairs.push({
-        operator: 'AND',
-        conditions: [
-          { namespace: 'subject', key: roleKey, op: 'eq', value: role },
-          actionCond,
-        ],
-      });
+      tabConds.push(
+        cellValues
+          ? { namespace: 'action', key: tabKey, op: 'in', value: [...selected] }
+          : { namespace: 'action', key: tabKey, op: 'eq', value: 'true' }
+      );
+    });
+    if (tabConds.length === 0) return;
+
+    const tabPart = tabConds.length === 1 ? tabConds[0] : { operator: 'OR', conditions: tabConds };
+    groups.push({
+      operator: 'AND',
+      conditions: [
+        { namespace: 'subject', key: roleKey, op: 'eq', value: role },
+        tabPart,
+      ],
     });
   });
-  if (pairs.length === 0) return { operator: 'AND', conditions: [] };
-  if (pairs.length === 1) return pairs[0];
-  return { operator: 'OR', conditions: pairs };
+
+  if (groups.length === 0) return { operator: 'AND', conditions: [] };
+  if (groups.length === 1) return groups[0];
+  return { operator: 'OR', conditions: groups };
 }
 
-// Returns true if a node is a single AND[role, tab] pair generated by the matrix.
+// Returns true if a node is a per-role matrix group: AND[ role=X, <tabCond | OR[tabCond,...]> ]
 function isMatrixPairNode(node, roleKey, tabKeys) {
   if (!node || node.operator !== 'AND' || !Array.isArray(node.conditions)) return false;
   const hasRole = node.conditions.some(c => 'op' in c && c.namespace === 'subject' && c.key === roleKey);
-  const hasTab  = node.conditions.some(c => 'op' in c && c.namespace === 'action'  && tabKeys.includes(c.key));
-  return hasRole && hasTab;
+  if (!hasRole) return false;
+  const isTabLeaf = (c) => 'op' in c && c.namespace === 'action' && tabKeys.includes(c.key);
+  return node.conditions.some(c => {
+    if (isTabLeaf(c)) return true;
+    return c.operator === 'OR' && Array.isArray(c.conditions) && c.conditions.some(isTabLeaf);
+  });
 }
 
-// Returns true if a node is the OR wrapper containing only matrix pair nodes.
+// Returns true if a node is the OR wrapper containing only matrix per-role groups.
 function isMatrixOrNode(node, roleKey, tabKeys) {
   if (!node || node.operator !== 'OR' || !Array.isArray(node.conditions)) return false;
   return node.conditions.length > 0 && node.conditions.every(n => isMatrixPairNode(n, roleKey, tabKeys));
 }
 
 // Splits a stored conditions tree into { matrix, extra } sub-trees.
-// Expected shape on disk: AND[ ...common conditions..., OR[ AND[role,tab], ... ] ]
+// Expected shape on disk: AND[ ...common conditions..., OR[ <per-role group>, ... ] ]
+// or, for a single role, AND[ ...common conditions..., <per-role group> ]
 function partitionConditions(conditions, roleKey, tabKeys) {
   if (!conditions || !conditions.operator) return { matrix: DEFAULT_CONDITIONS, extra: DEFAULT_CONDITIONS };
 
@@ -1098,7 +1184,21 @@ function partitionConditions(conditions, roleKey, tabKeys) {
         { operator: 'AND', conditions: extraNodes };
       return { matrix: matrixOrNode, extra };
     }
-    // Also handle legacy: a single pair node at top-level AND (no OR wrapper yet)
+    // Single per-role group at top-level AND (no OR wrapper — single role only)
+    const pairIdx = conditions.conditions.findIndex(n => isMatrixPairNode(n, roleKey, tabKeys));
+    if (pairIdx !== -1 && conditions.conditions.length === 1) {
+      return { matrix: conditions.conditions[0], extra: DEFAULT_CONDITIONS };
+    }
+    if (pairIdx !== -1) {
+      const matrixNode  = conditions.conditions[pairIdx];
+      const extraNodes  = conditions.conditions.filter((_, i) => i !== pairIdx);
+      const extra =
+        extraNodes.length === 0 ? DEFAULT_CONDITIONS :
+        extraNodes.length === 1 ? extraNodes[0] :
+        { operator: 'AND', conditions: extraNodes };
+      return { matrix: matrixNode, extra };
+    }
+    // Legacy whole-tree IS itself a single pair node (operator AND with role+tab directly)
     if (isMatrixPairNode(conditions, roleKey, tabKeys)) {
       return { matrix: conditions, extra: DEFAULT_CONDITIONS };
     }
@@ -1126,16 +1226,17 @@ function partitionConditions(conditions, roleKey, tabKeys) {
 }
 
 // Merges the matrix-managed and builder-managed condition trees before saving.
-// Structure: AND[ ...common conditions..., OR[ AND[role,tab], ... ] ]
+// Structure: AND[ ...common conditions..., <matrix node> ]
+// where <matrix node> is either a single per-role group or an OR of per-role groups.
 function mergeFormConditions(matrixConds, extraConds) {
-  // Flatten the matrix OR node into its pair array (or empty if no matrix)
-  const matrixPairs = (() => {
-    if (!matrixConds) return [];
+  // Normalize the matrix tree to its node form (single group, OR-of-groups, or none)
+  const matrixNode = (() => {
+    if (!matrixConds) return null;
     if (matrixConds.operator === 'OR' && Array.isArray(matrixConds.conditions) && matrixConds.conditions.length > 0)
-      return matrixConds.conditions;
+      return matrixConds.conditions.length === 1 ? matrixConds.conditions[0] : matrixConds;
     if (matrixConds.operator === 'AND' && Array.isArray(matrixConds.conditions) && matrixConds.conditions.length > 0)
-      return [matrixConds]; // single pair
-    return [];
+      return matrixConds; // single per-role group
+    return null;
   })();
 
   // Flatten extra common conditions into a node array
@@ -1147,7 +1248,7 @@ function mergeFormConditions(matrixConds, extraConds) {
     return [extraConds]; // OR block stays intact as one child
   })();
 
-  const hasMatrix = matrixPairs.length > 0;
+  const hasMatrix = !!matrixNode;
   const hasExtra  = extraNodes.length > 0;
 
   if (!hasMatrix && !hasExtra) return DEFAULT_CONDITIONS;
@@ -1157,13 +1258,11 @@ function mergeFormConditions(matrixConds, extraConds) {
     return extraNodes.length === 1 ? extraNodes[0] : { operator: 'AND', conditions: extraNodes };
   }
 
-  const matrixOrNode = matrixPairs.length === 1 ? matrixPairs[0] : { operator: 'OR', conditions: matrixPairs };
-
   // Only matrix, no common conditions
-  if (!hasExtra) return { operator: 'AND', conditions: [matrixOrNode] };
+  if (!hasExtra) return { operator: 'AND', conditions: [matrixNode] };
 
-  // Both: AND[ ...common..., OR[matrix pairs] ]
-  return { operator: 'AND', conditions: [...extraNodes, matrixOrNode] };
+  // Both: AND[ ...common..., <matrix node> ]
+  return { operator: 'AND', conditions: [...extraNodes, matrixNode] };
 }
 
 function PolicyTabRoleMatrix({ selectedTabKeys, tabAttrs, allActionAttrs, roleDef, roleOptions, conditions, onChange, disabled }) {
@@ -1479,7 +1578,7 @@ function PolicyTabRoleMatrix({ selectedTabKeys, tabAttrs, allActionAttrs, roleDe
 // PolicyConditionBuilder — unified builder (replaces tabs)
 // ---------------------------------------------------------------------------
 
-function ConditionGroupRenderer({ tree, onChange, disabled, attributeDefs, depth = 0 }) {
+function ConditionGroupRenderer({ tree, onChange, disabled, attributeDefs, depth = 0, lockOperator = false }) {
   const updateOperator = (op) => { if (!disabled) onChange({ ...tree, operator: op }); };
   const updateChild = (i, newNode) => onChange({ ...tree, conditions: tree.conditions.map((c, idx) => idx === i ? newNode : c) });
   const removeChild = (i) => onChange({ ...tree, conditions: tree.conditions.filter((_, idx) => idx !== i) });
@@ -1489,15 +1588,19 @@ function ConditionGroupRenderer({ tree, onChange, disabled, attributeDefs, depth
   return (
     <div className={depth > 0 ? 'border-l-2 border-gray-200 pl-3 ml-2 mt-1' : ''}>
       <div className="flex items-center gap-2 mb-2">
-        <div className="flex rounded-md border border-gray-200 overflow-hidden">
-          {['AND', 'OR'].map(op => (
-            <button key={op} type="button" disabled={disabled} onClick={() => updateOperator(op)}
-              className={`px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${tree.operator === op ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-            >{op}</button>
-          ))}
-        </div>
+        {lockOperator ? (
+          <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-gray-200 bg-primary text-white">AND</span>
+        ) : (
+          <div className="flex rounded-md border border-gray-200 overflow-hidden">
+            {['AND', 'OR'].map(op => (
+              <button key={op} type="button" disabled={disabled} onClick={() => updateOperator(op)}
+                className={`px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${tree.operator === op ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              >{op}</button>
+            ))}
+          </div>
+        )}
         <span className="text-xs text-gray-400">
-          {tree.operator === 'AND' ? 'all conditions must match' : 'any condition must match'}
+          {(lockOperator ? 'AND' : tree.operator) === 'AND' ? 'all conditions must match' : 'any condition must match'}
         </span>
       </div>
 
@@ -1544,12 +1647,17 @@ function ConditionGroupRenderer({ tree, onChange, disabled, attributeDefs, depth
 
 function PolicyConditionBuilder({ value, onChange, disabled, attributeDefs }) {
   const tree = normalizeConditions(value);
+  // Root of the common-conditions tree is always AND'd with the role/stage/action
+  // matrix (and with itself), so lock the root operator to AND. Users can still
+  // nest OR groups as children for "any of these" sub-conditions.
+  const rootTree = { ...tree, operator: 'AND' };
+  const handleChange = (newTree) => onChange({ ...newTree, operator: 'AND' });
   return (
     <div className="space-y-3">
-      <ConditionGroupRenderer tree={tree} onChange={onChange} disabled={disabled}
-        attributeDefs={attributeDefs} depth={0}
+      <ConditionGroupRenderer tree={rootTree} onChange={handleChange} disabled={disabled}
+        attributeDefs={attributeDefs} depth={0} lockOperator
       />
-      <ConditionJsonEditor tree={tree} onChange={onChange} disabled={disabled} />
+      <ConditionJsonEditor tree={rootTree} onChange={handleChange} disabled={disabled} />
     </div>
   );
 }
@@ -1812,7 +1920,12 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
       if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
       return !!c.action_tab;
     });
-    const selectedTabKeys = (policy.actions ?? []).filter(k => tabAttrs.some(a => a.key === k));
+    const allTabKeys = tabAttrs.map(a => a.key);
+    const storedTabKeys = (policy.actions ?? []).filter(k => allTabKeys.includes(k));
+    // `actions` isn't persisted on the policy, so also detect tabs referenced
+    // directly inside the saved conditions tree (e.g. published policies).
+    const conditionTabKeys = extractTabKeysFromConditions(policy.conditions, allTabKeys);
+    const selectedTabKeys = [...new Set([...storedTabKeys, ...conditionTabKeys])];
 
     let matrixConditions = DEFAULT_CONDITIONS;
     let extraConditions  = policy.conditions ?? DEFAULT_CONDITIONS;
@@ -1830,7 +1943,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
       effect:           policy.effect === 'PERMIT' ? 'ALLOW' : policy.effect,
       conditions:       extraConditions,
       matrixConditions,
-      actions:          policy.actions ?? [],
+      actions:          selectedTabKeys,
     });
   }, [policy?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 

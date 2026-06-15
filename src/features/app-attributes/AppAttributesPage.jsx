@@ -67,6 +67,7 @@ const EMPTY_FORM = {
   is_required: false,
   is_multi_valued: false,
   is_user_requestable: false,
+  is_action_tab: false,
   parentId: "",
 };
 
@@ -85,6 +86,7 @@ function formFromAttr(attr) {
     is_required: attr.isRequired ?? false,
     is_multi_valued: attr.isMultiValued ?? false,
     is_user_requestable: attr.isUserRequestable ?? false,
+    is_action_tab: c.action_tab === true,
     parentId: attr.parentId ?? "",
     id: attr.id,
   };
@@ -92,7 +94,10 @@ function formFromAttr(attr) {
 
 function buildPayload(form) {
   const constraints = {};
-  if (form.attribute_type === "enum" && form.allowed_values.trim()) {
+  if (
+    (form.attribute_type === "enum" || form.is_action_tab) &&
+    form.allowed_values.trim()
+  ) {
     constraints.allowedValues = form.allowed_values
       .split(",")
       .map((v) => v.trim())
@@ -104,6 +109,9 @@ function buildPayload(form) {
   }
   if (form.default_value.trim() !== "") {
     constraints.defaultValue = form.default_value.trim();
+  }
+  if (form.namespace === "action" && form.is_action_tab) {
+    constraints.action_tab = true;
   }
   return {
     namespace: form.namespace,
@@ -265,16 +273,39 @@ function AttributeForm({
         </Select>
       </div>
 
-      {/* allowed_values — only for enum */}
-      {form.attribute_type === "enum" && (
+      {/* action_tab — only for action namespace */}
+      {form.namespace === "action" && (
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="f-action-tab"
+            checked={form.is_action_tab}
+            onCheckedChange={(c) =>
+              setForm({ ...form, is_action_tab: Boolean(c) })
+            }
+          />
+          <Label htmlFor="f-action-tab" className="cursor-pointer">
+            Action Tab
+          </Label>
+        </div>
+      )}
+
+      {/* allowed_values — for enum, or for action_tab attributes (any type) */}
+      {(form.attribute_type === "enum" ||
+        (form.namespace === "action" && form.is_action_tab)) && (
         <div className="space-y-1.5">
           <Label htmlFor="f-allowed">
             Allowed Values
-            {!isEdit && <span className="text-red-500"> *</span>}
+            {!isEdit && form.attribute_type === "enum" && (
+              <span className="text-red-500"> *</span>
+            )}
           </Label>
           <Input
             id="f-allowed"
-            placeholder="e.g. read_only, reviewer, submitter"
+            placeholder={
+              form.is_action_tab
+                ? "e.g. open, view, submit"
+                : "e.g. read_only, reviewer, submitter"
+            }
             value={form.allowed_values}
             onChange={(e) =>
               setForm({ ...form, allowed_values: e.target.value })
@@ -846,7 +877,10 @@ export function AppAttributesPage() {
   const handleUpdate = () => {
     if (!editTarget) return;
     const c = {};
-    if (editForm.attribute_type === "enum" && editForm.allowed_values.trim()) {
+    if (
+      (editForm.attribute_type === "enum" || editForm.is_action_tab) &&
+      editForm.allowed_values.trim()
+    ) {
       c.allowedValues = editForm.allowed_values
         .split(",")
         .map((v) => v.trim())
@@ -858,6 +892,9 @@ export function AppAttributesPage() {
     }
     if (editForm.default_value.trim()) {
       c.defaultValue = editForm.default_value.trim();
+    }
+    if (editForm.namespace === "action" && editForm.is_action_tab) {
+      c.action_tab = true;
     }
     updateMutation.mutate({
       id: editTarget.id,
