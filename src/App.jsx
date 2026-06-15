@@ -35,6 +35,7 @@ const AppUsersManagementPage = lazy(() => import("@/features/app-users/AppUsersM
 const AppPoliciesPage = lazy(() => import("@/features/app-policies/AppPoliciesPage").then(m => ({ default: m.AppPoliciesPage })));
 const PolicyTesterPage = lazy(() => import("@/features/policy-tester/PolicyTesterPage").then(m => ({ default: m.PolicyTesterPage })));
 const CoverageGapsPage = lazy(() => import("@/features/coverage-gaps/CoverageGapsPage").then(m => ({ default: m.CoverageGapsPage })));
+const ExternalUsersPage = lazy(() => import("@/features/external-users/ExternalUsersPage").then(m => ({ default: m.ExternalUsersPage })));
 
 function AppRoutes() {
   const { loading, user, effectiveRoles } = useAuth();
@@ -69,6 +70,7 @@ function AppRoutes() {
         <Route path="account-approvals" element={<AccountRequestsPage />} />
         <Route path="access-approvals" element={<AccessRequestsPage />} />
         <Route path="facilities" element={<FacilitiesPage />} />
+        <Route path="external-users" element={<ExternalUsersPage />} />
         <Route path="audit" element={<AuditPage />} />
 
         {/* ── Global scope ABAC pages ──────────────────────────────── */}
