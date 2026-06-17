@@ -1629,13 +1629,12 @@ export function GlobalPoliciesPage() {
     queryFn: () => globalPolicyService.list(
       listFilter !== 'all' ? { status: listFilter } : {}
     ),
-    staleTime: 0,
   });
 
   const { data: hubAttrsData } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: () => hubAttributeService.list(),
-    staleTime: 0,
+    enabled: showCreatePanel || !!selectedPolicyId,
   });
   const attributeDefs = hubAttrsData?.data?.data ?? hubAttrsData?.data ?? [];
   const policies = policiesData?.data?.data ?? policiesData?.data ?? [];
@@ -1659,7 +1658,6 @@ export function GlobalPoliciesPage() {
     queryKey: QK.globalPolicyVersions(selectedPolicyId),
     queryFn: () => globalPolicyService.getVersions(selectedPolicyId),
     enabled: !!selectedPolicyId,
-    staleTime: 0,
   });
   const versions = versionsData?.data?.data ?? versionsData?.data ?? [];
 

@@ -2,6 +2,26 @@ import axios from "axios";
 import { env } from "@/config/env";
 import { logger } from "./logger";
 
+// Single-flight mutex so concurrent 401s share one refresh request.
+let _iamRefreshPromise = null;
+
+function singleFlightRefresh() {
+  if (!_iamRefreshPromise) {
+    _iamRefreshPromise = axios
+      .post(
+        `${env.AXIOS_BASE_URL}/auth/refresh`,
+        {},
+        { withCredentials: true, headers: { "Content-Type": "application/json" } }
+      )
+      .then((res) => {
+        if (!res.data?.success) throw new Error(res.data?.error || "Refresh failed");
+        return res.data;
+      })
+      .finally(() => { _iamRefreshPromise = null; });
+  }
+  return _iamRefreshPromise;
+}
+
 const REQUEST_ID_HEADER = "x-request-id";
 
 function generateRequestId() {
@@ -71,7 +91,7 @@ apiClient.interceptors.response.use(
 
     return response;
   },
-  (error) => {
+  async (error) => {
     const startedAt = error.config?.metadata?.startedAt || performance.now();
     const durationMs = Number((performance.now() - startedAt).toFixed(2));
     const requestId =
@@ -91,14 +111,22 @@ apiClient.interceptors.response.use(
     });
 
     if (error.response?.status === 401) {
+      const isAuthEndpoint = error.config?.url?.includes("/auth/");
+
+      if (!isAuthEndpoint && error.config && !error.config._retry) {
+        error.config._retry = true;
+        try {
+          await singleFlightRefresh();
+          return apiClient(error.config);
+        } catch {
+          // Silent refresh failed — fall through to the OAuth redirect below.
+        }
+      }
+
       const devMode = localStorage.getItem("dev_mode") === "true";
       if (devMode) {
-        console.warn("[API] 401 — session invalid");
+        console.warn("[API] 401 — session invalid, triggering OAuth flow");
       }
-      // Emit a single global event instead of redirecting here. Multiple
-      // concurrent 401s all fire the same event; AuthProvider's listener
-      // is idempotent (guarded by oauthRedirectInFlightRef) so only one
-      // redirect is ever triggered.
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("iam:session-expired"));
       }

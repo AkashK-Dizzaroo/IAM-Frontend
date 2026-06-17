@@ -450,7 +450,6 @@ export function AppUserAttributesPage() {
     queryKey: QK.appTeam(selectedAppKey),
     queryFn: () => userService.getAppTeamUsers(selectedAppKey),
     enabled: !!selectedAppKey && showOnlyAssigned,
-    staleTime: 0,
   });
   const assignedUserIds = useMemo(() => {
     const entries = appTeamData?.data ?? [];
@@ -467,7 +466,6 @@ export function AppUserAttributesPage() {
     queryKey: QK.appAttributes(selectedAppKey),
     queryFn: () => appAttributeService.list(selectedAppKey),
     enabled: !!selectedAppKey,
-    staleTime: 0,
   });
   const attributeDefs = normalizeList(attrDefsData);
 
@@ -475,7 +473,6 @@ export function AppUserAttributesPage() {
     queryKey: QK.appPolicies(selectedAppKey, 'active'),
     queryFn: () => appPolicyService.list(selectedAppKey, { status: 'active' }),
     enabled: !!selectedAppKey,
-    staleTime: 0,
   });
   const referencedKeys = useMemo(() => {
     const policies = activePoliciesData?.data?.data ?? activePoliciesData?.data ?? [];
@@ -499,7 +496,6 @@ export function AppUserAttributesPage() {
   const { data: applicationsData } = useQuery({
     queryKey: QK.appsForStudyAccess,
     queryFn: () => applicationService.getApplications(),
-    staleTime: 0,
   });
   const applications = normalizeList(applicationsData);
   const selectedApplication = applications.find(
@@ -517,7 +513,6 @@ export function AppUserAttributesPage() {
         isActive: 'true',
       }),
     enabled: !!selectedAppKey,
-    staleTime: 0,
   });
 
   const studyOptions = useMemo(() => {

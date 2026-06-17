@@ -1,4 +1,7 @@
-import { OAUTH_STATE_KEY, OAUTH_PKCE_VERIFIER_KEY } from "./sessionKeys";
+// sessionStorage keys for in-flight OAuth Authorization Code + PKCE state.
+// Tokens themselves live in HttpOnly cookies on the IAM origin.
+const OAUTH_STATE_KEY = "iam_oauth_state";
+const OAUTH_PKCE_VERIFIER_KEY = "iam_oauth_pkce_verifier";
 
 const DEV_HUB_API_URL = "http://localhost:4001";
 const DEV_REDIRECT_URI = "http://localhost:5001/callback";

@@ -66,7 +66,6 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
     queryKey: ["resources-by-app-modal", appId],
     queryFn: () => resourceService.getResourcesByApplication(appId),
     enabled: open && !!appId,
-    staleTime: 0,
   });
   const l2Resources = (appResourcesResponse?.data ?? []).filter((r) => r.level === 2 && r.isUnassignedNode !== true);
 

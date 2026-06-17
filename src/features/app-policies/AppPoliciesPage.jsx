@@ -2641,14 +2641,12 @@ function HubGlobalConfigTab({ appName }) {
   const { data: globalPoliciesData, isLoading: policiesLoading } = useQuery({
     queryKey: QK.globalPolicies('active'),
     queryFn: () => globalPolicyService.list({ status: 'active' }),
-    staleTime: 0,
   });
   const globalPolicies = globalPoliciesData?.data?.data ?? globalPoliciesData?.data ?? [];
 
   const { data: hubAttrsData, isLoading: attrsLoading } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: () => hubAttributeService.list(),
-    staleTime: 0,
   });
   const hubAttributes = hubAttrsData?.data?.data ?? hubAttrsData?.data ?? [];
 
@@ -2867,7 +2865,6 @@ function AppPoliciesContent({ appKey, appName }) {
       appKey,
       listFilter !== 'all' ? { status: listFilter } : {}
     ),
-    staleTime: 0,
   });
   const policies = policiesData?.data?.data ?? policiesData?.data ?? [];
 
@@ -2889,13 +2886,13 @@ function AppPoliciesContent({ appKey, appName }) {
   const { data: appAttrsData } = useQuery({
     queryKey: QK.appAttributes(appKey),
     queryFn: () => appAttributeService.list(appKey),
-    staleTime: 0,
+    enabled: showCreatePanel || !!selectedPolicyId,
   });
 
   const { data: hubAttrsData } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: () => hubAttributeService.list(),
-    staleTime: 0,
+    enabled: showCreatePanel || !!selectedPolicyId,
   });
 
   const hubDefs = (hubAttrsData?.data?.data ?? hubAttrsData?.data ?? []).map(a => ({ ...a, _source: 'hub' }));
@@ -2906,7 +2903,6 @@ function AppPoliciesContent({ appKey, appName }) {
     queryKey: QK.appPolicyVersions(appKey, selectedPolicyId),
     queryFn: () => appPolicyService.getVersions(appKey, selectedPolicyId),
     enabled: !!selectedPolicyId,
-    staleTime: 0,
   });
   const versions = versionsData?.data?.data ?? versionsData?.data ?? [];
 

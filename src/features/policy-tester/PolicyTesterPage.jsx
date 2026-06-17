@@ -11,7 +11,7 @@ import { hubAttributeService } from '@/features/hub-attributes/api/hubAttributeS
 import { abacUserService } from '@/features/users/api/abacUserService';
 import { appUserService } from '@/features/app-users/api/appUserService';
 import { useAbacScope } from '@/features/scope';
-import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useAuth } from '@/features/auth';
 import { resourceService } from '@/features/resources';
 
 // ---------------------------------------------------------------------------
@@ -801,14 +801,12 @@ export function PolicyTesterPage() {
   const { data: hubAttrData } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: () => hubAttributeService.list(),
-    staleTime: 0,
   });
 
   const { data: appAttrData } = useQuery({
     queryKey: QK.appAttributes(selectedAppKey),
     queryFn: () => appAttributeService.list(selectedAppKey),
     enabled: !!selectedAppKey,
-    staleTime: 0,
   });
 
   const hubDefs = useMemo(() => {
