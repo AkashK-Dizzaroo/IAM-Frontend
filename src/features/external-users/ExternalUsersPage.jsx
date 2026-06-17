@@ -813,16 +813,16 @@ export const ExternalUsersPage = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-sm table-fixed">
               <colgroup>
-                <col className="w-[88px]" /> {/* User ID */}
-                <col className="w-[160px]" /> {/* Name */}
-                <col className="w-[100px]" /> {/* User Type */}
-                <col className="w-[140px]" /> {/* Organization */}
-                <col className="w-[130px]" /> {/* Role */}
-                <col className="w-[100px]" /> {/* Country */}
-                <col className="w-[200px]" /> {/* Email */}
-                <col className="w-[140px]" /> {/* Phone */}
-                <col className="w-[80px]" /> {/* Status */}
-                <col className="w-[76px]" /> {/* Actions */}
+                <col className="w-[88px]" />
+                <col className="w-[160px]" />
+                <col className="w-[100px]" />
+                <col className="w-[140px]" />
+                <col className="w-[130px]" />
+                <col className="w-[100px]" />
+                <col className="w-[200px]" />
+                <col className="w-[140px]" />
+                <col className="w-[80px]" />
+                <col className="w-[76px]" />
               </colgroup>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-left">

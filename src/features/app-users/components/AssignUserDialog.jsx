@@ -427,7 +427,6 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
     queryKey: QK.studyResources(appKey, appId),
     queryFn: () => resourceService.getResources({ applicationId: appId, limit: 1000, isActive: 'true' }),
     enabled: !!appId && open,
-    staleTime: 0,
   });
   const resources = useMemo(() => {
     const raw = resourcesData?.data ?? resourcesData?.resources ?? [];

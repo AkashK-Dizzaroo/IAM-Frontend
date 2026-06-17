@@ -5,7 +5,7 @@ import { abacUserService } from './api/abacUserService';
 import { hubAttributeService } from '@/features/hub-attributes/api/hubAttributeService';
 import { applicationService } from '@/features/applications/api/applicationService';
 import { userService } from '@/features/users/api/userService';
-import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useAuth } from '@/features/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -263,7 +263,7 @@ export function AbacUsersPage() {
   const { data: attrDefsData } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: hubAttributeService.list,
-    staleTime: 0,
+    enabled: dialogMode !== null,
   });
   const attrDefs = (attrDefsData?.data?.data ?? attrDefsData?.data ?? []).filter(
     (d) => d.key !== 'hub_roles'

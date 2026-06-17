@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 import { startOAuthLogin } from "@/features/auth/utils/oauthFlow";
 import { AppShellSkeleton } from "@/components/ui/AppShellSkeleton";
 

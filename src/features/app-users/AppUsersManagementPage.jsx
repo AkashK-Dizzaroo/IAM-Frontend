@@ -6,7 +6,7 @@ import { applicationService } from '@/features/applications/api/applicationServi
 import { resourceService } from '@/features/resources';
 import { QK } from '@/lib/queryKeys';
 import { useAbacScope } from '@/features/scope';
-import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useAuth } from '@/features/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

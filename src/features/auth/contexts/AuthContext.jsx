@@ -1,10 +1,11 @@
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from "react";
 import apiClient from "@/lib/apiClient";
 import { getValidHubUrl } from "@/config/env";
-import { AuthContext } from "./AuthContext";
 import { startOAuthLogin } from "@/features/auth/utils/oauthFlow";
 import { queryClient } from "@/config/queryClient";
 import { logger } from "@/lib/logger";
+
+const AuthContext = createContext(null);
 
 export const DEFAULT_EFFECTIVE_ROLES = {
   isHubOwner: false,
@@ -52,6 +53,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Guard against React StrictMode double-invoking the init effect in development.
+  const initInFlight = useRef(false);
   // Avoid re-entering the OAuth redirect while one is already in progress
   // (e.g. focus/blur events firing during the navigation).
   const oauthRedirectInFlightRef = useRef(false);
@@ -88,21 +91,29 @@ export function AuthProvider({ children }) {
         logger.setUser(backendUser.id || backendUser.email);
         return true;
       }
+      // 200 with success:false — iam:session-expired already handles 401s.
       clearSession();
-      if (redirectOnFailure) triggerLogin();
+      if (redirectOnFailure && !oauthRedirectInFlightRef.current) triggerLogin();
       return false;
     } catch {
-      clearSession();
-      if (redirectOnFailure) triggerLogin();
+      // iam:session-expired fires synchronously on 401 before this catch runs,
+      // so only clean up if the OAuth flow hasn't already started.
+      if (!oauthRedirectInFlightRef.current) {
+        clearSession();
+        if (redirectOnFailure) triggerLogin();
+      }
       return false;
     }
   }, [clearSession, triggerLogin]);
 
   // 1. Initial mount verification
   useEffect(() => {
+    // StrictMode mounts → unmounts → remounts; the ref persists across that
+    // cycle so the second invocation bails out immediately.
+    if (initInFlight.current) return;
+    initInFlight.current = true;
+
     const initializeAuth = async () => {
-      // Don't pre-empt the OAuth callback page — let it complete its exchange,
-      // which will set cookies and navigate the browser.
       if (isInOAuthFlowPath()) {
         setLoading(false);
         return;
@@ -112,7 +123,8 @@ export function AuthProvider({ children }) {
     };
 
     initializeAuth();
-  }, [verifySession]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once at mount only.
 
   // 2. Global 401 listener — catches expired sessions mid-use without polling.
   // apiClient dispatches "iam:session-expired" on every 401 response, so any
@@ -206,3 +218,13 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+  return context;
+};
+
+export { AuthContext };

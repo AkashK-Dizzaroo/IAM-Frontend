@@ -39,14 +39,12 @@ export function CoverageGapsPage() {
     queryKey: QK.coverageGaps(selectedAppKey),
     queryFn: () => coverageGapService.get(selectedAppKey),
     enabled: !!selectedAppKey,
-    staleTime: 0,
   });
 
   const { data: attrDefsRes } = useQuery({
     queryKey: QK.appAttributes(selectedAppKey),
     queryFn: () => appAttributeService.list(selectedAppKey),
     enabled: !!selectedAppKey,
-    staleTime: 0,
   });
 
   const body = gapsRes?.data;

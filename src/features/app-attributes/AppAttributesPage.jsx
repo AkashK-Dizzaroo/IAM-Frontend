@@ -554,7 +554,6 @@ export function AppAttributesPage() {
     queryKey: QK.appAttributes(selectedApp?.key),
     queryFn: () => appAttributeService.list(selectedApp.key),
     enabled: !!selectedApp?.key,
-    staleTime: 0,
   });
 
   const rawData = data?.data?.data ?? data?.data ?? [];
@@ -566,7 +565,6 @@ export function AppAttributesPage() {
     queryFn: () =>
       appPolicyService.list(selectedApp.key, { status: "active" }),
     enabled: !!selectedApp?.key,
-    staleTime: 0,
   });
 
   const referencedKeys = useMemo(() => {

@@ -274,7 +274,6 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
   const { data: applicationsData } = useQuery({
     queryKey: QK.appsForStudyAccess,
     queryFn: () => applicationService.getApplications(),
-    staleTime: 0,
   });
   const selectedApplication = (applicationsData?.data?.data ?? applicationsData?.data ?? []).find(
     (a) => a?.key === appKey
@@ -285,7 +284,6 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
     queryFn: () =>
       resourceService.getResources({ applicationId: selectedApplication?.id, limit: 1000, isActive: 'true' }),
     enabled: !!selectedApplication?.id,
-    staleTime: 0,
   });
   const resources = useMemo(() => {
     const raw = resourcesData?.data ?? resourcesData?.resources ?? [];

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Loader2,
   XCircle,
@@ -10,6 +10,7 @@ import {
   MapPin,
   Calendar,
 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { userService } from "../api/userService";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -23,6 +24,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
+const QUERY_KEY = ["account-approvals"];
+
 /** API returns PostgreSQL `id`; legacy UIs used Mongo-style `_id`. */
 function userRowId(request) {
   return request?.id ?? request?._id;
@@ -30,65 +33,40 @@ function userRowId(request) {
 
 export const AccountRequestsPage = () => {
   const { toast } = useToast();
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
   const [actioning, setActioning] = useState({});
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [rejectionReason, setRejectionReason] = useState("");
 
-  const fetchRequests = async () => {
-    try {
-      setLoading(true);
-      const response = await userService.getUsers({
-        status: "PENDING_APPROVAL",
-        limit: 100,
-      });
-      if (response.success) setRequests(response.data || []);
-      setError("");
-    } catch (err) {
-      console.error("Error fetching account requests:", err);
-      setError(
-        err?.message || err?.error || "Failed to load account requests"
-      );
-      setRequests([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, isLoading, error } = useQuery({
+    queryKey: QUERY_KEY,
+    queryFn: () => userService.getUsers({ status: "PENDING_APPROVAL", limit: 100 }),
+    select: (res) => res?.data ?? [],
+    staleTime: 30_000,
+  });
+  const requests = data ?? [];
 
-  useEffect(() => {
-    fetchRequests();
-  }, []);
+  const refetchRequests = () =>
+    queryClient.invalidateQueries({ queryKey: QUERY_KEY });
 
   const handleApprove = async (request) => {
     const uid = userRowId(request);
     if (!uid) {
-      toast({
-        title: "Error",
-        description: "Missing user id — cannot approve.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Missing user id — cannot approve.", variant: "destructive" });
       return;
     }
     try {
       setActioning((prev) => ({ ...prev, [uid]: "approve" }));
       const res = await userService.approveUserAccount(uid);
-      if (!res?.success) {
-        throw new Error(res?.error || "Approval failed");
-      }
+      if (!res?.success) throw new Error(res?.error || "Approval failed");
       toast({
         title: "Success",
         description: `Account for ${request.firstName} ${request.lastName} has been approved.`,
       });
-      await fetchRequests();
+      await refetchRequests();
     } catch (err) {
-      toast({
-        title: "Error",
-        description: err?.message || "Failed to approve account",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: err?.message || "Failed to approve account", variant: "destructive" });
     } finally {
       setActioning((prev) => ({ ...prev, [uid]: null }));
     }
@@ -104,11 +82,7 @@ export const AccountRequestsPage = () => {
     if (!selectedRequest) return;
     const uid = userRowId(selectedRequest);
     if (!uid) {
-      toast({
-        title: "Error",
-        description: "Missing user id — cannot reject.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Missing user id — cannot reject.", variant: "destructive" });
       return;
     }
     try {
@@ -121,13 +95,9 @@ export const AccountRequestsPage = () => {
       setShowRejectDialog(false);
       setSelectedRequest(null);
       setRejectionReason("");
-      await fetchRequests();
+      await refetchRequests();
     } catch (err) {
-      toast({
-        title: "Error",
-        description: err?.message || "Failed to reject account",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: err?.message || "Failed to reject account", variant: "destructive" });
     } finally {
       setActioning((prev) => ({ ...prev, [uid]: null }));
     }
@@ -164,7 +134,7 @@ export const AccountRequestsPage = () => {
 
       {error && (
         <div className="rounded-md bg-red-50 border border-red-200 text-red-700 px-4 py-3">
-          {error}
+          {error?.message || "Failed to load account requests"}
         </div>
       )}
 
@@ -191,7 +161,7 @@ export const AccountRequestsPage = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {loading ? (
+              {isLoading ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
                     <Loader2 className="inline h-5 w-5 animate-spin mr-2" />
