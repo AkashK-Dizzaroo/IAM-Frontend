@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { QK } from '@/lib/queryKeys';
 import { formatDistanceToNow } from 'date-fns';
@@ -1894,32 +1894,61 @@ function PolicyListPanel({
 // ---------------------------------------------------------------------------
 
 
-function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }) {
+function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs, attrsLoading = false }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState(null);
   const isArchived = policy.status === 'archived';
 
+  // Locate the role / tab attribute defs that the role-tab matrix depends on.
+  // These come from queries that resolve *after* the panel first mounts, so on
+  // the very first policy open `attributeDefs` is still empty. Deriving them
+  // here (and tracking when they become available) lets the init effect below
+  // re-run once they load, so the matrix layout renders consistently — instead
+  // of the first policy showing the old (non-matrix) layout until you switch.
+  const subjectAttrs = attributeDefs.filter(a => a.namespace === 'subject');
+  const roleDef = subjectAttrs.find(a => {
+    let c = a.constraints || {};
+    if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
+    return /(_role|^role)$/i.test(a.key) && Array.isArray(c.allowedValues) && c.allowedValues.length > 0;
+  });
+  const actionAttrs = attributeDefs.filter(a => a.namespace === 'action');
+  const tabAttrs = actionAttrs.filter(a => {
+    let c = a.constraints || {};
+    if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
+    return !!c.action_tab;
+  });
+  // Signal for the init effect: changes from "" → key once the matrix-relevant
+  // defs have loaded, triggering a single re-initialization while still pristine.
+  const defsReadyKey = roleDef && tabAttrs.length > 0
+    ? `${roleDef.key}|${tabAttrs.map(a => a.key).join(',')}`
+    : '';
+
+  // Track which (policy, defs) combination the form was last initialized for so
+  // we never clobber in-progress user edits when defs arrive late or re-render.
+  const initSignatureRef = useRef(null);
+
   useEffect(() => {
     if (!policy) return;
 
-    // Determine whether the stored conditions contain matrix nodes so we can
-    // split them into separate state fields — one for the matrix, one for the
-    // condition builder — keeping the two UIs independent.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const subjectAttrs = attributeDefs.filter(a => a.namespace === 'subject');
-    const roleDef = subjectAttrs.find(a => {
-      let c = a.constraints || {};
-      if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
-      return /(_role|^role)$/i.test(a.key) && Array.isArray(c.allowedValues) && c.allowedValues.length > 0;
-    });
-    const actionAttrs = attributeDefs.filter(a => a.namespace === 'action');
-    const tabAttrs = actionAttrs.filter(a => {
-      let c = a.constraints || {};
-      if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
-      return !!c.action_tab;
-    });
+    const signature = `${policy.id}::${defsReadyKey}`;
+    // Only (re)initialize when switching policies, or when this is the first
+    // time the matrix defs are available for the current policy. Once we have
+    // initialized *with* defs ready, never re-run — that would transform or
+    // reset condition data the user may have edited.
+    const prev = initSignatureRef.current;
+    if (prev) {
+      const sepIdx = prev.indexOf('::');
+      const prevPolicyId = prev.slice(0, sepIdx);
+      const prevDefsKey  = prev.slice(sepIdx + 2);
+      const isSamePolicy = prevPolicyId === String(policy.id);
+      // Already initialized this policy with the matrix defs present → done.
+      if (isSamePolicy && prevDefsKey !== '') return;
+      // Same policy, still no defs now → nothing new to do; keep current form.
+      if (isSamePolicy && defsReadyKey === '') return;
+    }
+
     const allTabKeys = tabAttrs.map(a => a.key);
     const storedTabKeys = (policy.actions ?? []).filter(k => allTabKeys.includes(k));
     // `actions` isn't persisted on the policy, so also detect tabs referenced
@@ -1936,6 +1965,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
       extraConditions  = split.extra;
     }
 
+    initSignatureRef.current = signature;
     setForm({
       name:             policy.name,
       description:      policy.description ?? '',
@@ -1945,7 +1975,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
       matrixConditions,
       actions:          selectedTabKeys,
     });
-  }, [policy?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [policy?.id, defsReadyKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDirty = form && policy && (
     form.name !== policy.name ||
@@ -2258,6 +2288,20 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
           <Separator className="my-2" />
 
           {(() => {
+            // The condition section's layout (plain builder vs. role-tab matrix)
+            // depends on attribute defs that load asynchronously. Until they're
+            // ready, render a skeleton instead of the plain builder so the old
+            // (non-matrix) UI never flashes before the matrix appears.
+            if (attrsLoading || attributeDefs.length === 0) {
+              return (
+                <div className="space-y-4">
+                  <div className="h-4 w-40 rounded bg-gray-200 animate-pulse" />
+                  <div className="h-24 rounded-xl bg-gray-200 animate-pulse" />
+                  <div className="h-40 rounded-xl bg-gray-200 animate-pulse" />
+                </div>
+              );
+            }
+
             const subjectAttrs = attributeDefs.filter(a => a.namespace === 'subject');
             const roleDef = subjectAttrs.find(a => {
               let c = a.constraints || {};
@@ -2883,21 +2927,28 @@ function AppPoliciesContent({ appKey, appName }) {
   const selectedPolicy =
     selectedData?.data?.data ?? selectedData?.data ?? null;
 
-  const { data: appAttrsData } = useQuery({
+  const attrsEnabled = showCreatePanel || !!selectedPolicyId;
+
+  const { data: appAttrsData, isFetched: appAttrsFetched } = useQuery({
     queryKey: QK.appAttributes(appKey),
     queryFn: () => appAttributeService.list(appKey),
-    enabled: showCreatePanel || !!selectedPolicyId,
+    enabled: attrsEnabled,
   });
 
-  const { data: hubAttrsData } = useQuery({
+  const { data: hubAttrsData, isFetched: hubAttrsFetched } = useQuery({
     queryKey: QK.hubAttributes,
     queryFn: () => hubAttributeService.list(),
-    enabled: showCreatePanel || !!selectedPolicyId,
+    enabled: attrsEnabled,
   });
 
   const hubDefs = (hubAttrsData?.data?.data ?? hubAttrsData?.data ?? []).map(a => ({ ...a, _source: 'hub' }));
   const appDefs = (appAttrsData?.data?.data ?? appAttrsData?.data ?? []).map(a => ({ ...a, _source: 'app' }));
   const attributeDefs = [...hubDefs, ...appDefs];
+  // True until both attribute-def queries have resolved at least once. The
+  // role-tab matrix depends on these defs, so the editor must wait for them
+  // before rendering the condition section — otherwise the plain (non-matrix)
+  // builder flashes for a second before the matrix appears.
+  const attrsLoading = attrsEnabled && !(appAttrsFetched && hubAttrsFetched);
 
   const { data: versionsData } = useQuery({
     queryKey: QK.appPolicyVersions(appKey, selectedPolicyId),
@@ -2992,6 +3043,7 @@ function AppPoliciesContent({ appKey, appName }) {
               policy={selectedPolicy}
               versions={versions}
               attributeDefs={attributeDefs}
+              attrsLoading={attrsLoading}
               onDelete={() => {
                 setSelectedPolicyId(null);
               }}
