@@ -34,20 +34,20 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
   const [linkingId, setLinkingId] = useState(null);
   const [expandedIds, setExpandedIds] = useState(new Set());
 
-  // Fetch all resources (global list) — reuses QK.resourcesAll cache when open
-  const { data: allResponse, isLoading } = useQuery({
+  // Always refetch when the modal opens so we never show a stale empty state.
+  const { data: allResponse, isLoading, isFetching: isAllFetching } = useQuery({
     queryKey: QK.resourcesAll,
     queryFn: () => resourceService.getResources({ limit: 10000, page: 1 }),
     enabled: open && !!applicationId,
-    staleTime: 2 * 60_000,
+    staleTime: 0,
   });
 
-  // Fetch resources already linked to this app so we can exclude them
-  const { data: linkedResponse } = useQuery({
+  // Fetch resources already linked to this app so we can exclude them.
+  const { data: linkedResponse, isFetching: isLinkedFetching } = useQuery({
     queryKey: QK.resourcesByApp(applicationId),
     queryFn: () => resourceService.getResourcesByApplication(applicationId),
     enabled: open && !!applicationId,
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   const allResources = useMemo(() => {
@@ -279,7 +279,7 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
         </div>
 
         <div className="flex-1 overflow-y-auto border rounded-lg min-h-0">
-          {isLoading ? (
+          {isLoading || isAllFetching || isLinkedFetching ? (
             <div className="p-6 text-center text-sm text-gray-500">Loading resources...</div>
           ) : treeData.length === 0 ? (
             <div className="p-6 text-center text-sm text-gray-500">

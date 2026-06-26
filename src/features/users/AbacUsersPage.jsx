@@ -26,7 +26,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Search, Plus, Pencil, Users, Trash2, AlertCircle } from 'lucide-react';
+import { Search, Plus, Pencil, Users, Trash2, AlertCircle, Check } from 'lucide-react';
 import { UserForm, validateUserFormFields } from '@/features/users/components/UserForm';
 
 // ─── table cell helpers ───────────────────────────────────────────────────────
@@ -255,7 +255,7 @@ export function AbacUsersPage() {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: QK.users(debouncedSearch),
-    queryFn: () => abacUserService.list({ search: debouncedSearch, limit: 50 }),
+    queryFn: () => abacUserService.list({ search: debouncedSearch, status: 'active', limit: 50 }),
     staleTime: 30_000,
   });
   const users = data?.data?.data ?? data?.data ?? [];
@@ -294,6 +294,8 @@ export function AbacUsersPage() {
   const [pendingHubOwner, setPendingHubOwner] = useState(null);
   // attribute keys queued for deletion — applied only on Save
   const [pendingDeleteKeys, setPendingDeleteKeys] = useState(new Set());
+  const [pendingEditAttrs, setPendingEditAttrs] = useState({});
+  const [editingAttrKey, setEditingAttrKey] = useState(null);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
   const resetCreate = useCallback(() => {
@@ -317,6 +319,8 @@ export function AbacUsersPage() {
     setEditNewAttr({ attributeDefId: '', value: '' });
     setPendingHubOwner(null);
     setPendingDeleteKeys(new Set());
+    setPendingEditAttrs({});
+    setEditingAttrKey(null);
     setSubmitted(false);
     setDialogMode(user);
   };
@@ -328,6 +332,8 @@ export function AbacUsersPage() {
     setDialogMode(null);
     setShowDiscardDialog(false);
     setPendingDeleteKeys(new Set());
+    setPendingEditAttrs({});
+    setEditingAttrKey(null);
     resetCreate();
   }, [resetCreate]);
 
@@ -349,7 +355,7 @@ export function AbacUsersPage() {
       editFormData.firstName !== editOriginalData.firstName ||
       editFormData.lastName !== editOriginalData.lastName;
     const hasNewAttr = editNewAttr.attributeDefId !== '';
-    if (nameChanged || pendingHubOwner !== null || hasNewAttr || pendingDeleteKeys.size > 0) {
+    if (nameChanged || pendingHubOwner !== null || hasNewAttr || pendingDeleteKeys.size > 0 || Object.keys(pendingEditAttrs).length > 0) {
       setShowDiscardDialog(true);
       return;
     }
@@ -438,7 +444,7 @@ export function AbacUsersPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => abacUserService.update(id, data),
+    mutationFn: ({ id, data }) => userService.updateUser(id, data),
     onSuccess: () => { toast({ title: 'User updated' }); refetch(); closeDialog(); },
     onError: (err) => toast({ title: 'Error', description: apiErrorDescription(err), variant: 'destructive' }),
   });
@@ -502,32 +508,74 @@ export function AbacUsersPage() {
         toast({ title: 'Unsaved attribute', description: 'Click Add before saving, or clear the field.', variant: 'destructive' });
         return;
       }
-      // Apply pending attribute deletions
-      if (pendingDeleteKeys.size > 0) {
-        Promise.allSettled(
-          Array.from(pendingDeleteKeys).map((key) =>
-            abacUserService.deleteHubUserAttr(editUserId, key)
-          )
-        ).then((results) => {
+
+      const applyAttributeChanges = async () => {
+        // 1. Deletions first
+        if (pendingDeleteKeys.size > 0) {
+          const results = await Promise.allSettled(
+            Array.from(pendingDeleteKeys).map((key) =>
+              abacUserService.deleteHubUserAttr(editUserId, key)
+            )
+          );
           const failed = results.filter((r) => r.status === 'rejected');
           if (failed.length > 0) {
             toast({ title: `${failed.length} attribute(s) failed to delete`, variant: 'destructive' });
           }
-          setPendingDeleteKeys(new Set());
-          refetchUserAttrs();
-        });
+        }
+
+        // 2. Edits/upserts with proper value parsing
+        const editKeys = Object.keys(pendingEditAttrs);
+        if (editKeys.length > 0) {
+          const results = await Promise.allSettled(
+            editKeys.map((key) => {
+              const def = attrDefs.find((d) => d.key === key);
+              let value = pendingEditAttrs[key];
+              if (def) {
+                try { value = parseHubAttrValue(def, value); }
+                catch (e) { /* use raw value */ }
+              }
+              return abacUserService.setHubUserAttr(editUserId, { attribute_key: key, value });
+            })
+          );
+          const failed = results.filter((r) => r.status === 'rejected');
+          if (failed.length > 0) {
+            toast({ title: `${failed.length} attribute edit(s) failed`, variant: 'destructive' });
+          }
+        }
+
+        // 3. Hub roles change
+        if (pendingHubOwner === 'grant') {
+          await abacUserService.setHubUserAttr(editUserId, { attribute_key: 'hub_roles', value: ['HUB_OWNER'] })
+            .catch((err) => toast({ title: 'Failed to assign Hub Owner', description: apiErrorDescription(err), variant: 'destructive' }));
+        } else if (pendingHubOwner === 'revoke') {
+          await abacUserService.setHubUserAttr(editUserId, { attribute_key: 'hub_roles', value: ['USER'] })
+            .catch((err) => toast({ title: 'Failed to remove Hub Owner', description: apiErrorDescription(err), variant: 'destructive' }));
+        }
+
+        // 4. Clear pending state and update user profile
+        // Sync organization to the users table whenever it changes as a hub attribute.
+        let orgUpdate = {};
+        if (pendingEditAttrs.organization !== undefined) {
+          orgUpdate = { organization: pendingEditAttrs.organization };
+        } else if (pendingDeleteKeys.has('organization')) {
+          orgUpdate = { organization: '' };
+        }
+        setPendingDeleteKeys(new Set());
+        setPendingEditAttrs({});
+        setPendingHubOwner(null);
+        refetchUserAttrs();
+        updateMutation.mutate({ id: editUserId, data: { ...editFormData, ...orgUpdate } });
+      };
+
+      const hasChanges = pendingDeleteKeys.size > 0
+        || Object.keys(pendingEditAttrs).length > 0
+        || pendingHubOwner !== null;
+
+      if (hasChanges) {
+        applyAttributeChanges();
+      } else {
+        updateMutation.mutate({ id: editUserId, data: editFormData });
       }
-      // Apply pending hub_roles change (if any)
-      if (pendingHubOwner === 'grant') {
-        abacUserService.setHubUserAttr(editUserId, { attribute_key: 'hub_roles', value: ['HUB_OWNER'] })
-          .then(() => { setPendingHubOwner(null); refetchUserAttrs(); })
-          .catch((err) => toast({ title: 'Failed to assign Hub Owner', description: apiErrorDescription(err), variant: 'destructive' }));
-      } else if (pendingHubOwner === 'revoke') {
-        abacUserService.setHubUserAttr(editUserId, { attribute_key: 'hub_roles', value: ['USER'] })
-          .then(() => { setPendingHubOwner(null); refetchUserAttrs(); })
-          .catch((err) => toast({ title: 'Failed to remove Hub Owner', description: apiErrorDescription(err), variant: 'destructive' }));
-      }
-      updateMutation.mutate({ id: editUserId, data: editFormData });
     }
   };
 
@@ -859,47 +907,87 @@ export function AbacUsersPage() {
                           const key = attr._synthetic ? attr.key : (attr.attributeKey || attr.attribute_key || attr.attributeDef?.key || attr.key || '?');
                           const isPendingChange = attr.isPending || (key === 'hub_roles' && pendingHubOwner === 'revoke');
                           const isPendingDelete = pendingDeleteKeys.has(key);
+                          const def = attrDefs.find((d) => d.key === key);
+                          const isEditingAttr = editingAttrKey === key && !!def;
+                          const hasPendingEdit = key in pendingEditAttrs && !isPendingDelete;
+                          const displayValue = hasPendingEdit ? pendingEditAttrs[key] : attr.value;
                           return (
                             <div
                               key={attr.id || key}
                               className={`flex items-center justify-between border rounded-md px-3 py-2 ${
                                 isPendingDelete ? 'bg-red-50 border-red-200 opacity-60' :
-                                isPendingChange ? 'bg-amber-50 border-amber-200' :
+                                (isPendingChange || hasPendingEdit) && !isPendingDelete ? 'bg-amber-50 border-amber-200' :
                                 'bg-gray-50 border-gray-100'
                               }`}
                             >
                               <div className="flex items-center gap-2 min-w-0">
                                 <Badge variant="outline" className="shrink-0 font-mono text-xs">{key}</Badge>
-                                <span className={`text-sm font-mono truncate ${
-                                  isPendingDelete ? 'line-through text-red-400' :
-                                  isPendingChange ? 'text-amber-700' :
-                                  'text-gray-700'
-                                }`}>
-                                  {pendingHubOwner === 'revoke' && key === 'hub_roles'
-                                    ? <><s>HUB_OWNER</s>{' → USER'}</>
-                                    : String(attr.value ?? '')}
-                                </span>
+                                {isEditingAttr ? (
+                                  <EditAttrValueInput
+                                    def={def}
+                                    value={hasPendingEdit ? pendingEditAttrs[key] : attr.value}
+                                    onChange={(v) => setPendingEditAttrs((prev) => ({ ...prev, [key]: v }))}
+                                  />
+                                ) : (
+                                  <span className={`text-sm font-mono truncate ${
+                                    isPendingDelete ? 'line-through text-red-400' :
+                                    isPendingChange || hasPendingEdit ? 'text-amber-700' :
+                                    'text-gray-700'
+                                  }`}>
+                                    {pendingHubOwner === 'revoke' && key === 'hub_roles'
+                                      ? <><s>HUB_OWNER</s>{' → USER'}</>
+                                      : String(displayValue ?? '')}
+                                  </span>
+                                )}
                                 {isPendingDelete && (
                                   <span className="text-xs text-red-500 italic">(will be deleted)</span>
                                 )}
                                 {isPendingChange && !isPendingDelete && (
                                   <span className="text-xs text-amber-600 italic">(pending)</span>
                                 )}
+                                {hasPendingEdit && !isPendingChange && (
+                                  <span className="text-xs text-amber-600 italic">(edited)</span>
+                                )}
                               </div>
-                              {key !== 'hub_roles' && (
-                                <Button
-                                  variant="ghost" size="sm"
-                                  className={`shrink-0 h-7 w-7 p-0 ${isPendingDelete ? 'text-red-400 hover:text-gray-500' : 'text-gray-400 hover:text-red-500'}`}
-                                  onClick={() => setPendingDeleteKeys((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(key)) next.delete(key); else next.add(key);
-                                    return next;
-                                  })}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                              {key === 'hub_roles' && <div className="shrink-0 h-7 w-7" />}
+                              <div className="flex items-center gap-1">
+                                {key !== 'hub_roles' && !isPendingDelete && !isEditingAttr && (
+                                  <Button
+                                    variant="ghost" size="sm"
+                                    className="shrink-0 h-7 w-7 p-0 text-gray-400 hover:text-blue-500"
+                                    onClick={() => setEditingAttrKey(key)}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                {key !== 'hub_roles' && isEditingAttr && (
+                                  <Button
+                                    variant="ghost" size="sm"
+                                    className="shrink-0 h-7 w-7 p-0 text-green-600 hover:text-green-700"
+                                    onClick={() => setEditingAttrKey(null)}
+                                  >
+                                    <Check className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                {key !== 'hub_roles' && (
+                                  <Button
+                                    variant="ghost" size="sm"
+                                    className={`shrink-0 h-7 w-7 p-0 ${isPendingDelete ? 'text-red-400 hover:text-gray-500' : 'text-gray-400 hover:text-red-500'}`}
+                                    onClick={() => {
+                                      setPendingDeleteKeys((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(key)) next.delete(key); else next.add(key);
+                                        return next;
+                                      });
+                                      if (!isPendingDelete) {
+                                        setEditingAttrKey((prev) => prev === key ? null : prev);
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                {key === 'hub_roles' && <div className="shrink-0 h-7 w-7" />}
+                              </div>
                             </div>
                           );
                         })}

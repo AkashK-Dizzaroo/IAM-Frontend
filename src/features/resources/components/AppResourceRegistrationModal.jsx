@@ -104,16 +104,13 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
 
   const createMutation = useMutation({
     mutationFn: async (payload) => {
-      const result = await resourceService.createResource(payload);
-      if (result?.success === false && result?.error) throw new Error(result.error);
-      const resourceId = result?.data?.id ?? result?.data?._id;
-
       const entries = attributeRows
         .filter((row) => row.attributeDefId && row.value !== "" && row.value !== undefined)
         .map((row) => ({ attributeDefId: row.attributeDefId, value: row.value }));
-      if (resourceId && entries.length > 0) {
-        await resourceService.upsertResourceAttributes(resourceId, entries);
-      }
+      const result = await resourceService.createResource(
+        entries.length > 0 ? { ...payload, attributeEntries: entries } : payload
+      );
+      if (result?.success === false && result?.error) throw new Error(result.error);
       return result;
     },
     onSuccess: () => {

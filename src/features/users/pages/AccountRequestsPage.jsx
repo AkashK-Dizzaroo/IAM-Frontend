@@ -41,7 +41,7 @@ export const AccountRequestsPage = () => {
 
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEY,
-    queryFn: () => userService.getUsers({ status: "PENDING_APPROVAL", limit: 100 }),
+    queryFn: () => userService.getUsers({ status: "pending", limit: 100 }),
     select: (res) => res?.data ?? [],
     staleTime: 30_000,
   });

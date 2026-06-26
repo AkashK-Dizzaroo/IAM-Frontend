@@ -311,18 +311,112 @@ export function ResourceManagementTab() {
       }
     });
 
-    return Array.from(appMap.values())
+    // Collect resources with no application links — they won't appear in appMap.
+    const orphanL2s = l2s.filter(r => (r.assignedApplications || []).length === 0);
+    const orphanL3s = l3s.filter(r => (r.assignedApplications || []).length === 0);
+    const orphanL2IdSet = new Set(orphanL2s.map(r => (r._id || r.id).toString()));
+
+    const orphanL2Nodes = orphanL2s.map(l2 => {
+      const l2Id = (l2._id || l2.id).toString();
+      const children = orphanL3s
+        .filter(l3 => {
+          const parentId = (l3.parentResource?._id || l3.parentResource?.id || l3.parentId)?.toString();
+          return parentId === l2Id;
+        })
+        .map(l3 => ({
+          ...l3,
+          type: 'resource',
+          treeId: `orphan-l2-${l2Id}-l3-${l3._id || l3.id}`,
+          children: []
+        }));
+      return { ...l2, type: 'resource', treeId: `orphan-l2-${l2Id}`, children };
+    });
+
+    const orphanRootL3s = orphanL3s
+      .filter(l3 => {
+        const parentId = (l3.parentResource?._id || l3.parentResource?.id || l3.parentId)?.toString();
+        return !parentId || !orphanL2IdSet.has(parentId);
+      })
+      .map(l3 => ({
+        ...l3,
+        type: 'resource',
+        treeId: `orphan-l3-${l3._id || l3.id}`,
+        children: []
+      }));
+
+    const orphanChildren = [...orphanL2Nodes, ...orphanRootL3s]
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+    const result = Array.from(appMap.values())
       .map(app => ({
         ...app,
         children: Array.from(app.children.values())
       }))
       .filter(app => app.children.length > 0)
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+    if (orphanChildren.length > 0) {
+      result.push({
+        type: 'orphan-group',
+        treeId: 'orphan-group',
+        name: 'Orphaned Resources',
+        children: orphanChildren,
+      });
+    }
+
+    return result;
   }, [resources, applications]);
 
   const renderTreeNode = (node, level = 0) => {
     const isExpanded = expandedIds.has(node.treeId);
     const hasChildren = node.children && node.children.length > 0;
+
+    if (node.type === 'orphan-group') {
+      return (
+        <>
+          <div
+            className="group flex items-center py-2 px-4 bg-amber-50/60 border-b border-amber-100 transition-colors"
+            style={{ paddingLeft: `${level * 24 + 16}px` }}
+          >
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="flex items-center w-6 justify-center">
+                {hasChildren ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(node.treeId)}
+                    className="p-1 hover:bg-amber-200 rounded transition-colors"
+                  >
+                    {isExpanded
+                      ? <ChevronDown className="w-4 h-4 text-amber-600" />
+                      : <ChevronRight className="w-4 h-4 text-amber-600" />}
+                  </button>
+                ) : (
+                  <div className="w-4 h-4" />
+                )}
+              </div>
+              <div className="flex items-center gap-2 min-w-0">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                <span className="truncate text-sm font-bold text-amber-800">{node.name}</span>
+                <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px] px-1.5 h-4">
+                  {node.children.length}
+                </Badge>
+              </div>
+            </div>
+            <div className="w-[500px]">
+              <span className="text-[10px] text-amber-600 italic">Not linked to any application</span>
+            </div>
+          </div>
+          {isExpanded && hasChildren && (
+            <div className="animate-in slide-in-from-top-1 duration-200">
+              {node.children.map(child => (
+                <Fragment key={child.treeId}>{renderTreeNode(child, level + 1)}</Fragment>
+              ))}
+            </div>
+          )}
+        </>
+      );
+    }
+
     const isApp = node.type === 'application';
     const isL2 = node.type === 'resource' && node.level === 2;
     const isL3 = node.type === 'resource' && node.level === 3;

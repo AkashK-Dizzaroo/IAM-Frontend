@@ -3,6 +3,7 @@ import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/rea
 import { useToast } from "@/hooks/use-toast";
 import { resourceService } from "../api/resourceService";
 import { appAttributeService } from "@/features/app-attributes/api/appAttributeService";
+import { applicationService } from "@/features/applications";
 import { QK } from "@/lib/queryKeys";
 import {
   Dialog,
@@ -32,6 +33,8 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
   const [attrValues, setAttrValues] = useState({});       // { [hubDefId]: value }
   const [appAttrValues, setAppAttrValues] = useState({}); // { [appId]: { [appDefId]: value } }
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [appsToAdd, setAppsToAdd] = useState([]);           // app objects staged to link on save
+  const [appsToRemove, setAppsToRemove] = useState(new Set()); // app IDs staged to unlink on save
 
   const originalRef = useRef({
     name: "", description: "", isActive: true, attrValues: {}, appAttrValues: {},
@@ -51,6 +54,18 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
   const attrDefs = allAttrDefs.filter(
     (d) => !RESERVED_ATTR_KEYS.has(d.key?.toLowerCase?.() ?? ""),
   );
+
+  // All applications (for the link-app selector)
+  const { data: allAppsResponse } = useQuery({
+    queryKey: QK.applicationsModal,
+    queryFn: async () => {
+      const response = await applicationService.getApplications();
+      return response?.data ?? response ?? [];
+    },
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
+  const allApplications = Array.isArray(allAppsResponse) ? allAppsResponse : [];
 
   // App resource attribute definitions — one query per linked app
   const appAttrDefQueries = useQueries({
@@ -78,6 +93,16 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
     return map;
   }, [appAttrDefQueries]);
 
+  // Apps available to add: exclude already-linked and staged-to-add
+  const linkedAppIdSet = useMemo(() => new Set([
+    ...linkedApps.map((a) => String(a._id ?? a.id)),
+    ...appsToAdd.map((a) => String(a._id ?? a.id)),
+  ]), [linkedApps, appsToAdd]);
+  const availableApps = useMemo(
+    () => allApplications.filter((a) => !linkedAppIdSet.has(String(a._id ?? a.id))),
+    [allApplications, linkedAppIdSet],
+  );
+
   // Existing attribute values for this resource
   const { data: existingAttrsResponse } = useQuery({
     queryKey: QK.resourceAttrs(resourceId),
@@ -98,6 +123,8 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
       setDescription(descVal);
       setIsActive(activeVal);
       setNameError("");
+      setAppsToAdd([]);
+      setAppsToRemove(new Set());
       originalRef.current = {
         ...originalRef.current,
         name: nameVal,
@@ -138,7 +165,9 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
     description !== originalRef.current.description ||
     isActive !== originalRef.current.isActive ||
     JSON.stringify(attrValues) !== JSON.stringify(originalRef.current.attrValues) ||
-    JSON.stringify(appAttrValues) !== JSON.stringify(originalRef.current.appAttrValues);
+    JSON.stringify(appAttrValues) !== JSON.stringify(originalRef.current.appAttrValues) ||
+    appsToAdd.length > 0 ||
+    appsToRemove.size > 0;
 
   const handleCancel = () => {
     if (isDirty) {
@@ -184,6 +213,15 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
 
       const allEntries = [statusEntry, ...hubEntries, ...appEntries];
       await resourceService.upsertResourceAttributes(resourceId, allEntries);
+
+      // Link new apps
+      for (const app of appsToAdd) {
+        await resourceService.addApplicationToResource(resourceId, String(app._id ?? app.id));
+      }
+      // Unlink removed apps
+      for (const appId of appsToRemove) {
+        await resourceService.unlinkResourceFromApp(resourceId, appId);
+      }
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Resource updated successfully" });
@@ -343,6 +381,101 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
                 onCheckedChange={setIsActive}
                 disabled={isPending}
               />
+            </div>
+
+            {/* Linked Applications */}
+            <div className="space-y-3 pt-2">
+              <div>
+                <Label className="text-sm font-semibold text-gray-700 uppercase tracking-wide block mb-0.5">
+                  Linked Applications
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Applications that can access this resource. Changes take effect on save.
+                </p>
+              </div>
+
+              {/* Current linked apps (minus staged removals) + staged additions */}
+              <div className="flex flex-wrap gap-2 min-h-[2rem]">
+                {linkedApps.filter((app) => !appsToRemove.has(String(app._id ?? app.id))).length === 0 &&
+                  appsToAdd.length === 0 && (
+                    <p className="text-xs text-muted-foreground italic">No applications linked yet.</p>
+                  )}
+                {linkedApps
+                  .filter((app) => !appsToRemove.has(String(app._id ?? app.id)))
+                  .map((app) => {
+                    const appId = String(app._id ?? app.id);
+                    return (
+                      <span
+                        key={appId}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20"
+                      >
+                        {app.name ?? app.key}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAppsToRemove((prev) => {
+                              const next = new Set(prev);
+                              next.add(appId);
+                              return next;
+                            })
+                          }
+                          disabled={isPending}
+                          className="ml-0.5 leading-none hover:text-destructive transition-colors disabled:opacity-50"
+                          aria-label={`Remove ${app.name ?? app.key}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  })}
+                {appsToAdd.map((app) => {
+                  const appId = String(app._id ?? app.id);
+                  return (
+                    <span
+                      key={appId}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200"
+                    >
+                      {app.name ?? app.key}
+                      <span className="text-green-500 text-[10px] font-normal ml-0.5">new</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAppsToAdd((prev) =>
+                            prev.filter((a) => String(a._id ?? a.id) !== appId),
+                          )
+                        }
+                        disabled={isPending}
+                        className="ml-0.5 leading-none hover:text-destructive transition-colors disabled:opacity-50"
+                        aria-label={`Remove ${app.name ?? app.key}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+
+              {/* Add app selector */}
+              {availableApps.length > 0 && (
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value=""
+                  onChange={(e) => {
+                    const selected = allApplications.find(
+                      (a) => String(a._id ?? a.id) === e.target.value,
+                    );
+                    if (selected) setAppsToAdd((prev) => [...prev, selected]);
+                  }}
+                  disabled={isPending}
+                >
+                  <option value="">+ Link an application…</option>
+                  {availableApps.map((app) => (
+                    <option key={String(app._id ?? app.id)} value={String(app._id ?? app.id)}>
+                      {app.name ?? app.key}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Common Attributes (hub resource defs) */}

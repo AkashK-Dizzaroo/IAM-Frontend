@@ -198,11 +198,6 @@ export function ResourceRegistrationModal({
 
   const createMutation = useMutation({
     mutationFn: async (payload) => {
-      const result = await resourceService.createResource(payload);
-      if (result?.success === false && result?.error) {
-        throw new Error(result.error);
-      }
-      const resourceId = result?.data?.id ?? result?.data?._id;
       const commonEntries = attributeRows
         .filter((row) => row.attributeDefId && row.value !== "" && row.value !== undefined)
         .map((row) => ({ attributeDefId: row.attributeDefId, value: row.value }));
@@ -210,8 +205,11 @@ export function ResourceRegistrationModal({
         .filter((o) => o.attributeDefId && o.value !== "" && o.value !== undefined)
         .map((o) => ({ attributeDefId: o.attributeDefId, value: o.value, applicationId: o.appId }));
       const allEntries = [...commonEntries, ...overrideEntries];
-      if (resourceId && allEntries.length > 0) {
-        await resourceService.upsertResourceAttributes(resourceId, allEntries);
+      const result = await resourceService.createResource(
+        allEntries.length > 0 ? { ...payload, attributeEntries: allEntries } : payload
+      );
+      if (result?.success === false && result?.error) {
+        throw new Error(result.error);
       }
       return result;
     },
