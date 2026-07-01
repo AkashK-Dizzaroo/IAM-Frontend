@@ -179,40 +179,41 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: async () => {
-      await resourceService.updateResource(resourceId, {
-        name: name.trim(),
-        description,
-      });
+      const hasBaseChanges =
+        name.trim() !== originalRef.current.name ||
+        description !== originalRef.current.description ||
+        isActive !== originalRef.current.isActive ||
+        JSON.stringify(attrValues) !== JSON.stringify(originalRef.current.attrValues) ||
+        JSON.stringify(appAttrValues) !== JSON.stringify(originalRef.current.appAttrValues);
 
-      // resource_status via attribute upsert (uses the hub attribute definition)
-      const statusEntry = { attributeKey: 'resource_status', value: isActive ? 'active' : 'inactive' };
+      if (hasBaseChanges) {
+        const statusEntry = { attributeKey: 'resource_status', value: isActive ? 'active' : 'inactive' };
 
-      // Hub entries — always send all defs; null = delete from DB
-      const hubEntries = attrDefs.map((def) => ({
-        attributeDefId: def.id,
-        value:
-          attrValues[def.id] !== undefined && attrValues[def.id] !== ""
-            ? attrValues[def.id]
-            : null,
-      }));
+        const hubEntries = attrDefs.map((def) => ({
+          attributeDefId: def.id,
+          value: attrValues[def.id] !== undefined && attrValues[def.id] !== "" ? attrValues[def.id] : null,
+        }));
 
-      // App entries — all defs for each app; null = delete from DB
-      const appEntries = [];
-      for (const app of linkedApps) {
-        const appId = String(app._id ?? app.id);
-        const defs = appAttrDefs[appId] ?? [];
-        for (const def of defs) {
-          const val = appAttrValues[appId]?.[def.id];
-          appEntries.push({
-            attributeDefId: def.id,
-            value: val !== undefined && val !== "" ? val : null,
-            applicationId: appId,
-          });
+        const appEntries = [];
+        for (const app of linkedApps) {
+          const appId = String(app._id ?? app.id);
+          const defs = appAttrDefs[appId] ?? [];
+          for (const def of defs) {
+            const val = appAttrValues[appId]?.[def.id];
+            appEntries.push({
+              attributeDefId: def.id,
+              value: val !== undefined && val !== "" ? val : null,
+              applicationId: appId,
+            });
+          }
         }
-      }
 
-      const allEntries = [statusEntry, ...hubEntries, ...appEntries];
-      await resourceService.upsertResourceAttributes(resourceId, allEntries);
+        await resourceService.updateResource(resourceId, {
+          name: name.trim(),
+          description,
+          attributeEntries: [statusEntry, ...hubEntries, ...appEntries],
+        });
+      }
 
       // Link new apps
       for (const app of appsToAdd) {

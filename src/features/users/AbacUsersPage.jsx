@@ -116,7 +116,7 @@ function getAssignedApps(user, allApps) {
 
   const ownedNames = new Set(owned.map((o) => o.application?.name || o.application?.key).filter(Boolean));
   const reqNames = reqs.map((r) => r.application?.name || r.application?.key).filter(Boolean);
-  
+
   const allNames = Array.from(new Set([...reqNames, ...ownedNames]));
   return allNames.map(name => ({
     name,
@@ -268,6 +268,7 @@ export function AbacUsersPage() {
   const attrDefs = (attrDefsData?.data?.data ?? attrDefsData?.data ?? []).filter(
     (d) => d.key !== 'hub_roles'
   );
+  const subjectAttrDefs = attrDefs.filter((d) => (d.namespace ?? 'subject') === 'subject');
 
   const { data: appsData } = useQuery({
     queryKey: QK.applications,
@@ -373,23 +374,20 @@ export function AbacUsersPage() {
   });
   const userAttrs = userAttrsData?.data?.data ?? userAttrsData?.data ?? [];
 
-  // ── mutations ─────────────────────────────────────────────────────────────
-  const setAttrMutation = useMutation({
-    mutationFn: ({ userId, data }) => abacUserService.setHubUserAttr(userId, data),
-    onSuccess: () => {
-      refetchUserAttrs();
-      refetch();
-      setEditNewAttr({ attributeDefId: '', value: '' });
-    },
-    onError: (err) =>
-      toast({ title: 'Could not save attribute', description: apiErrorDescription(err), variant: 'destructive' }),
-  });
+  const assignedAttrKeys = useMemo(() => {
+    const keys = new Set(
+      userAttrs.map((a) => a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key).filter(Boolean)
+    );
+    Object.keys(pendingEditAttrs).forEach((k) => keys.add(k));
+    return keys;
+  }, [userAttrs, pendingEditAttrs]);
 
-  const deleteAttrMutation = useMutation({
-    mutationFn: ({ userId, attributeKey }) => abacUserService.deleteHubUserAttr(userId, attributeKey),
-    onSuccess: () => { toast({ title: 'Attribute removed' }); refetchUserAttrs(); refetch(); },
-    onError: (err) => toast({ title: 'Error', description: apiErrorDescription(err), variant: 'destructive' }),
-  });
+  const availableSubjectAttrDefs = useMemo(
+    () => subjectAttrDefs.filter((d) => !assignedAttrKeys.has(d.key)),
+    [subjectAttrDefs, assignedAttrKeys]
+  );
+
+  // ── mutations ─────────────────────────────────────────────────────────────
 
 
   const createMutation = useMutation({
@@ -597,7 +595,8 @@ export function AbacUsersPage() {
     let value;
     try { value = parseHubAttrValue(def, editNewAttr.value); }
     catch (e) { toast({ title: 'Invalid value', description: e.message, variant: 'destructive' }); return; }
-    setAttrMutation.mutate({ userId: editUserId, data: { attribute_key: def.key, value } });
+    setPendingEditAttrs((prev) => ({ ...prev, [def.key]: value }));
+    setEditNewAttr({ attributeDefId: '', value: '' });
   };
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -872,31 +871,33 @@ export function AbacUsersPage() {
                           </Button>
                         );
                       })()}
-                      <Badge variant="outline" className="text-xs text-gray-500">{userAttrs.length - pendingDeleteKeys.size} assigned</Badge>
+                      <Badge variant="outline" className="text-xs text-gray-500">{userAttrs.length - pendingDeleteKeys.size + Object.keys(pendingEditAttrs).filter((k) => !userAttrs.find((a) => (a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key) === k)).length} assigned</Badge>
                     </div>
                   </div>
 
                   {(() => {
                     // Build the displayed attribute list, reflecting any pending hub_roles change
-                    const hubRolesAttr = userAttrs.find((a) => (a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key) === 'hub_roles');
-                    const isHubOwnerInDb = (() => {
-                      const v = hubRolesAttr?.value;
-                      const roles = Array.isArray(v) ? v : (typeof v === 'string' && v ? [v] : []);
-                      return roles.includes('HUB_OWNER');
-                    })();
+                    let displayAttrs = [...userAttrs];
 
-                    // Rows to display: replace hub_roles with pending value, or add/remove it
-                    let displayAttrs = userAttrs.filter((a) => (a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key) !== 'hub_roles');
-                    const effectiveIsHubOwner =
-                      pendingHubOwner === 'grant' ? true :
-                      pendingHubOwner === 'revoke' ? false :
-                      isHubOwnerInDb;
-                    if (effectiveIsHubOwner) {
-                      displayAttrs = [
-                        { _synthetic: true, key: 'hub_roles', value: 'HUB_OWNER', isPending: pendingHubOwner === 'grant' },
-                        ...displayAttrs,
-                      ];
+                    // If a hub_roles change is pending, replace the real row with a synthetic pending one
+                    if (pendingHubOwner !== null) {
+                      const pendingValue = pendingHubOwner === 'grant' ? ['HUB_OWNER', 'USER'] : ['USER'];
+                      const idx = displayAttrs.findIndex((a) => (a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key) === 'hub_roles');
+                      const syntheticRow = { _synthetic: true, key: 'hub_roles', value: pendingValue, isPending: true };
+                      if (idx >= 0) {
+                        displayAttrs = displayAttrs.map((a, i) => i === idx ? syntheticRow : a);
+                      } else {
+                        displayAttrs = [syntheticRow, ...displayAttrs];
+                      }
                     }
+
+                    // Append pending-new attributes (staged via Add but not yet saved)
+                    const existingAttrKeys = new Set(displayAttrs.map((a) => a._synthetic ? a.key : (a.attributeKey || a.attribute_key || a.attributeDef?.key || a.key)));
+                    Object.entries(pendingEditAttrs).forEach(([key, value]) => {
+                      if (!existingAttrKeys.has(key)) {
+                        displayAttrs = [...displayAttrs, { _synthetic: true, _pendingNew: true, key, value, isPending: true }];
+                      }
+                    });
 
                     if (displayAttrs.length === 0) {
                       return <p className="text-xs text-gray-400">No attributes assigned yet.</p>;
@@ -934,8 +935,10 @@ export function AbacUsersPage() {
                                     isPendingChange || hasPendingEdit ? 'text-amber-700' :
                                     'text-gray-700'
                                   }`}>
-                                    {pendingHubOwner === 'revoke' && key === 'hub_roles'
-                                      ? <><s>HUB_OWNER</s>{' → USER'}</>
+                                    {Array.isArray(displayValue)
+                                      ? (key === 'hub_roles' && (displayValue.includes('HUB_OWNER') || displayValue.includes('APP_OWNER'))
+                                          ? displayValue.filter((r) => r !== 'USER').join(', ')
+                                          : displayValue.join(', '))
                                       : String(displayValue ?? '')}
                                   </span>
                                 )}
@@ -968,7 +971,7 @@ export function AbacUsersPage() {
                                     <Check className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
-                                {key !== 'hub_roles' && (
+                                {key !== 'hub_roles' && !def?.isRequired && (
                                   <Button
                                     variant="ghost" size="sm"
                                     className={`shrink-0 h-7 w-7 p-0 ${isPendingDelete ? 'text-red-400 hover:text-gray-500' : 'text-gray-400 hover:text-red-500'}`}
@@ -986,7 +989,9 @@ export function AbacUsersPage() {
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
-                                {key === 'hub_roles' && <div className="shrink-0 h-7 w-7" />}
+                                {key === 'hub_roles' && (
+                                  <span className="text-[10px] text-gray-400 italic shrink-0">managed</span>
+                                )}
                               </div>
                             </div>
                           );
@@ -1007,7 +1012,9 @@ export function AbacUsersPage() {
                     >
                       <SelectTrigger><SelectValue placeholder="Select attribute definition…" /></SelectTrigger>
                       <SelectContent>
-                        {attrDefs.map((def) => (
+                        {availableSubjectAttrDefs.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-400">All attributes already assigned</div>
+                        ) : availableSubjectAttrDefs.map((def) => (
                           <SelectItem key={def.id || def._id} value={String(def.id || def._id)}>
                             {def.displayName ? `${def.displayName} (${def.key})` : def.key}
                           </SelectItem>
@@ -1026,10 +1033,10 @@ export function AbacUsersPage() {
                         <Button
                           variant="outline" size="sm"
                           onClick={handleEditAddAttr}
-                          disabled={editAddDisabled || setAttrMutation.isPending}
+                          disabled={editAddDisabled}
                           className="shrink-0"
                         >
-                          {setAttrMutation.isPending ? 'Adding…' : 'Add'}
+                          Add
                         </Button>
                       </div>
                     )}

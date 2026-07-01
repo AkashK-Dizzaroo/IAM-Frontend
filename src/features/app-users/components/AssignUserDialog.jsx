@@ -53,7 +53,7 @@ function UserDropdown({ selectedUser, onSelect, open: dialogOpen }) {
     if (!q) return allUsers;
     return allUsers.filter(
       (u) =>
-        (u.displayName || '').toLowerCase().includes(q) ||
+        (`${u.firstName ?? ''} ${u.lastName ?? ''}`).toLowerCase().includes(q) ||
         (u.email || '').toLowerCase().includes(q)
     );
   }, [allUsers, query]);
@@ -77,11 +77,11 @@ function UserDropdown({ selectedUser, onSelect, open: dialogOpen }) {
       <div className="flex items-center justify-between gap-2 border border-gray-200 rounded-md px-3 py-2 bg-gray-50">
         <div className="flex items-center gap-2 min-w-0">
           <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
-            {(selectedUser.displayName || selectedUser.email || '?')[0].toUpperCase()}
+            {(selectedUser.firstName || selectedUser.email || '?')[0].toUpperCase()}
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">
-              {selectedUser.displayName || selectedUser.email}
+              {`${selectedUser.firstName ?? ''} ${selectedUser.lastName ?? ''}`.trim() || selectedUser.email}
             </p>
             <p className="text-xs text-gray-500 truncate">{selectedUser.email}</p>
           </div>
@@ -142,11 +142,11 @@ function UserDropdown({ selectedUser, onSelect, open: dialogOpen }) {
                   onMouseDown={(e) => { e.preventDefault(); handleSelect(u); }}
                 >
                   <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
-                    {(u.displayName || u.email || '?')[0].toUpperCase()}
+                    {(u.firstName || u.email || '?')[0].toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
-                      {u.displayName || u.email}
+                      {`${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || u.email}
                     </p>
                     <p className="text-xs text-gray-500 truncate">{u.email}</p>
                   </div>
@@ -513,7 +513,7 @@ export function AssignUserDialog({ open, onClose, appKey, appId, attrDefs }) {
     onSuccess: () => {
       toast({
         title: 'User assigned',
-        description: `${selectedUser?.displayName || selectedUser?.email} has been assigned and notified by email.`,
+        description: `${`${selectedUser?.firstName ?? ''} ${selectedUser?.lastName ?? ''}`.trim() || selectedUser?.email} has been assigned and notified by email.`,
       });
       queryClient.invalidateQueries({ queryKey: QK.appUsers(appKey) });
       queryClient.invalidateQueries({ queryKey: QK.appUserAttributes(appKey, selectedUser?.id) });

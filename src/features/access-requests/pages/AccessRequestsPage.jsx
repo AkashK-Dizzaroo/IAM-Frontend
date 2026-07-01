@@ -58,6 +58,13 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
   const hasAppAttrs = appAttributes && Object.keys(appAttributes).length > 0;
   const hasPendingAttrs = hasAppAttrs && Object.values(appAttributes).some(m => m.status === 'PENDING_APPROVAL');
   const resourceApproved = Boolean(request.requestedAttributes?._iamApprovalProgress?.resourceApprovedAt);
+  const appAttributesApproved = Boolean(request.requestedAttributes?._iamApprovalProgress?.appAttributesApprovedAt);
+  const hasResourceStep = Boolean(
+    request.requestedResource ||
+    request.requestedAttributes?.role ||
+    request.requestedAttributes?.requestedRole
+  );
+  const isTwoStep = hasAppAttrs && hasResourceStep;
 
   // For reject: simple single-panel layout (no tabs needed)
   if (!isApprove) {
@@ -141,6 +148,53 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
           </button>
         </div>
 
+        {/* Two-step progress header — only shown when request has both attr and resource steps */}
+        {isTwoStep && (
+          <div className="flex items-center gap-3 px-1 py-2 bg-gray-50 rounded-lg border">
+            <div className="flex items-center gap-1.5">
+              {!hasPendingAttrs && hasAppAttrs ? (
+                <span className="w-5 h-5 rounded-full bg-green-100 border border-green-300 flex items-center justify-center">
+                  <CheckCircle className="w-3 h-3 text-green-600" />
+                </span>
+              ) : (
+                <span className="w-5 h-5 rounded-full bg-yellow-100 border border-yellow-300 flex items-center justify-center">
+                  <Clock className="w-3 h-3 text-yellow-600" />
+                </span>
+              )}
+              <span className={`text-xs font-medium ${(!hasPendingAttrs && hasAppAttrs) ? 'text-green-700' : 'text-yellow-700'}`}>
+                App Attributes
+              </span>
+              {appAttributesApproved && (
+                <span className="text-[10px] text-green-500">
+                  · {new Date(request.requestedAttributes._iamApprovalProgress.appAttributesApprovedAt)
+                    .toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                </span>
+              )}
+            </div>
+            <div className="flex-1 h-px bg-gray-300" />
+            <div className="flex items-center gap-1.5">
+              {resourceApproved ? (
+                <span className="w-5 h-5 rounded-full bg-green-100 border border-green-300 flex items-center justify-center">
+                  <CheckCircle className="w-3 h-3 text-green-600" />
+                </span>
+              ) : (
+                <span className="w-5 h-5 rounded-full bg-yellow-100 border border-yellow-300 flex items-center justify-center">
+                  <Clock className="w-3 h-3 text-yellow-600" />
+                </span>
+              )}
+              <span className={`text-xs font-medium ${resourceApproved ? 'text-green-700' : 'text-yellow-700'}`}>
+                Resource Access
+              </span>
+              {resourceApproved && request.requestedAttributes?._iamApprovalProgress?.resourceApprovedAt && (
+                <span className="text-[10px] text-green-500">
+                  · {new Date(request.requestedAttributes._iamApprovalProgress.resourceApprovedAt)
+                    .toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full">
             <TabsTrigger value="app_attributes" className="flex-1">
@@ -150,9 +204,11 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
                   {Object.keys(appAttributes).length}
                 </span>
               )}
-              {hasPendingAttrs && (
+              {hasPendingAttrs ? (
                 <span className="ml-1 text-[10px] bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5 font-semibold">pending</span>
-              )}
+              ) : (hasAppAttrs && (
+                <span className="ml-1 text-[10px] bg-green-100 text-green-700 rounded-full px-1.5 py-0.5 font-semibold">approved</span>
+              ))}
             </TabsTrigger>
             <TabsTrigger value="resource" className="flex-1">
               Resource Details
@@ -218,7 +274,23 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
                   </>
                 )}
                 {!hasPendingAttrs && (
-                  <div className="pt-2" />
+                  <div className="pt-2 space-y-3">
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200">
+                      <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+                      <span className="text-sm font-medium text-green-700">Application attributes approved</span>
+                      {request.requestedAttributes?._iamApprovalProgress?.appAttributesApprovedAt && (
+                        <span className="ml-auto text-xs text-green-500">
+                          {new Date(request.requestedAttributes._iamApprovalProgress.appAttributesApprovedAt)
+                            .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
+                    {hasResourceStep && !resourceApproved && (
+                      <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+                        Resource access is still pending approval. Switch to the Resource Details tab to complete the request.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             ) : (
