@@ -372,7 +372,10 @@ export function AppUsersManagementPage() {
               {filteredUsers.map((user) => {
                 const userId = user.id || user._id;
                 const isCurrentUser = currentUser?.id === userId;
-                const isSelectable = !isCurrentUser;
+                const isAppOwner = user.isAppOwner === true;
+                const isHubOwner = user.isHubOwner === true;
+                // App/hub owners have implicit full access via ownership — they are not editable/removable here.
+                const isSelectable = !isCurrentUser && !isAppOwner && !isHubOwner;
                 const initial = (user.displayName || user.email || '?')[0].toUpperCase();
                 const attrs = user.appAttributes ?? {};
                 const assignedCount = user.appUserAttributes?.length ?? Object.keys(attrs).length;
@@ -414,7 +417,24 @@ export function AppUsersManagementPage() {
                     </td>
 
                     <td className="px-4 py-3 break-words">
-                      <ResourceAccessCell pairs={resourcePairs} resourceMap={resourceMap} />
+                      {isAppOwner || isHubOwner ? (
+                        <div className="flex flex-col gap-1 items-start">
+                          {isAppOwner && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border bg-amber-50 text-amber-800 border-amber-200">
+                              App Owner
+                              <span className="text-[10px] font-normal text-amber-700">· full access</span>
+                            </span>
+                          )}
+                          {isHubOwner && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border bg-purple-50 text-purple-800 border-purple-200">
+                              Hub Owner
+                              <span className="text-[10px] font-normal text-purple-700">· full access</span>
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <ResourceAccessCell pairs={resourcePairs} resourceMap={resourceMap} />
+                      )}
                     </td>
 
                     <td className="px-4 py-3">
@@ -439,26 +459,30 @@ export function AppUsersManagementPage() {
                     </td>
 
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          onClick={() => setSelectedUser(user)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        {!isCurrentUser && (
+                      {isAppOwner || isHubOwner ? (
+                        <span className="text-xs text-gray-300">—</span>
+                      ) : (
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 px-2 hover:bg-red-50 hover:text-red-600"
-                            onClick={() => { setUserToDelete(user); setShowDeleteDialog(true); }}
+                            className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => setSelectedUser(user)}
                           >
-                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                        )}
-                      </div>
+                          {!isCurrentUser && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 hover:bg-red-50 hover:text-red-600"
+                              onClick={() => { setUserToDelete(user); setShowDeleteDialog(true); }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

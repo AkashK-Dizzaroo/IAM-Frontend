@@ -26,7 +26,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Search, Plus, Pencil, Users, Trash2, AlertCircle, Check } from 'lucide-react';
+import { Search, Plus, Pencil, Users, Trash2, AlertCircle, Check, X } from 'lucide-react';
 import { UserForm, validateUserFormFields } from '@/features/users/components/UserForm';
 
 // ─── table cell helpers ───────────────────────────────────────────────────────
@@ -50,6 +50,21 @@ const USER_STATUS_STYLES = {
   pending_approval:  'bg-yellow-100 text-yellow-700 border-yellow-200',
 };
 
+const STATUS_FILTER_OPTIONS = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'suspended', label: 'Suspended' },
+  { value: 'pending_approval', label: 'Pending Approval' },
+];
+
+const ROLE_FILTER_OPTIONS = [
+  { value: 'all', label: 'All roles' },
+  { value: 'HUB_OWNER', label: 'Hub Owner' },
+  { value: 'USER', label: 'User' },
+  { value: 'none', label: 'No roles' },
+];
+
 function UserStatusBadge({ status }) {
   const s = (status || '').toLowerCase();
   const cls = USER_STATUS_STYLES[s] ?? 'bg-gray-100 text-gray-500 border-gray-200';
@@ -64,7 +79,8 @@ function formatLastLogin(value) {
   return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-const GLOBAL_ROLES = ['HUB_OWNER', 'APP_OWNER', 'USER'];
+// App ownership is sourced from ApplicationMember (shown per-application), not hub_roles.
+const GLOBAL_ROLES = ['HUB_OWNER', 'USER'];
 
 function getHubRolesList(user) {
   const hubRolesAttr = (user.hubUserAttributes ?? []).find((a) => {
@@ -86,22 +102,15 @@ function getUserRoleSummary(user) {
   let globalRoles = roles.filter((r) => GLOBAL_ROLES.includes(r));
 
   const ownedAppKeys = new Set(
-    (user.applicationMembers ?? []).map((m) => m.application?.key || m.application?.name).filter(Boolean)
+    (user.applicationMembers ?? [])
+      .filter((m) => m.isAppOwner)
+      .map((m) => m.application?.key || m.application?.name)
+      .filter(Boolean)
   );
   const isAppOwner = ownedAppKeys.size > 0;
 
-  // Access requests for apps NOT already owned by this user
-  const hasPlainAppAccessOnly = (user.accessRequests ?? []).some((r) => {
-    const key = r.application?.key || r.application?.name;
-    return key && !ownedAppKeys.has(key);
-  });
-
-  // Only hide USER when HUB_OWNER is present (they have implicit access to everything).
-  // Hide USER alongside APP_OWNER when all app access is through ownership (no additional plain access).
+  // HUB_OWNER has implicit access to everything — hide the redundant USER badge.
   if (globalRoles.includes('HUB_OWNER')) {
-    globalRoles = globalRoles.filter((r) => r !== 'USER' && r !== 'APP_OWNER');
-  } else if (globalRoles.includes('APP_OWNER') && !hasPlainAppAccessOnly) {
-    // App owner with no plain-user-only app access — hide redundant USER badge
     globalRoles = globalRoles.filter((r) => r !== 'USER');
   }
 
@@ -112,15 +121,20 @@ function getAssignedApps(user, allApps) {
   if (isHubOwner(user)) return allApps.map(a => ({ name: a, isOwner: true }));
 
   const reqs = user.accessRequests ?? [];
-  const owned = user.applicationMembers ?? [];
+  const members = user.applicationMembers ?? [];
 
-  const ownedNames = new Set(owned.map((o) => o.application?.name || o.application?.key).filter(Boolean));
+  const ownedNames = new Set(
+    members.filter((m) => m.isAppOwner).map((m) => m.application?.name || m.application?.key).filter(Boolean)
+  );
+  const memberNames = new Set(
+    members.map((m) => m.application?.name || m.application?.key).filter(Boolean)
+  );
   const reqNames = reqs.map((r) => r.application?.name || r.application?.key).filter(Boolean);
 
-  const allNames = Array.from(new Set([...reqNames, ...ownedNames]));
+  const allNames = Array.from(new Set([...reqNames, ...memberNames]));
   return allNames.map(name => ({
     name,
-    isOwner: ownedNames.has(name)
+    isOwner: ownedNames.has(name),
   }));
 }
 
@@ -239,6 +253,9 @@ export function AbacUsersPage() {
   const { user: currentUser } = useAuth();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('active');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [appFilter, setAppFilter] = useState('all');
   const [dialogMode, setDialogMode] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -254,8 +271,12 @@ export function AbacUsersPage() {
   const queryClient = useQueryClient();
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: QK.users(debouncedSearch),
-    queryFn: () => abacUserService.list({ search: debouncedSearch, status: 'active', limit: 50 }),
+    queryKey: [...QK.users(debouncedSearch), statusFilter],
+    queryFn: () => abacUserService.list({
+      search: debouncedSearch,
+      ...(statusFilter !== 'all' && { status: statusFilter }),
+      limit: 50,
+    }),
     staleTime: 30_000,
   });
   const users = data?.data?.data ?? data?.data ?? [];
@@ -599,6 +620,34 @@ export function AbacUsersPage() {
     setEditNewAttr({ attributeDefId: '', value: '' });
   };
 
+  // ── client-side role/application filters ──────────────────────────────────
+  const filteredUsers = useMemo(() => {
+    return users.filter((user) => {
+      if (roleFilter !== 'all') {
+        const { globalRoles } = getUserRoleSummary(user);
+        if (roleFilter === 'none') {
+          if (globalRoles.length > 0) return false;
+        } else if (!globalRoles.includes(roleFilter)) {
+          return false;
+        }
+      }
+      if (appFilter !== 'all') {
+        const assignedApps = getAssignedApps(user, allAppNames);
+        if (!assignedApps.some((a) => a.name === appFilter)) return false;
+      }
+      return true;
+    });
+  }, [users, roleFilter, appFilter, allAppNames]);
+
+  const hasActiveFilters = statusFilter !== 'active' || roleFilter !== 'all' || appFilter !== 'all' || !!search;
+
+  const clearFilters = () => {
+    setSearch('');
+    setStatusFilter('active');
+    setRoleFilter('all');
+    setAppFilter('all');
+  };
+
   // ── render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6">
@@ -612,9 +661,53 @@ export function AbacUsersPage() {
       </div>
 
       {/* Search */}
-      <div className="relative mb-5">
+      <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <Input placeholder="Search by name or email..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[160px] h-9 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {STATUS_FILTER_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="w-[150px] h-9 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {ROLE_FILTER_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={appFilter} onValueChange={setAppFilter}>
+          <SelectTrigger className="w-[200px] h-9 text-sm"><SelectValue placeholder="All applications" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All applications</SelectItem>
+            {allAppNames.map((name) => (
+              <SelectItem key={name} value={name}>{name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" className="h-9 text-gray-500 hover:text-gray-700" onClick={clearFilters}>
+            <X className="h-3.5 w-3.5" />
+            Clear filters
+          </Button>
+        )}
+
+        {!isLoading && (
+          <span className="text-xs text-gray-400 ml-auto">
+            {filteredUsers.length} of {users.length} user{users.length === 1 ? '' : 's'}
+          </span>
+        )}
       </div>
 
       {isLoading && (
@@ -632,27 +725,36 @@ export function AbacUsersPage() {
         </div>
       )}
 
-      {!isLoading && users.length > 0 && (
+      {!isLoading && users.length > 0 && filteredUsers.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center border border-gray-200 rounded-lg">
+          <div className="rounded-full bg-gray-100 p-4 mb-4"><Users className="h-8 w-8 text-gray-400" /></div>
+          <h3 className="text-base font-medium text-gray-900 mb-1">No users match these filters</h3>
+          <p className="text-sm text-gray-500 mb-4">Try adjusting or clearing your filters.</p>
+          <Button variant="outline" onClick={clearFilters}>Clear filters</Button>
+        </div>
+      )}
+
+      {!isLoading && filteredUsers.length > 0 && (
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-left">
                 <th className="px-4 py-3 font-medium text-gray-600">User</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Status</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Organization</th>
                 <th className="px-4 py-3 font-medium text-gray-600">HUB Role</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Assigned Applications</th>
+                <th className="px-4 py-3 font-medium text-gray-600">Status</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Last Login</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {users.map((user) => {
+              {filteredUsers.map((user) => {
                 const fullName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
                 const initial = (fullName || user.email || '?')[0].toUpperCase();
                 const userStatus = getHubAttr(user, 'user_status');
                 const org = getHubAttr(user, 'organization');
-                const { globalRoles, isAppOwner } = getUserRoleSummary(user);
+                const { globalRoles } = getUserRoleSummary(user);
                 const lastLogin = user.lastLoginAt ?? user.lastLogin ?? user.last_login ?? user.metadata?.lastLoginAt ?? user.metadata?.lastLogin ?? null;
                 const assignedApps = getAssignedApps(user, allAppNames);
                 return (
@@ -666,16 +768,12 @@ export function AbacUsersPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <UserStatusBadge status={userStatus} />
-                    </td>
                     <td className="px-4 py-3 text-sm text-gray-700">{org ?? '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
                         {globalRoles.map((r) => {
                           let cls = 'bg-gray-100 text-gray-700 border-gray-200'; // Default: USER
                           if (r === 'HUB_OWNER') cls = 'bg-purple-100 text-purple-800 border-purple-200';
-                          if (r === 'APP_OWNER') cls = 'bg-amber-50 text-amber-800 border-amber-200';
 
                           return (
                             <span key={r} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
@@ -692,21 +790,29 @@ export function AbacUsersPage() {
                       {assignedApps.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {assignedApps.map((app) => (
-                            <span 
-                              key={app.name} 
-                              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
-                                app.isOwner 
-                                  ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                            <span
+                              key={app.name}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${
+                                app.isOwner
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200'
                                   : 'bg-gray-100 text-gray-700 border-gray-200'
                               }`}
                             >
                               {app.name}
+                              {app.isOwner && (
+                                <span className="ml-0.5 inline-flex items-center rounded bg-amber-200/70 px-1 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+                                  Owner
+                                </span>
+                              )}
                             </span>
                           ))}
                         </div>
                       ) : (
                         <span className="text-xs text-gray-400 italic">No access</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <UserStatusBadge status={userStatus} />
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{formatLastLogin(lastLogin)}</td>
                     <td className="px-4 py-3">
@@ -936,7 +1042,7 @@ export function AbacUsersPage() {
                                     'text-gray-700'
                                   }`}>
                                     {Array.isArray(displayValue)
-                                      ? (key === 'hub_roles' && (displayValue.includes('HUB_OWNER') || displayValue.includes('APP_OWNER'))
+                                      ? (key === 'hub_roles' && displayValue.includes('HUB_OWNER')
                                           ? displayValue.filter((r) => r !== 'USER').join(', ')
                                           : displayValue.join(', '))
                                       : String(displayValue ?? '')}

@@ -693,20 +693,19 @@ export const MyProfilePage = () => {
                             })()}
                           </td>
                           <td className="px-4 py-4">
-                            {assignment.assignedBy ? (
-                              <div className="break-words whitespace-normal">
-                                <div className="text-gray-900">
-                                  {assignment.assignedBy.name || assignment.assignedBy.email || "—"}
-                                </div>
-                                {assignment.assignedBy.name && assignment.assignedBy.email && (
-                                  <div className="text-xs text-gray-500">
-                                    {assignment.assignedBy.email}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 italic">—</span>
-                            )}
+                            {(() => {
+                              const roleName =
+                                assignment.role?.name ||
+                                assignment.roleName ||
+                                assignment.role?.roleCode ||
+                                assignment.roleCode ||
+                                (typeof assignment.role === "string" ? assignment.role : null);
+                              return roleName ? (
+                                <span className="text-gray-900">{roleName}</span>
+                              ) : (
+                                <span className="text-gray-400 italic">—</span>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-4">
                             {assignment.assignedBy ? (

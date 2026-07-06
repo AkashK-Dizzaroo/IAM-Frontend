@@ -202,7 +202,7 @@ export function UserForm({
     [attrDefs]
   );
   const optionalDefs = useMemo(
-    () => attrDefs.filter((d) => !(d.isRequired && d.namespace === 'subject')),
+    () => attrDefs.filter((d) => d.namespace === 'subject' && !d.isRequired),
     [attrDefs]
   );
 
