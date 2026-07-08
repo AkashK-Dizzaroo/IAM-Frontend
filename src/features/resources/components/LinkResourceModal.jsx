@@ -123,27 +123,16 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
 
   const linkMutation = useMutation({
     mutationFn: async ({ resource }) => {
-      await resourceService.addApplicationToResource(resource._id ?? resource.id, applicationId);
-
-      // If it's an L3 with a real (non-unassigned) L2 parent, auto-link the parent too.
-      const parentResource = resource.parentResource;
-      const parentId = parentResource?._id ?? parentResource?.id ?? resource.parentId;
-      const parentIsUnassigned = parentResource?.isUnassignedNode === true || parentResource?.isUnassignedNode === 1;
-      if (resource.level === 3 && parentId && !parentIsUnassigned) {
-        try {
-          await resourceService.addApplicationToResource(parentId, applicationId);
-        } catch {
-          // 409 = already linked — ignore silently
-        }
-      }
+      // Linking an L2 container cascades to its L3 children on the backend.
+      // Linking an L3 resource does NOT touch its L2 parent — only L2→L3 cascades, never L3→L2.
+      return resourceService.addApplicationToResource(resource._id ?? resource.id, applicationId);
     },
-    onSuccess: (_, { resource }) => {
-      const parentIsUnassigned = resource.parentResource?.isUnassignedNode === true || resource.parentResource?.isUnassignedNode === 1;
-      const parentLinked = resource.level === 3 && !parentIsUnassigned && (resource.parentResource?._id ?? resource.parentResource?.id ?? resource.parentId);
+    onSuccess: (result, { resource }) => {
+      const linkedChildrenCount = result?.linkedChildrenCount ?? 0;
       toast({
         title: "Linked",
-        description: parentLinked
-          ? `"${resource.name}" and its parent container linked to this application`
+        description: linkedChildrenCount > 0
+          ? `"${resource.name}" and ${linkedChildrenCount} sub-resource${linkedChildrenCount === 1 ? '' : 's'} linked to this application`
           : `"${resource.name}" linked to this application`,
       });
       queryClient.invalidateQueries({ queryKey: QK.resourcesByApp(applicationId) });

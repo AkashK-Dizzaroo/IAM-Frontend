@@ -152,8 +152,14 @@ export function AppResourcesTab({ application }) {
 
   const unlinkMutation = useMutation({
     mutationFn: ({ resourceId }) => resourceService.unlinkResourceFromApp(resourceId, applicationId),
-    onSuccess: (_, { resourceName }) => {
-      toast({ title: "Unlinked", description: `"${resourceName}" removed from this application` });
+    onSuccess: (data, { resourceName }) => {
+      const childCount = data?.unlinkedChildrenCount ?? 0;
+      toast({
+        title: "Unlinked",
+        description: childCount > 0
+          ? `"${resourceName}" and ${childCount} sub-resource${childCount === 1 ? '' : 's'} removed from this application`
+          : `"${resourceName}" removed from this application`,
+      });
       queryClient.invalidateQueries({ queryKey: QK.resourcesByApp(applicationId) });
       queryClient.invalidateQueries({ queryKey: ['resources'] });
     },
@@ -163,15 +169,33 @@ export function AppResourcesTab({ application }) {
     onSettled: () => setUnlinkingId(null),
   });
 
-  const handleUnlink = (r) => {
-    const id = r._id ?? r.id;
-    const confirmed = window.confirm(
-      `Remove "${r.name}" from this application?\n\nThe resource will still exist globally and can be re-linked later.`
-    );
-    if (!confirmed) return;
-    setUnlinkingId(id);
-    unlinkMutation.mutate({ resourceId: id, resourceName: r.name });
+  // Level-3 children of a level-2 resource that are currently linked to this app —
+  // these will be cascade-unlinked along with their parent.
+  const getLinkedChildren = (r) => {
+    if (r.level !== 2) return [];
+    const parentId = r._id ?? r.id;
+    return resources.filter((x) => {
+      if (x.level !== 3) return false;
+      const xParentId = (x.parentResource?._id ?? x.parentResource?.id ?? x.parentId)?.toString();
+      return xParentId === parentId?.toString();
+    });
   };
+
+  const [unlinkTarget, setUnlinkTarget] = useState(null);
+
+  const handleUnlink = (r) => {
+    setUnlinkTarget(r);
+  };
+
+  const confirmUnlink = () => {
+    if (!unlinkTarget) return;
+    const id = unlinkTarget._id ?? unlinkTarget.id;
+    setUnlinkingId(id);
+    unlinkMutation.mutate({ resourceId: id, resourceName: unlinkTarget.name });
+    setUnlinkTarget(null);
+  };
+
+  const unlinkTargetChildren = unlinkTarget ? getLinkedChildren(unlinkTarget) : [];
 
   // ── Bulk select helpers (table view) ─────────────────────────────────────
   const allSelected = resources.length > 0 && resources.every((r) => selectedIds.has(r._id ?? r.id));
@@ -197,9 +221,12 @@ export function AppResourcesTab({ application }) {
     setIsBulkUnlinking(true);
     const ids = Array.from(selectedIds);
     let failed = 0;
+    let cascadedChildren = 0;
     await Promise.all(
       ids.map((id) =>
-        resourceService.unlinkResourceFromApp(id, applicationId).catch(() => { failed++; })
+        resourceService.unlinkResourceFromApp(id, applicationId)
+          .then((data) => { cascadedChildren += data?.unlinkedChildrenCount ?? 0; })
+          .catch(() => { failed++; })
       )
     );
     setIsBulkUnlinking(false);
@@ -210,9 +237,27 @@ export function AppResourcesTab({ application }) {
     if (failed > 0) {
       toast({ title: `${ids.length - failed} unlinked, ${failed} failed`, variant: 'destructive' });
     } else {
-      toast({ title: `${ids.length} resource${ids.length === 1 ? '' : 's'} unlinked` });
+      toast({
+        title: cascadedChildren > 0
+          ? `${ids.length} resource${ids.length === 1 ? '' : 's'} and ${cascadedChildren} sub-resource${cascadedChildren === 1 ? '' : 's'} unlinked`
+          : `${ids.length} resource${ids.length === 1 ? '' : 's'} unlinked`,
+      });
     }
   };
+
+  // L3 resources not individually selected but that will be cascade-unlinked
+  // because their L2 parent is selected — shown in the bulk confirmation dialog.
+  const bulkCascadedChildren = useMemo(() => {
+    const selectedL2Ids = new Set(
+      resources.filter((r) => r.level === 2 && selectedIds.has(r._id ?? r.id)).map((r) => (r._id ?? r.id).toString())
+    );
+    if (selectedL2Ids.size === 0) return [];
+    return resources.filter((r) => {
+      if (r.level !== 3 || selectedIds.has(r._id ?? r.id)) return false;
+      const parentId = (r.parentResource?._id ?? r.parentResource?.id ?? r.parentId)?.toString();
+      return parentId && selectedL2Ids.has(parentId);
+    });
+  }, [resources, selectedIds]);
 
   // ── Row actions renderer ─────────────────────────────────────────────────
 
@@ -583,12 +628,60 @@ export function AppResourcesTab({ application }) {
                 <li className="text-gray-400 text-xs">…and {selectedIds.size - 5} more</li>
               )}
             </ul>
+            {bulkCascadedChildren.length > 0 && (
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+                <p className="text-xs font-medium text-amber-800 mb-1.5">
+                  {bulkCascadedChildren.length} sub-resource{bulkCascadedChildren.length === 1 ? '' : 's'} under the selected container{selectedIds.size === 1 ? '' : 's'} will also be unlinked:
+                </p>
+                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto">
+                  {bulkCascadedChildren.slice(0, 10).map((c) => (
+                    <li key={c._id ?? c.id} className="truncate">• {c.name}</li>
+                  ))}
+                  {bulkCascadedChildren.length > 10 && (
+                    <li>…and {bulkCascadedChildren.length - 10} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBulkUnlinkOpen(false)} disabled={isBulkUnlinking}>Cancel</Button>
             <Button variant="destructive" onClick={handleBulkUnlink} disabled={isBulkUnlinking}>
               {isBulkUnlinking ? 'Unlinking…' : 'Unlink'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Single unlink confirmation — warns about cascaded L3 children when unlinking an L2 container */}
+      <Dialog open={!!unlinkTarget} onOpenChange={(v) => { if (!v) setUnlinkTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Unlink "{unlinkTarget?.name}"?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              This resource will be removed from <strong>{application?.name ?? application?.key}</strong> but will still exist globally.
+            </p>
+            {unlinkTargetChildren.length > 0 && (
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+                <p className="text-xs font-medium text-amber-800 mb-1.5">
+                  All {unlinkTargetChildren.length} sub-resource{unlinkTargetChildren.length === 1 ? '' : 's'} under this container will also be unlinked:
+                </p>
+                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto">
+                  {unlinkTargetChildren.slice(0, 10).map((c) => (
+                    <li key={c._id ?? c.id} className="truncate">• {c.name}</li>
+                  ))}
+                  {unlinkTargetChildren.length > 10 && (
+                    <li>…and {unlinkTargetChildren.length - 10} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnlinkTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmUnlink}>Unlink</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
