@@ -1,13 +1,21 @@
 /* @refresh reset */
 
 // Redirect to custom domain only if it differs from the current hostname.
+// The redirect target's origin always comes from the build-time env var
+// (trusted); the path/query is only ever appended below and is validated
+// to be a single-slash-rooted relative reference so it cannot smuggle in a
+// protocol-relative ("//host/...") or absolute URL that would change the
+// destination's origin.
 const _iamCustomDomain = import.meta.env.VITE_IAM_CUSTOM_DOMAIN;
 if (_iamCustomDomain) {
   try {
     const _customHost = new URL(_iamCustomDomain).hostname;
     if (_customHost && _customHost !== window.location.hostname) {
       const target = _iamCustomDomain.replace(/\/$/, "");
-      const dest = window.location.pathname + window.location.search;
+      const rawDest = window.location.pathname + window.location.search;
+      // Only allow a path that starts with exactly one "/" (not "//" or "/\"),
+      // which rules out protocol-relative and backslash-based origin overrides.
+      const dest = /^\/(?!\/|\\)/.test(rawDest) ? rawDest : "/";
       window.location.replace(`${target}${dest}`);
     }
   } catch {

@@ -725,6 +725,13 @@ export function AppAttributesPage() {
     }
   };
 
+  // Summary list for the confirmation dialog (max 5 shown).
+  const bulkDeletePreviewNames = useMemo(() => {
+    const ids = Array.from(selectedIds);
+    const matched = attributes.filter((a) => ids.includes(a.id));
+    return matched.slice(0, 5).map((a) => a.displayName || a.key);
+  }, [selectedIds, attributes]);
+
   if (!selectedApp) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center h-full">
@@ -925,13 +932,6 @@ export function AppAttributesPage() {
       setEditTarget(null);
     }
   };
-
-  // Summary list for the confirmation dialog (max 5 shown).
-  const bulkDeletePreviewNames = useMemo(() => {
-    const ids = Array.from(selectedIds);
-    const matched = attributes.filter((a) => ids.includes(a.id));
-    return matched.slice(0, 5).map((a) => a.displayName || a.key);
-  }, [selectedIds, attributes]);
 
   const bulkDeleteOverflow = selectedIds.size > 5 ? selectedIds.size - 5 : 0;
 
@@ -1175,8 +1175,7 @@ export function AppAttributesPage() {
                   reference{" "}
                   <span className="font-mono">
                     {deleteTarget.namespace}.{deleteTarget.key}
-                  </span>
-                  . Evaluation will silently fail for those conditions.
+                  </span>. Evaluation will silently fail for those conditions.
                 </p>
               </div>
             )}

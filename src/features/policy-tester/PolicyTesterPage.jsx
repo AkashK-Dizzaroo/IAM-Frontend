@@ -480,7 +480,7 @@ function ActionAttrRow({ attr, attrDefs, onChange, onRemove }) {
 
   const handleKeyChange = (newKey) => {
     const def = attrDefs.find((d) => d.key === newKey);
-    const defaultValue = def?.dataType === 'list' ? [] : def?.dataType === 'boolean' ? '' : '';
+    const defaultValue = def?.dataType === 'list' ? [] : def?.dataType === 'boolean' ? 'false' : '';
     onChange({ key: newKey, value: defaultValue });
   };
 
@@ -854,7 +854,7 @@ export function PolicyTesterPage() {
     if (Array.isArray(val)) return val;
     if (val === 'true')  return true;
     if (val === 'false') return false;
-    if (dataType === 'number' && !isNaN(val) && val !== '') return Number(val);
+    if (dataType === 'number' && val !== '' && !Number.isNaN(Number(val))) return Number(val);
     if (typeof val === 'string') {
       try { return JSON.parse(val); } catch { return val; }
     }

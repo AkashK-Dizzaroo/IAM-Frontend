@@ -111,9 +111,16 @@ function MultiValueDropdown({ allowedValues = [], selectedValues = [], onChange,
           <>
             <div
               role="option"
+              tabIndex={0}
               aria-selected={allSelected}
               className="w-full flex items-center justify-between rounded px-2 py-1.5 text-xs cursor-pointer hover:bg-gray-50"
               onClick={toggleAll}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleAll();
+                }
+              }}
             >
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -136,9 +143,16 @@ function MultiValueDropdown({ allowedValues = [], selectedValues = [], onChange,
               <div
                 key={value}
                 role="option"
+                tabIndex={0}
                 aria-selected={checked}
                 className="w-full flex items-center justify-between rounded px-2 py-1.5 text-xs hover:bg-gray-50 cursor-pointer"
                 onClick={() => toggleValue(value, !checked)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleValue(value, !checked);
+                  }
+                }}
               >
                 <div className="flex items-center gap-2">
                   <Checkbox
@@ -849,11 +863,25 @@ function TabTreeNode({ attr, childMap, selectedActions, onChange, disabled, dept
 
   if (children.length === 0) {
     const checked = selectedActions.includes(attr.key);
+    const toggleLeaf = () => {
+      if (disabled) return;
+      onChange(checked ? selectedActions.filter(k => k !== attr.key) : [...selectedActions, attr.key]);
+    };
     return (
       <div
+        role="checkbox"
+        aria-checked={checked}
+        aria-disabled={disabled || undefined}
+        tabIndex={disabled ? -1 : 0}
         className={`flex items-center gap-2.5 py-1.5 rounded-md cursor-pointer group transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-primary/5'}`}
         style={{ paddingLeft: `${12 + depth * 20}px`, paddingRight: '12px' }}
-        onClick={() => !disabled && onChange(checked ? selectedActions.filter(k => k !== attr.key) : [...selectedActions, attr.key])}
+        onClick={toggleLeaf}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleLeaf();
+          }
+        }}
       >
         <div className={`h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? 'bg-primary border-primary' : 'border-gray-300 bg-white group-hover:border-primary/50'}`}>
           {checked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
@@ -898,8 +926,18 @@ function TabTreeNode({ attr, childMap, selectedActions, onChange, disabled, dept
         </button>
         <div
           title="Select this module"
+          role="checkbox"
+          aria-checked={parentChecked}
+          aria-disabled={disabled || undefined}
+          tabIndex={disabled ? -1 : 0}
           className={`h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors cursor-pointer ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${parentChecked ? 'bg-primary border-primary' : 'border-gray-300 bg-white hover:border-primary/50'}`}
           onClick={toggleParent}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleParent();
+            }
+          }}
         >
           {parentChecked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
         </div>
@@ -1407,11 +1445,21 @@ function PolicyTabRoleMatrix({ selectedTabKeys, tabAttrs, allActionAttrs, roleDe
                       </span>
                       <div
                         title={allChecked ? 'Deselect all' : 'Select all'}
+                        role="checkbox"
+                        aria-checked={allChecked}
+                        aria-disabled={disabled || undefined}
+                        tabIndex={disabled ? -1 : 0}
                         className={`h-4 w-4 rounded border-2 flex items-center justify-center transition-colors cursor-pointer ${
                           disabled ? 'opacity-40 cursor-not-allowed' :
                           allChecked ? 'bg-primary border-primary' : 'border-gray-300 hover:border-primary/50'
                         }`}
                         onClick={() => !disabled && toggleCol(tabKey)}
+                        onKeyDown={(e) => {
+                          if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+                            e.preventDefault();
+                            toggleCol(tabKey);
+                          }
+                        }}
                       >
                         {allChecked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
                         {someChecked && <div className="h-1.5 w-1.5 rounded-sm bg-primary" />}
@@ -1448,11 +1496,21 @@ function PolicyTabRoleMatrix({ selectedTabKeys, tabAttrs, allActionAttrs, roleDe
                         <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} />
                       </button>
                       <div
+                        role="checkbox"
+                        aria-checked={allInRow}
+                        aria-disabled={disabled || undefined}
+                        tabIndex={disabled ? -1 : 0}
                         className={`h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
                           disabled ? 'opacity-40 cursor-not-allowed' :
                           allInRow ? 'bg-primary border-primary' : 'border-gray-300 hover:border-primary/50'
                         }`}
                         onClick={() => !disabled && toggleRow(role)}
+                        onKeyDown={(e) => {
+                          if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+                            e.preventDefault();
+                            toggleRow(role);
+                          }
+                        }}
                       >
                         {allInRow && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
                         {someInRow && <div className="h-1.5 w-1.5 rounded-sm bg-primary" />}
@@ -1482,6 +1540,8 @@ function PolicyTabRoleMatrix({ selectedTabKeys, tabAttrs, allActionAttrs, roleDe
                         ? cellValues.filter(v => current.has(v.key))
                         : (current.has('true') ? [{ key: 'true', label: '✓' }] : []);
                       return (
+                        // NOSONAR: pointer-only shortcut; the row's chevron button already
+                        // provides a fully keyboard-accessible way to toggle the same expand state
                         <td
                           key={tabKey}
                           className="px-3 py-2.5 border-r border-gray-100 last:border-r-0 align-middle cursor-pointer hover:bg-gray-50 transition-colors"
@@ -1508,11 +1568,21 @@ function PolicyTabRoleMatrix({ selectedTabKeys, tabAttrs, allActionAttrs, roleDe
                       return (
                         <td key={tabKey} className="px-4 py-3 text-center border-r border-gray-100 last:border-r-0 align-top">
                           <div
+                            role="checkbox"
+                            aria-checked={checked}
+                            aria-disabled={disabled || undefined}
+                            tabIndex={disabled ? -1 : 0}
                             className={`h-5 w-5 rounded border-2 inline-flex items-center justify-center transition-all cursor-pointer mx-auto ${
                               disabled ? 'opacity-40 cursor-not-allowed' :
                               checked ? 'bg-primary border-primary shadow-sm' : 'border-gray-300 hover:border-primary/60 hover:bg-primary/5'
                             }`}
                             onClick={() => toggleValue(role, tabKey, 'true')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                toggleValue(role, tabKey, 'true');
+                              }
+                            }}
                           >
                             {checked && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
                           </div>
@@ -1525,8 +1595,18 @@ function PolicyTabRoleMatrix({ selectedTabKeys, tabAttrs, allActionAttrs, roleDe
                     return (
                       <td key={tabKey} className="px-3 py-2.5 border-r border-gray-100 last:border-r-0 align-top">
                         <div
+                          role="checkbox"
+                          aria-checked={allValChecked}
+                          aria-disabled={disabled || undefined}
+                          tabIndex={disabled ? -1 : 0}
                           className={`flex items-center gap-1.5 mb-2 pb-1.5 border-b border-gray-100 cursor-pointer group ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
                           onClick={() => !disabled && toggleAllInCell(role, tabKey)}
+                          onKeyDown={(e) => {
+                            if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+                              e.preventDefault();
+                              toggleAllInCell(role, tabKey);
+                            }
+                          }}
                         >
                           <div className={`h-3.5 w-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
                             allValChecked ? 'bg-primary border-primary' : 'border-gray-300 group-hover:border-primary/50'
@@ -1542,10 +1622,20 @@ function PolicyTabRoleMatrix({ selectedTabKeys, tabAttrs, allActionAttrs, roleDe
                             return (
                               <div
                                 key={valKey}
+                                role="checkbox"
+                                aria-checked={checked}
+                                aria-disabled={disabled || undefined}
+                                tabIndex={disabled ? -1 : 0}
                                 className={`flex items-center gap-1.5 rounded px-1 py-0.5 cursor-pointer group transition-colors ${
                                   disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-primary/5'
                                 }`}
                                 onClick={() => !disabled && toggleValue(role, tabKey, valKey)}
+                                onKeyDown={(e) => {
+                                  if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+                                    e.preventDefault();
+                                    toggleValue(role, tabKey, valKey);
+                                  }
+                                }}
                               >
                                 <div className={`h-3.5 w-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
                                   checked ? 'bg-primary border-primary' : 'border-gray-300 group-hover:border-primary/50'
@@ -1829,7 +1919,7 @@ function PolicyListPanel({
       <div className="flex-1 overflow-y-auto">
         {loading && (
           <div className="space-y-1 p-2">
-            {[...Array(4)].map((_, i) => (
+            {[...new Array(4)].map((_, i) => (
               <div key={i}
                 className="h-16 rounded-lg bg-gray-100 animate-pulse" />
             ))}
@@ -2033,7 +2123,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
     updateMutation.mutate({
       name:        form.name,
       description: form.description || undefined,
-      priority:    parseInt(form.priority) || 10,
+      priority:    Number.parseInt(form.priority) || 10,
       effect:      form.effect,
       conditions:  mergeFormConditions(form.matrixConditions, form.conditions),
     });
@@ -2390,7 +2480,7 @@ function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose,
       return appPolicyService.create(appKey, {
         name:        form.name,
         description: form.description || undefined,
-        priority:    parseInt(form.priority) || 10,
+        priority:    Number.parseInt(form.priority) || 10,
         effect:      form.effect,
         conditions:  mergeFormConditions(form.matrixConditions, form.conditions),
       });

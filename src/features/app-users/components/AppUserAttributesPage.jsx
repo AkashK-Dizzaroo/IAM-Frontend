@@ -639,7 +639,7 @@ export function AppUserAttributesPage() {
                 setSelectedUserId('');
               }}
               className="rounded"
-            />
+            />{" "}
             Show only users assigned to this app
           </label>
         </div>
@@ -739,7 +739,7 @@ export function AppUserAttributesPage() {
 
           {loadingUserAttrs && (
             <div className="space-y-3">
-              {[...Array(3)].map((_, i) => (
+              {[...new Array(3)].map((_, i) => (
                 <div key={i} className="h-24 rounded-xl bg-gray-100 animate-pulse" />
               ))}
             </div>

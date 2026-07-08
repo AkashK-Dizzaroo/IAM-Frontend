@@ -70,7 +70,7 @@ export function getParentTypeFor(appKey, childType) {
   let childLevel = null;
   for (const [levelKey, types] of Object.entries(config)) {
     if (Array.isArray(types) && types.includes(childType)) {
-      childLevel = parseInt(levelKey, 10);
+      childLevel = Number.parseInt(levelKey, 10);
       break;
     }
   }

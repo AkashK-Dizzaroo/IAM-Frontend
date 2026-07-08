@@ -68,7 +68,7 @@ const ROLE_FILTER_OPTIONS = [
 function UserStatusBadge({ status }) {
   const s = (status || '').toLowerCase();
   const cls = USER_STATUS_STYLES[s] ?? 'bg-gray-100 text-gray-500 border-gray-200';
-  const label = s ? s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
+  const label = s ? s.replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
   return <Badge className={cls}>{label}</Badge>;
 }
 
@@ -712,7 +712,7 @@ export function AbacUsersPage() {
 
       {isLoading && (
         <div className="space-y-2">
-          {[...Array(5)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />)}
+          {[...new Array(5)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />)}
         </div>
       )}
 
@@ -777,7 +777,7 @@ export function AbacUsersPage() {
 
                           return (
                             <span key={r} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
-                              {r.replace(/_/g, ' ')}
+                              {r.replaceAll('_', ' ')}
                             </span>
                           );
                         })}

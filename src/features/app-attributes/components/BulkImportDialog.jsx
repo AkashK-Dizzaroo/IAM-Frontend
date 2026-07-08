@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { secureRandomId } from '@/lib/random';
 
 /**
  * @typedef {Object} ParsedNode
@@ -39,10 +40,7 @@ const toSnakeCase = (input) =>
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '');
 
-const generateId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+const generateId = () => secureRandomId();
 
 function parseHierarchy(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
@@ -52,10 +50,8 @@ function parseHierarchy(text) {
   const stack = [];
 
   for (const rawLine of lines) {
-    const match = rawLine.match(/^([\s\-]*)(.*)$/);
-    if (!match) continue;
-    const leading = match[1] ?? '';
-    const name = (match[2] ?? '').trim();
+    const leading = rawLine.match(/^[\s-]*/)[0];
+    const name = rawLine.slice(leading.length).trim();
     if (!name) continue;
 
     let depthScore = 0;

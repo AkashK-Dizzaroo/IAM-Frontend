@@ -76,7 +76,7 @@ const COUNTRIES = [
   'Singapore','Slovakia','Slovenia','South Africa','South Korea','Spain',
   'Sri Lanka','Sweden','Switzerland','Taiwan','Thailand','Turkey','Ukraine',
   'United Arab Emirates','United Kingdom','United States','Venezuela','Vietnam','Other',
-].sort();
+].sort((a, b) => a.localeCompare(b));
 
 /** Searchable dropdown used for country and state selects in the form */
 function SearchableSelect({ value, onChange, options, placeholder, disabled = false }) {
@@ -137,12 +137,14 @@ function SearchableSelect({ value, onChange, options, placeholder, disabled = fa
               <li className="px-3 py-2 text-sm text-gray-400 text-center">No results</li>
             )}
             {filtered.map((opt) => (
-              <li
-                key={opt}
-                className={`px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 hover:text-blue-700 ${opt === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
-                onMouseDown={(e) => { e.preventDefault(); onChange(opt); setOpen(false); }}
-              >
-                {opt}
+              <li key={opt}>
+                <button
+                  type="button"
+                  className={`w-full text-left px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 hover:text-blue-700 ${opt === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                  onMouseDown={(e) => { e.preventDefault(); onChange(opt); setOpen(false); }}
+                >
+                  {opt}
+                </button>
               </li>
             ))}
           </ul>
@@ -425,7 +427,7 @@ export const FacilitiesPage = () => {
       {/* Loading skeleton */}
       {isLoading && (
         <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
+          {[...new Array(5)].map((_, i) => (
             <div key={i} className="h-14 rounded-lg bg-gray-100 animate-pulse" />
           ))}
         </div>
@@ -597,7 +599,9 @@ export const FacilitiesPage = () => {
       {/* Delete confirmation */}
       {deleteTarget && (
         <>
-          <div className="fixed inset-0 bg-black/30 z-50" onClick={() => setDeleteTarget(null)} />
+          {/* NOSONAR: decorative backdrop; the visible Cancel button below is the
+              keyboard-accessible equivalent for closing this dialog */}
+          <div aria-hidden="true" className="fixed inset-0 bg-black/30 z-50" onClick={() => setDeleteTarget(null)} />
           <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
               <h3 className="font-semibold text-gray-900 mb-2">Delete Facility</h3>
@@ -622,7 +626,9 @@ export const FacilitiesPage = () => {
       {/* Create / Edit slide panel */}
       {panel !== null && (
         <>
-          <div className="fixed inset-0 bg-black/20 z-40" onClick={closePanel} />
+          {/* NOSONAR: decorative backdrop; the panel's close button is the
+              keyboard-accessible equivalent for dismissing this panel */}
+          <div aria-hidden="true" className="fixed inset-0 bg-black/20 z-40" onClick={closePanel} />
           <div className="fixed right-0 top-0 h-full w-full max-w-[520px] z-50 bg-white border-l border-gray-200 shadow-xl flex flex-col">
             {/* Panel header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">

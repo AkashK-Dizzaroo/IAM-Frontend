@@ -176,7 +176,7 @@ const COUNTRIES = [
   "Venezuela",
   "Vietnam",
   "Other",
-].sort();
+].sort((a, b) => a.localeCompare(b));
 
 const COUNTRY_DIAL_CODES = {
   Afghanistan: "+93",
@@ -444,20 +444,22 @@ function SearchableSelect({
               </li>
             )}
             {filtered.map((opt) => (
-              <li
-                key={opt}
-                className={`px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 hover:text-blue-700 ${
-                  opt === value
-                    ? "bg-blue-50 text-blue-700 font-medium"
-                    : "text-gray-700"
-                }`}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onChange(opt);
-                  setOpen(false);
-                }}
-              >
-                {opt}
+              <li key={opt}>
+                <button
+                  type="button"
+                  className={`w-full text-left px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 hover:text-blue-700 ${
+                    opt === value
+                      ? "bg-blue-50 text-blue-700 font-medium"
+                      : "text-gray-700"
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange(opt);
+                    setOpen(false);
+                  }}
+                >
+                  {opt}
+                </button>
               </li>
             ))}
           </ul>
@@ -781,7 +783,7 @@ export const ExternalUsersPage = () => {
       {/* ── Loading skeleton ──────────────────────────────────────────────── */}
       {isLoading && (
         <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
+          {[...new Array(5)].map((_, i) => (
             <div
               key={i}
               className="h-12 rounded-lg bg-gray-100 animate-pulse"
@@ -938,7 +940,10 @@ export const ExternalUsersPage = () => {
       {/* ── Delete Confirmation ────────────────────────────────────────────── */}
       {deleteTarget && (
         <>
+          {/* NOSONAR: decorative backdrop; the visible Cancel button below is the
+              keyboard-accessible equivalent for closing this dialog */}
           <div
+            aria-hidden="true"
             className="fixed inset-0 bg-black/30 z-50"
             onClick={() => setDeleteTarget(null)}
           />
@@ -978,7 +983,10 @@ export const ExternalUsersPage = () => {
       {/* ── Create / Edit Slide Panel ──────────────────────────────────────── */}
       {panel !== null && (
         <>
+          {/* NOSONAR: decorative backdrop; the panel's close button is the
+              keyboard-accessible equivalent for dismissing this panel */}
           <div
+            aria-hidden="true"
             className="fixed inset-0 bg-black/20 z-40"
             onClick={closePanel}
           />

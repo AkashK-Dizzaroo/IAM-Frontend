@@ -26,7 +26,7 @@ const STATUS_ICON = {
 const fmt = (v) => {
   if (!v) return '—';
   const d = new Date(v);
-  return isNaN(d) ? '—' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 const STATUS_FILTERS = ['all', 'pending', 'approved', 'rejected', 'cancelled'];
@@ -97,8 +97,9 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
             </InfoRow>
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-700">Reason for rejection (optional)</label>
+            <label htmlFor="reject-notes" className="text-sm font-medium text-gray-700">Reason for rejection (optional)</label>
             <textarea
+              id="reject-notes"
               className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400"
               rows={2}
               placeholder="Reason for rejection…"
@@ -250,8 +251,9 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
                 {hasPendingAttrs && (
                   <>
                     <div className="space-y-1 pt-2">
-                      <label className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
+                      <label htmlFor="review-notes-attrs" className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
                       <textarea
+                        id="review-notes-attrs"
                         className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         rows={2}
                         placeholder="Any notes for the requester…"
@@ -354,8 +356,9 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
                 /* Resource step pending — show notes + approve button */
                 <>
                   <div className="space-y-1 pt-2">
-                    <label className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
+                    <label htmlFor="review-notes-resource" className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
                     <textarea
+                      id="review-notes-resource"
                       className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       rows={2}
                       placeholder="Any notes for the requester…"

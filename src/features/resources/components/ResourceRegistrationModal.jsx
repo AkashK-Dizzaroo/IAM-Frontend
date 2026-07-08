@@ -539,7 +539,7 @@ export function ResourceRegistrationModal({
                 <div className="space-y-3 pt-3 border-t border-gray-100">
                   <div>
                     <p className="text-xs font-medium text-gray-600">
-                      Application-Specific Overrides
+                      Application-Specific Overrides{" "}
                       <span className="ml-1 text-muted-foreground font-normal">(optional)</span>
                     </p>
                     <p className="text-xs text-muted-foreground">

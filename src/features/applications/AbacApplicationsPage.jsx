@@ -413,7 +413,7 @@ export function AbacApplicationsPage() {
 
       {isLoading && (
         <div className="space-y-2">
-          {[...Array(6)].map((_, i) => (
+          {[...new Array(6)].map((_, i) => (
             <div
               key={i}
               className="h-12 rounded-lg bg-gray-100 animate-pulse"
@@ -707,15 +707,14 @@ export function AbacApplicationsPage() {
                   {ownerResults.length > 0 && (
                     <ul className="border border-gray-200 rounded-md divide-y max-h-36 overflow-y-auto">
                       {ownerResults.map((u) => (
-                        <li
-                          key={u._id}
-                          className="px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer"
-                          onClick={() => addOwner(u)}
-                          onKeyDown={(e) => e.key === 'Enter' && addOwner(u)}
-                          role="button"
-                          tabIndex={0}
-                        >
-                          {u.email}{u.firstName || u.lastName ? ` – ${u.firstName} ${u.lastName}`.trimEnd() : ''}
+                        <li key={u._id} className="hover:bg-gray-50">
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 text-sm text-left cursor-pointer"
+                            onClick={() => addOwner(u)}
+                          >
+                            {u.email}{u.firstName || u.lastName ? ` – ${u.firstName} ${u.lastName}`.trimEnd() : ''}
+                          </button>
                         </li>
                       ))}
                     </ul>

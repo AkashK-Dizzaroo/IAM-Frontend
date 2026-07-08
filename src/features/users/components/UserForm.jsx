@@ -12,6 +12,17 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { AlertCircle, Eye, EyeOff, Plus, X } from 'lucide-react';
 
+// ─── email validation ─────────────────────────────────────────────────────────
+
+// Avoids a single regex with two adjacent unbounded quantifiers around a
+// shared "no @, no whitespace" character class (super-linear backtracking);
+// the domain's dot requirement is checked separately as a plain substring test.
+function isValidEmail(value) {
+  if (!/^[^\s@]+@[^\s@]+$/.test(value)) return false;
+  const domain = value.slice(value.indexOf('@') + 1);
+  return domain.includes('.') && !domain.startsWith('.') && !domain.endsWith('.');
+}
+
 // ─── password validation ──────────────────────────────────────────────────────
 
 const PASSWORD_COMPLEXITY_MSG =
@@ -254,7 +265,7 @@ export function UserForm({
           return '';
         case 'email':
           if (!value?.trim()) return 'Email address is required';
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Enter a valid email address';
+          if (!isValidEmail(value)) return 'Enter a valid email address';
           return '';
         case 'address':
           return '';
@@ -547,7 +558,7 @@ export function validateUserFormFields(fields) {
   if (!fields.firstName?.trim()) errors.firstName = 'First name is required';
   if (!fields.lastName?.trim()) errors.lastName = 'Last name is required';
   if (!fields.email?.trim()) errors.email = 'Email address is required';
-  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) errors.email = 'Enter a valid email address';
+  else if (!isValidEmail(fields.email)) errors.email = 'Enter a valid email address';
   const pwErr = validatePasswordComplexity(fields.password);
   if (pwErr) errors.password = pwErr;
   if (!fields.confirmPassword?.trim()) errors.confirmPassword = 'Please confirm your password';

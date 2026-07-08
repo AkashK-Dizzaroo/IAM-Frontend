@@ -187,7 +187,7 @@ export function RequestAccessModal({
         </DialogHeader>
 
         {/* Prevent Enter on selects/inputs from submitting; textarea and submit button are exempt */}
-        <form
+        <form // NOSONAR: form-level Enter-key guard only prevents accidental submit — every control stays natively keyboard-operable
           onSubmit={handleSubmit(submitHandler)}
           noValidate
           onKeyDown={(e) => {
@@ -310,10 +310,11 @@ export function RequestAccessModal({
 
                 {/* Justification */}
                 <div className="pt-2">
-                  <label className="text-sm font-medium text-gray-700 block mb-1.5">
+                  <label htmlFor="justification" className="text-sm font-medium text-gray-700 block mb-1.5">
                     Reason / Justification <span className="text-red-500">*</span>
                   </label>
                   <Textarea
+                    id="justification"
                     {...register("justification", {
                       required: "Justification is required",
                       minLength: { value: 10, message: "Please provide at least 10 characters" },

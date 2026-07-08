@@ -281,8 +281,7 @@ export const AccountRequestsPage = () => {
               Are you sure you want to reject the account request for{" "}
               <strong>
                 {selectedRequest?.firstName} {selectedRequest?.lastName}
-              </strong>
-              ? Please provide a reason for rejection.
+              </strong>? Please provide a reason for rejection.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">

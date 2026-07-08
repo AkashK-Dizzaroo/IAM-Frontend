@@ -40,8 +40,10 @@ function getOAuthRedirectUri() {
 
 function base64UrlEncode(bytes) {
   let str = "";
-  for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  for (let i = 0; i < bytes.length; i++) str += String.fromCodePoint(bytes[i]);
+  let encoded = btoa(str).replaceAll("+", "-").replaceAll("/", "_");
+  while (encoded.endsWith("=")) encoded = encoded.slice(0, -1);
+  return encoded;
 }
 
 async function generatePkceVerifierAndChallenge() {

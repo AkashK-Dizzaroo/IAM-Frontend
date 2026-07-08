@@ -59,7 +59,7 @@ function extractFlags(attrs) {
 
 function formatFlagLabel(key) {
   return key
-    .replace(/_/g, ' ')
+    .replaceAll('_', ' ')
     .replace(/\bis\b/gi, '')
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -320,7 +320,7 @@ export function AppUsersManagementPage() {
       {/* Loading */}
       {isLoading && (
         <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
+          {[...new Array(5)].map((_, i) => (
             <div key={i} className="h-14 rounded-lg bg-gray-100 animate-pulse" />
           ))}
         </div>
@@ -421,13 +421,13 @@ export function AppUsersManagementPage() {
                         <div className="flex flex-col gap-1 items-start">
                           {isAppOwner && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border bg-amber-50 text-amber-800 border-amber-200">
-                              App Owner
+                              App Owner{" "}
                               <span className="text-[10px] font-normal text-amber-700">· full access</span>
                             </span>
                           )}
                           {isHubOwner && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border bg-purple-50 text-purple-800 border-purple-200">
-                              Hub Owner
+                              Hub Owner{" "}
                               <span className="text-[10px] font-normal text-purple-700">· full access</span>
                             </span>
                           )}

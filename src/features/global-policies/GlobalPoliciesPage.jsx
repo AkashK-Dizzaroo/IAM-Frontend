@@ -108,9 +108,16 @@ function MultiValueDropdown({ allowedValues = [], selectedValues = [], onChange,
           <>
             <div
               role="option"
+              tabIndex={0}
               aria-selected={allSelected}
               className="w-full flex items-center justify-between rounded px-2 py-1.5 text-xs cursor-pointer hover:bg-gray-50"
               onClick={toggleAll}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleAll();
+                }
+              }}
             >
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -133,9 +140,16 @@ function MultiValueDropdown({ allowedValues = [], selectedValues = [], onChange,
               <div
                 key={value}
                 role="option"
+                tabIndex={0}
                 aria-selected={checked}
                 className="w-full flex items-center justify-between rounded px-2 py-1.5 text-xs hover:bg-gray-50 cursor-pointer"
                 onClick={() => toggleValue(value, !checked)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleValue(value, !checked);
+                  }
+                }}
               >
                 <div className="flex items-center gap-2">
                   <Checkbox
@@ -1022,7 +1036,7 @@ function PolicyListPanel({
       <div className="flex-1 overflow-y-auto">
         {loading && (
           <div className="space-y-1 p-2">
-            {[...Array(4)].map((_, i) => (
+            {[...new Array(4)].map((_, i) => (
               <div key={i}
                 className="h-16 rounded-lg bg-gray-100 animate-pulse" />
             ))}
@@ -1198,7 +1212,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
     updateMutation.mutate({
       name:        form.name,
       description: form.description || undefined,
-      priority:    parseInt(form.priority) || 10,
+      priority:    Number.parseInt(form.priority) || 10,
       effect:      form.effect,
       conditions:  form.conditions,
     });
@@ -1446,7 +1460,7 @@ function PolicyCreatePanel({ onClose, onCreated, attributeDefs }) {
       return globalPolicyService.create({
         name:        form.name,
         description: form.description || undefined,
-        priority:    parseInt(form.priority) || 10,
+        priority:    Number.parseInt(form.priority) || 10,
         effect:      form.effect,
         conditions:  form.conditions,
       });

@@ -71,6 +71,9 @@ function ResourceTreeSelect({ resources, selectedResourceId, onSelect }) {
     return (
       <div key={id}>
         <div
+          role="option"
+          aria-selected={isSelected}
+          tabIndex={0}
           className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer select-none transition-colors group
             ${isSelected
               ? 'bg-primary/10 border border-primary/30'
@@ -78,6 +81,12 @@ function ResourceTreeSelect({ resources, selectedResourceId, onSelect }) {
             }`}
           style={{ marginLeft: depth * 16 }}
           onClick={() => onSelect(isSelected ? '' : id)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect(isSelected ? '' : id);
+            }
+          }}
         >
           {hasChildren ? (
             <button
@@ -459,7 +468,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
           {loadingAttrs ? (
             <div className="space-y-3">
-              {[...Array(3)].map((_, i) => (
+              {[...new Array(3)].map((_, i) => (
                 <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />
               ))}
             </div>

@@ -361,7 +361,7 @@ export function HubAttributesPage() {
       {/* Loading skeleton */}
       {isLoading && (
         <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
+          {[...new Array(5)].map((_, i) => (
             <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />
           ))}
         </div>

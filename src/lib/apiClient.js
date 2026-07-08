@@ -1,6 +1,7 @@
 import axios from "axios";
 import { env } from "@/config/env";
 import { logger } from "./logger";
+import { secureRandomId } from "./random";
 
 // Single-flight mutex so concurrent 401s share one refresh request.
 let _iamRefreshPromise = null;
@@ -25,10 +26,7 @@ function singleFlightRefresh() {
 const REQUEST_ID_HEADER = "x-request-id";
 
 function generateRequestId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return secureRandomId();
 }
 
 function pathFromConfig(configObj) {
