@@ -923,23 +923,23 @@ export function ResourceManagementTab() {
 
       {/* Bulk delete confirmation */}
       <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm min-w-0">
           <DialogHeader>
             <DialogTitle>Delete {selectedIds.size} {selectedIds.size === 1 ? 'resource' : 'resources'}?</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <p className="text-sm text-gray-600">These resources will be <strong>permanently deleted</strong>. Resources still linked to applications or with children will fail — unlink them first.</p>
-            <ul className="text-sm text-gray-700 space-y-1 max-h-40 overflow-y-auto">
+            <ul className="text-sm text-gray-700 space-y-1 max-h-40 overflow-y-auto min-w-0">
               {filteredResources
                 .filter((r) => selectedIds.has(r._id || r.id))
                 .slice(0, 5)
                 .map((r) => {
                   const rid = r._id || r.id;
                   return (
-                    <li key={rid} className="flex items-center gap-2">
-                      <ShieldCheck className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                      <span className="truncate">{r.name}</span>
-                      <Badge variant="outline" className="text-[10px] ml-auto shrink-0">L{r.level}</Badge>
+                    <li key={rid} className="flex items-start gap-2">
+                      <ShieldCheck className="h-3.5 w-3.5 text-gray-400 shrink-0 mt-0.5" />
+                      <span className="break-words min-w-0 flex-1">{r.name}</span>
+                      <Badge variant="outline" className="text-[10px] shrink-0">L{r.level}</Badge>
                     </li>
                   );
                 })}

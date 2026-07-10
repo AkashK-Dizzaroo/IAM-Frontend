@@ -602,25 +602,25 @@ export function AppResourcesTab({ application }) {
 
       {/* Bulk unlink confirmation */}
       <Dialog open={bulkUnlinkOpen} onOpenChange={setBulkUnlinkOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm min-w-0">
           <DialogHeader>
             <DialogTitle>Unlink {selectedIds.size} {selectedIds.size === 1 ? 'resource' : 'resources'}?</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <p className="text-sm text-gray-600">
               These resources will be removed from <strong>{application?.name ?? application?.key}</strong> but will still exist globally.
             </p>
-            <ul className="text-sm text-gray-700 space-y-1 max-h-40 overflow-y-auto">
+            <ul className="text-sm text-gray-700 space-y-1 max-h-40 overflow-y-auto min-w-0">
               {resources
                 .filter((r) => selectedIds.has(r._id ?? r.id))
                 .slice(0, 5)
                 .map((r) => {
                   const id = r._id ?? r.id;
                   return (
-                    <li key={id} className="flex items-center gap-2">
-                      <Unlink className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                      <span className="truncate">{r.name}</span>
-                      <Badge variant="outline" className="text-[10px] ml-auto shrink-0">L{r.level}</Badge>
+                    <li key={id} className="flex items-start gap-2">
+                      <Unlink className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                      <span className="break-words min-w-0 flex-1">{r.name}</span>
+                      <Badge variant="outline" className="text-[10px] shrink-0">L{r.level}</Badge>
                     </li>
                   );
                 })}
@@ -629,13 +629,13 @@ export function AppResourcesTab({ application }) {
               )}
             </ul>
             {bulkCascadedChildren.length > 0 && (
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 min-w-0">
                 <p className="text-xs font-medium text-amber-800 mb-1.5">
                   {bulkCascadedChildren.length} sub-resource{bulkCascadedChildren.length === 1 ? '' : 's'} under the selected container{selectedIds.size === 1 ? '' : 's'} will also be unlinked:
                 </p>
-                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto">
+                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto min-w-0">
                   {bulkCascadedChildren.slice(0, 10).map((c) => (
-                    <li key={c._id ?? c.id} className="truncate">• {c.name}</li>
+                    <li key={c._id ?? c.id} className="break-words">• {c.name}</li>
                   ))}
                   {bulkCascadedChildren.length > 10 && (
                     <li>…and {bulkCascadedChildren.length - 10} more</li>
@@ -655,22 +655,22 @@ export function AppResourcesTab({ application }) {
 
       {/* Single unlink confirmation — warns about cascaded L3 children when unlinking an L2 container */}
       <Dialog open={!!unlinkTarget} onOpenChange={(v) => { if (!v) setUnlinkTarget(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm min-w-0">
           <DialogHeader>
-            <DialogTitle>Unlink "{unlinkTarget?.name}"?</DialogTitle>
+            <DialogTitle className="break-words">Unlink "{unlinkTarget?.name}"?</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <p className="text-sm text-gray-600">
               This resource will be removed from <strong>{application?.name ?? application?.key}</strong> but will still exist globally.
             </p>
             {unlinkTargetChildren.length > 0 && (
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 min-w-0">
                 <p className="text-xs font-medium text-amber-800 mb-1.5">
                   All {unlinkTargetChildren.length} sub-resource{unlinkTargetChildren.length === 1 ? '' : 's'} under this container will also be unlinked:
                 </p>
-                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto">
+                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto min-w-0">
                   {unlinkTargetChildren.slice(0, 10).map((c) => (
-                    <li key={c._id ?? c.id} className="truncate">• {c.name}</li>
+                    <li key={c._id ?? c.id} className="break-words">• {c.name}</li>
                   ))}
                   {unlinkTargetChildren.length > 10 && (
                     <li>…and {unlinkTargetChildren.length - 10} more</li>

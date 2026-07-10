@@ -18,6 +18,15 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Link2, Unlink, X } from "lucide-react";
 import { AttributeGroupEditor } from "@/components/attributes/AttributeGroupEditor";
 
 const MAX_DESCRIPTION = 500;
@@ -36,6 +45,7 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [appsToAdd, setAppsToAdd] = useState([]);           // app objects staged to link on save
   const [appsToRemove, setAppsToRemove] = useState(new Set()); // app IDs staged to unlink on save
+  const [removeAppTarget, setRemoveAppTarget] = useState(null); // app object pending unlink confirmation
 
   const originalRef = useRef({
     name: "", description: "", isActive: true, attrValues: {}, appAttrValues: {},
@@ -103,6 +113,23 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
     () => allApplications.filter((a) => !linkedAppIdSet.has(String(a._id ?? a.id))),
     [allApplications, linkedAppIdSet],
   );
+
+  // L3 children of this resource (only relevant for level-2 resources) currently
+  // linked to the app pending unlink confirmation — these get cascade-unlinked
+  // along with the parent by the backend, so we warn about them up front.
+  const removeAppTargetId = removeAppTarget ? String(removeAppTarget._id ?? removeAppTarget.id) : null;
+  const { data: removeAppChildrenResponse } = useQuery({
+    queryKey: ['resource-children-for-app', resourceId, removeAppTargetId],
+    queryFn: () => resourceService.getResources({ applicationId: removeAppTargetId, level: 3, limit: 2000 }),
+    enabled: open && resource?.level === 2 && !!removeAppTargetId,
+  });
+  const removeAppChildren = useMemo(() => {
+    if (!removeAppTargetId) return [];
+    return (removeAppChildrenResponse?.data ?? []).filter((c) => {
+      const parentId = (c.parentResource?._id ?? c.parentResource?.id ?? c.parentId)?.toString();
+      return parentId === String(resourceId);
+    });
+  }, [removeAppChildrenResponse, removeAppTargetId, resourceId]);
 
   // Existing attribute values for this resource
   const { data: existingAttrsResponse } = useQuery({
@@ -349,38 +376,45 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
                   .map((app) => {
                     const appId = String(app._id ?? app.id);
                     return (
-                      <span
+                      <Badge
                         key={appId}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20"
+                        variant="secondary"
+                        className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 text-xs font-medium"
                       >
                         {app.name ?? app.key}
                         <button
                           type="button"
-                          onClick={() =>
-                            setAppsToRemove((prev) => {
-                              const next = new Set(prev);
-                              next.add(appId);
-                              return next;
-                            })
-                          }
+                          onClick={() => {
+                            if (resource?.level === 2) {
+                              setRemoveAppTarget(app);
+                            } else {
+                              setAppsToRemove((prev) => {
+                                const next = new Set(prev);
+                                next.add(appId);
+                                return next;
+                              });
+                            }
+                          }}
                           disabled={isPending}
-                          className="ml-0.5 leading-none hover:text-destructive transition-colors disabled:opacity-50"
-                          aria-label={`Remove ${app.name ?? app.key}`}
+                          className="rounded-sm p-0.5 text-muted-foreground hover:text-amber-600 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                          aria-label={`Unlink ${app.name ?? app.key}`}
+                          title="Unlink from this resource"
                         >
-                          ×
+                          <Unlink className="h-3 w-3" />
                         </button>
-                      </span>
+                      </Badge>
                     );
                   })}
                 {appsToAdd.map((app) => {
                   const appId = String(app._id ?? app.id);
                   return (
-                    <span
+                    <Badge
                       key={appId}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200"
+                      variant="outline"
+                      className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 text-xs font-medium bg-green-50 text-green-700 border-green-200"
                     >
                       {app.name ?? app.key}
-                      <span className="text-green-500 text-[10px] font-normal ml-0.5">new</span>
+                      <span className="text-[10px] font-normal text-green-500">new</span>
                       <button
                         type="button"
                         onClick={() =>
@@ -389,36 +423,42 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
                           )
                         }
                         disabled={isPending}
-                        className="ml-0.5 leading-none hover:text-destructive transition-colors disabled:opacity-50"
+                        className="rounded-sm p-0.5 text-green-600 hover:text-destructive hover:bg-red-50 transition-colors disabled:opacity-50"
                         aria-label={`Remove ${app.name ?? app.key}`}
+                        title="Undo"
                       >
-                        ×
+                        <X className="h-3 w-3" />
                       </button>
-                    </span>
+                    </Badge>
                   );
                 })}
               </div>
 
               {/* Add app selector */}
               {availableApps.length > 0 && (
-                <select
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                <Select
                   value=""
-                  onChange={(e) => {
-                    const selected = allApplications.find(
-                      (a) => String(a._id ?? a.id) === e.target.value,
-                    );
+                  onValueChange={(val) => {
+                    const selected = allApplications.find((a) => String(a._id ?? a.id) === val);
                     if (selected) setAppsToAdd((prev) => [...prev, selected]);
                   }}
                   disabled={isPending}
                 >
-                  <option value="">+ Link an application…</option>
-                  {availableApps.map((app) => (
-                    <option key={String(app._id ?? app.id)} value={String(app._id ?? app.id)}>
-                      {app.name ?? app.key}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder={
+                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                        <Link2 className="h-3.5 w-3.5" /> Link an application…
+                      </span>
+                    } />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableApps.map((app) => (
+                      <SelectItem key={String(app._id ?? app.id)} value={String(app._id ?? app.id)}>
+                        {app.name ?? app.key}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
             </div>
 
@@ -475,6 +515,51 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
             </Button>
             <Button onClick={() => save()} disabled={isPending || !name.trim()}>
               {isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unlink-application confirmation — warns about cascaded L3 children (level-2 resources only) */}
+      <Dialog open={!!removeAppTarget} onOpenChange={(v) => { if (!v) setRemoveAppTarget(null); }}>
+        <DialogContent className="max-w-sm min-w-0">
+          <DialogHeader>
+            <DialogTitle className="break-words">Unlink "{removeAppTarget?.name ?? removeAppTarget?.key}"?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 min-w-0">
+            <p className="text-sm text-gray-600">
+              This application will be removed from <strong>{resource?.name}</strong> on save.
+            </p>
+            {removeAppChildren.length > 0 && (
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 min-w-0">
+                <p className="text-xs font-medium text-amber-800 mb-1.5">
+                  All {removeAppChildren.length} sub-resource{removeAppChildren.length === 1 ? '' : 's'} under this container will also be unlinked:
+                </p>
+                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto min-w-0">
+                  {removeAppChildren.slice(0, 10).map((c) => (
+                    <li key={c._id ?? c.id} className="break-words">• {c.name}</li>
+                  ))}
+                  {removeAppChildren.length > 10 && (
+                    <li>…and {removeAppChildren.length - 10} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveAppTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setAppsToRemove((prev) => {
+                  const next = new Set(prev);
+                  next.add(removeAppTargetId);
+                  return next;
+                });
+                setRemoveAppTarget(null);
+              }}
+            >
+              Unlink
             </Button>
           </DialogFooter>
         </DialogContent>
