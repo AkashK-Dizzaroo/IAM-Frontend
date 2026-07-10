@@ -152,7 +152,7 @@ function AttributeForm({
         </Label>
         <Input
           id="f-key"
-          placeholder="e.g. tmf_role"
+          placeholder="e.g. app_role"
           className="font-mono text-sm"
           value={form.attribute_name}
           disabled={isEdit}
