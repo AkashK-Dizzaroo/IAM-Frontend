@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -25,7 +26,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Loader2, Plus, Trash2, ChevronRight, Save } from 'lucide-react';
+import { Loader2, Plus, Trash2, ChevronRight, Save, Pencil, Check } from 'lucide-react';
 
 // ─── resource tree ────────────────────────────────────────────────────────────
 
@@ -212,9 +213,13 @@ function AttrInput({ def, value, onChange }) {
   if (def.dataType === 'boolean') {
     return (
       <div className="flex items-center gap-2">
-        <Switch id={`edit-attr-${def.id}`} checked={Boolean(value)} onCheckedChange={onChange} />
+        <Switch
+          id={`edit-attr-${def.id}`}
+          checked={value === true || value === 'true'}
+          onCheckedChange={onChange}
+        />
         <Label htmlFor={`edit-attr-${def.id}`} className="text-sm cursor-pointer">
-          {value ? 'Yes' : 'No'}
+          {value === true || value === 'true' ? 'Yes' : 'No'}
         </Label>
       </div>
     );
@@ -235,13 +240,118 @@ function AttrInput({ def, value, onChange }) {
     );
   }
 
+  if (def.dataType === 'list' && Array.isArray(constraints.allowedValues)) {
+    return (
+      <div className="flex flex-wrap gap-1.5 p-2 rounded-md border border-gray-200 bg-white min-h-[38px]">
+        {constraints.allowedValues.map((v) => {
+          const selected = Array.isArray(value) && value.includes(v);
+          return (
+            <button
+              key={v}
+              type="button"
+              onClick={() =>
+                onChange(
+                  selected
+                    ? (Array.isArray(value) ? value : []).filter((x) => x !== v)
+                    : [...(Array.isArray(value) ? value : []), v]
+                )
+              }
+              className={`px-2 py-0.5 rounded text-xs font-mono border transition-colors ${
+                selected
+                  ? 'bg-gray-900 text-white border-gray-900'
+                  : 'bg-gray-50 text-gray-600 border-gray-300 hover:border-gray-500'
+              }`}
+            >
+              {v}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <Input
-      type={def.dataType === 'number' ? 'number' : 'text'}
+      type={
+        def.dataType === 'number'
+          ? 'number'
+          : def.dataType === 'datetime'
+            ? 'datetime-local'
+            : 'text'
+      }
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
       placeholder={`Enter ${def.displayName || def.key}…`}
     />
+  );
+}
+
+function formatAttrDisplayValue(def, value) {
+  if (value === undefined || value === null || value === '') return '—';
+  if (def.dataType === 'boolean') return (value === true || value === 'true') ? 'Yes' : 'No';
+  if (Array.isArray(value)) return value.join(', ');
+  return String(value);
+}
+
+function normalizeForCompare(def, value) {
+  if (value === undefined || value === null) return '';
+  if (def.dataType === 'boolean') return (value === true || value === 'true') ? 'true' : 'false';
+  if (Array.isArray(value)) return [...value].sort().join('|');
+  return String(value);
+}
+
+// ─── attribute row (required always shown; optional ones are add/removable) ──
+
+function AttrRow({ def, value, editing, edited, onToggleEdit, onChange, onRemove, canRemove }) {
+  return (
+    <div
+      className={`flex items-center justify-between border rounded-md px-3 py-2 transition-colors ${
+        edited ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'
+      }`}
+    >
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <Badge variant="outline" className="shrink-0 font-mono text-[10px]">{def.key}</Badge>
+        {editing ? (
+          <div className="flex-1 min-w-0">
+            <AttrInput def={def} value={value} onChange={onChange} />
+          </div>
+        ) : (
+          <>
+            <span className={`text-sm font-mono truncate ${edited ? 'text-amber-700' : 'text-gray-700'}`}>
+              {formatAttrDisplayValue(def, value)}
+            </span>
+            {edited && <span className="text-xs text-amber-600 italic">(edited)</span>}
+          </>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0 ml-2">
+        {!editing && (
+          <span className="text-[10px] text-gray-400 font-mono mr-1">
+            {def.dataType}
+          </span>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={`h-7 w-7 p-0 ${editing ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-blue-500'}`}
+          onClick={onToggleEdit}
+        >
+          {editing ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+        </Button>
+        {!def.isRequired && canRemove && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-gray-400 hover:text-red-500"
+            onClick={onRemove}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -275,8 +385,15 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
 
   const [rows, setRows] = useState([{ ...EMPTY_ROW }]);
   const [attrValues, setAttrValues] = useState({});
+  const [originalAttrValues, setOriginalAttrValues] = useState({});
   const [isDirty, setIsDirty] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [addedOptionalIds, setAddedOptionalIds] = useState([]);
+  const [originallyAssignedIds, setOriginallyAssignedIds] = useState([]);
+  const [removedDefIds, setRemovedDefIds] = useState([]);
+  const [editingDefId, setEditingDefId] = useState(null);
+  const [pendingAddId, setPendingAddId] = useState('');
+  const [pendingAddValue, setPendingAddValue] = useState('');
 
   const userId = user?.id;
 
@@ -337,6 +454,27 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
     [attrDefs, roleDef]
   );
 
+  // Required attrs are always shown and cannot be removed; optional ones are
+  // shown only once already-assigned or explicitly added via "Add Attribute".
+  const requiredOtherDefs = useMemo(() => otherDefs.filter((d) => d.isRequired), [otherDefs]);
+  const optionalOtherDefs = useMemo(() => otherDefs.filter((d) => !d.isRequired), [otherDefs]);
+  const addedOptionalDefs = useMemo(
+    () => optionalOtherDefs.filter((d) => addedOptionalIds.includes(d.id)),
+    [optionalOtherDefs, addedOptionalIds]
+  );
+  const availableOptionalDefs = useMemo(
+    () => optionalOtherDefs.filter((d) => !addedOptionalIds.includes(d.id)),
+    [optionalOtherDefs, addedOptionalIds]
+  );
+  const visibleOtherDefs = useMemo(
+    () => [...requiredOtherDefs, ...addedOptionalDefs],
+    [requiredOtherDefs, addedOptionalDefs]
+  );
+  const pendingAddDef = useMemo(
+    () => optionalOtherDefs.find((d) => d.id === pendingAddId) ?? null,
+    [optionalOtherDefs, pendingAddId]
+  );
+
   // Seed form from existing user attributes whenever the dialog opens or user changes
   useEffect(() => {
     if (!open || loadingAttrs) return;
@@ -348,17 +486,26 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
     const existingRows = normalizeResourceRows(resourceAttr?.value);
     setRows(existingRows.length > 0 ? existingRows : [{ ...EMPTY_ROW }]);
 
-    // Seed other attribute values
+    // Seed other attribute values, and pre-expand optional attrs that already have a value
     const vals = {};
+    const preExpanded = [];
     for (const def of otherDefs) {
       const existing = userAttributes.find(
         (a) => a.attributeDefId === def.id || a.attributeDef?.key === def.key
       );
       if (existing) {
         vals[def.id] = existing.value;
+        if (!def.isRequired) preExpanded.push(def.id);
       }
     }
     setAttrValues(vals);
+    setOriginalAttrValues(vals);
+    setAddedOptionalIds(preExpanded);
+    setOriginallyAssignedIds(preExpanded);
+    setRemovedDefIds([]);
+    setEditingDefId(null);
+    setPendingAddId('');
+    setPendingAddValue('');
     setIsDirty(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, loadingAttrs, userAttributes.length]);
@@ -376,8 +523,38 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
     setIsDirty(true);
   };
 
+  const handleConfirmAddOptional = () => {
+    if (!pendingAddDef) return;
+    setAddedOptionalIds((prev) => [...prev, pendingAddDef.id]);
+    setAttrValues((prev) => ({ ...prev, [pendingAddDef.id]: pendingAddValue }));
+    setRemovedDefIds((prev) => prev.filter((id) => id !== pendingAddDef.id));
+    setPendingAddId('');
+    setPendingAddValue('');
+    setIsDirty(true);
+  };
+
+  const handleRemoveOptional = (defId) => {
+    setAddedOptionalIds((prev) => prev.filter((id) => id !== defId));
+    setAttrValues((prev) => {
+      const next = { ...prev };
+      delete next[defId];
+      return next;
+    });
+    if (originallyAssignedIds.includes(defId)) {
+      setRemovedDefIds((prev) => (prev.includes(defId) ? prev : [...prev, defId]));
+    }
+    setEditingDefId((prev) => (prev === defId ? null : prev));
+    setIsDirty(true);
+  };
+
   const saveMutation = useMutation({
-    mutationFn: (payload) => appUserService.assignAppUser(appKey, payload),
+    mutationFn: async ({ removedDefIds: toRemove, ...payload }) => {
+      const result = await appUserService.assignAppUser(appKey, payload);
+      await Promise.all(
+        toRemove.map((defId) => appUserService.deleteAppUserAttr(appKey, payload.userId, defId))
+      );
+      return result;
+    },
     onSuccess: () => {
       toast({ title: 'User updated', description: 'Attributes saved successfully.' });
       queryClient.invalidateQueries({ queryKey: QK.appUsers(appKey) });
@@ -415,7 +592,7 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
     }
 
     const attributePayload = {};
-    for (const def of otherDefs) {
+    for (const def of visibleOtherDefs) {
       const val = attrValues[def.id];
       if (val !== undefined && val !== '' && val !== null) {
         attributePayload[def.key] = val;
@@ -426,13 +603,17 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
       userId,
       assignments: validAssignments,
       attributes: attributePayload,
+      removedDefIds,
     });
   };
 
   const initial = user ? (user.displayName || user.email || '?')[0].toUpperCase() : '';
   const hasValidRow = rows.some((r) => r.resourceId && r.role);
-  const hasAttributes = Object.values(attrValues).some((v) => v !== undefined && v !== '' && v !== null);
-  const canSave = isDirty && (hasValidRow || hasAttributes) && !saveMutation.isPending;
+  const hasAttributes = visibleOtherDefs.some((def) => {
+    const v = attrValues[def.id];
+    return v !== undefined && v !== '' && v !== null;
+  });
+  const canSave = isDirty && (hasValidRow || hasAttributes || removedDefIds.length > 0) && !saveMutation.isPending;
 
   const handleClose = () => {
     if (isDirty) {
@@ -518,35 +699,91 @@ export function AppUserAttributesPanel({ appKey, user, attrDefs, open, onClose, 
 
               {/* ── Additional attributes ── */}
               {otherDefs.length > 0 && (
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-sm font-medium">Additional Attributes</Label>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Application-specific attributes for this user.
-                    </p>
-                  </div>
-                  {otherDefs.map((def) => (
-                    <div key={def.id} className="space-y-1">
-                      <Label htmlFor={`edit-attr-${def.id}`} className="text-sm">
-                        {def.displayName || def.key}
-                        {def.isRequired && <span className="text-red-500 ml-1">*</span>}
-                        <span className="ml-1.5 text-[10px] font-mono text-gray-400">
-                          ({def.dataType})
-                        </span>
-                      </Label>
-                      {def.description && (
-                        <p className="text-xs text-gray-400">{def.description}</p>
-                      )}
-                      <AttrInput
-                        def={def}
-                        value={attrValues[def.id]}
-                        onChange={(val) => {
-                          setAttrValues((prev) => ({ ...prev, [def.id]: val }));
-                          setIsDirty(true);
-                        }}
-                      />
+                <div className="border-t border-gray-100 pt-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Additional Attributes</Label>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Application-specific attributes for this user.
+                      </p>
                     </div>
-                  ))}
+                    <Badge variant="outline" className="text-xs text-gray-500 shrink-0">
+                      {visibleOtherDefs.length} assigned
+                    </Badge>
+                  </div>
+
+                  {visibleOtherDefs.length === 0 ? (
+                    <p className="text-xs text-gray-400">No attributes assigned yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {visibleOtherDefs.map((def) => (
+                        <AttrRow
+                          key={def.id}
+                          def={def}
+                          value={attrValues[def.id]}
+                          editing={editingDefId === def.id}
+                          edited={
+                            normalizeForCompare(def, attrValues[def.id]) !==
+                            normalizeForCompare(def, originalAttrValues[def.id])
+                          }
+                          onToggleEdit={() =>
+                            setEditingDefId((prev) => (prev === def.id ? null : def.id))
+                          }
+                          onChange={(val) => {
+                            setAttrValues((prev) => ({ ...prev, [def.id]: val }));
+                            setIsDirty(true);
+                          }}
+                          onRemove={() => handleRemoveOptional(def.id)}
+                          canRemove={!def.isRequired}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {availableOptionalDefs.length > 0 && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                      <Label className="text-xs font-medium text-gray-700">Add Attribute</Label>
+                      <Select
+                        value={pendingAddId}
+                        onValueChange={(val) => {
+                          const def = availableOptionalDefs.find((d) => d.id === val);
+                          setPendingAddId(val);
+                          setPendingAddValue(def?.dataType === 'boolean' ? false : '');
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select attribute definition…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableOptionalDefs.map((def) => (
+                            <SelectItem key={def.id} value={def.id}>
+                              {def.displayName ? `${def.displayName} (${def.key})` : def.key}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {pendingAddDef && (
+                        <div className="flex gap-2 items-start">
+                          <div className="flex-1">
+                            <AttrInput
+                              def={pendingAddDef}
+                              value={pendingAddValue}
+                              onChange={setPendingAddValue}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={handleConfirmAddOptional}
+                          >
+                            Add
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </>

@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { AttributeGroupEditor } from "@/components/attributes/AttributeGroupEditor";
 
 const MAX_DESCRIPTION = 500;
 const RESERVED_ATTR_KEYS = new Set(['isactive', 'is_active', 'status', 'resource_status']);
@@ -247,64 +248,6 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
     },
   });
 
-  const renderAttrInput = (def, value, onChange, sizeClass = "") => {
-    if (def.dataType === "boolean") {
-      return (
-        <select
-          className={`w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ${sizeClass}`}
-          value={value === undefined ? "" : String(value)}
-          onChange={(e) =>
-            onChange(e.target.value === "" ? undefined : e.target.value === "true")
-          }
-          disabled={isPending}
-        >
-          <option value="">— not set —</option>
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
-      );
-    }
-    if (def.dataType === "enum" && def.constraints?.allowedValues?.length > 0) {
-      return (
-        <select
-          className={`w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ${sizeClass}`}
-          value={value ?? ""}
-          onChange={(e) => onChange(e.target.value || undefined)}
-          disabled={isPending}
-        >
-          <option value="">— not set —</option>
-          {def.constraints.allowedValues.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-      );
-    }
-    return (
-      <Input
-        className={sizeClass}
-        type={def.dataType === "number" ? "number" : "text"}
-        placeholder={
-          def.dataType === "datetime"
-            ? "e.g. 2025-01-01T00:00:00Z"
-            : `Enter ${def.displayName.toLowerCase()}`
-        }
-        value={value ?? ""}
-        onChange={(e) =>
-          onChange(
-            def.dataType === "number"
-              ? e.target.value === ""
-                ? undefined
-                : Number(e.target.value)
-              : e.target.value || undefined,
-          )
-        }
-        disabled={isPending}
-      />
-    );
-  };
-
   return (
     <>
       <Dialog
@@ -479,89 +422,46 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
               )}
             </div>
 
-            {/* Common Attributes (hub resource defs) */}
-            {attrDefs.length > 0 && (
+            {/* Attributes: common (hub resource defs) + per-app (AppAttributeDefinition namespace=resource) */}
+            {(attrDefs.length > 0 ||
+              linkedApps.some((app) => (appAttrDefs[String(app._id ?? app.id)] ?? []).length > 0)) && (
               <div className="space-y-4 pt-2">
                 <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
                   Attributes
                 </h3>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs font-medium text-gray-600">Common Attributes</p>
-                    <p className="text-xs text-muted-foreground">
-                      These values apply across all assigned applications.
-                    </p>
-                  </div>
-                  {attrDefs.map((def) => (
-                    <div key={def.id}>
-                      <Label className="text-sm font-medium mb-1 block">
-                        {def.displayName}
-                        {def.isRequired && (
-                          <span className="text-destructive ml-1">*</span>
-                        )}
-                      </Label>
-                      {renderAttrInput(def, attrValues[def.id], (val) =>
-                        setAttrValues((p) => ({ ...p, [def.id]: val })),
-                      )}
-                      {def.description && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {def.description}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* App-specific Attributes (per linked app, AppAttributeDefinition namespace=resource) */}
-            {linkedApps.some(
-              (app) => (appAttrDefs[String(app._id ?? app.id)] ?? []).length > 0,
-            ) && (
-              <div className="space-y-4 pt-2">
-                {attrDefs.length === 0 && (
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                    Attributes
-                  </h3>
+                {attrDefs.length > 0 && (
+                  <AttributeGroupEditor
+                    defs={attrDefs}
+                    values={attrValues}
+                    originalValues={originalRef.current.attrValues}
+                    onChange={(defId, val) => setAttrValues((p) => ({ ...p, [defId]: val }))}
+                    disabled={isPending}
+                    title="Common Attributes"
+                    description="These values apply across all assigned applications."
+                  />
                 )}
+
                 {linkedApps.map((app) => {
                   const appId = String(app._id ?? app.id);
                   const defs = appAttrDefs[appId] ?? [];
                   if (defs.length === 0) return null;
                   return (
-                    <div key={appId} className="space-y-3 pt-3 border-t border-gray-100">
-                      <div>
-                        <p className="text-xs font-medium text-gray-600">
-                          {app.name ?? app.key} Attributes
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Attributes specific to {app.name ?? app.key}.
-                        </p>
-                      </div>
-                      {defs.map((def) => {
-                        const val = appAttrValues[appId]?.[def.id];
-                        return (
-                          <div key={def.id}>
-                            <Label className="text-sm font-medium mb-1 block">
-                              {def.displayName}
-                              {def.isRequired && (
-                                <span className="text-destructive ml-1">*</span>
-                              )}
-                            </Label>
-                            {renderAttrInput(def, val, (newVal) =>
-                              setAppAttrValues((p) => ({
-                                ...p,
-                                [appId]: { ...(p[appId] ?? {}), [def.id]: newVal },
-                              })),
-                            )}
-                            {def.description && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {def.description}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div key={appId} className="pt-3 border-t border-gray-100">
+                      <AttributeGroupEditor
+                        defs={defs}
+                        values={appAttrValues[appId] ?? {}}
+                        originalValues={originalRef.current.appAttrValues[appId] ?? {}}
+                        onChange={(defId, val) =>
+                          setAppAttrValues((p) => ({
+                            ...p,
+                            [appId]: { ...(p[appId] ?? {}), [defId]: val },
+                          }))
+                        }
+                        disabled={isPending}
+                        title={`${app.name ?? app.key} Resource Attributes`}
+                        description={`Attributes specific to ${app.name ?? app.key}.`}
+                      />
                     </div>
                   );
                 })}

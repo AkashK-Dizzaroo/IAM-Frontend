@@ -536,6 +536,22 @@ function ActionTabSelector({ actionAttrs, selectedActions, onChange, disabled })
 // PolicyTabRoleMatrix — role × tab permission matrix
 // ---------------------------------------------------------------------------
 
+// Finds the subject attribute that drives the role × tab matrix. `app_role` is the
+// predefined attribute every application now gets on creation (see
+// application.controller.js#createApplication), so it takes priority; the
+// `*_role`/`role` regex is kept only to support legacy apps (e.g. TMF's `tmf_role`)
+// seeded before `app_role` was standardized.
+function findRoleDef(subjectAttrs) {
+  const getAllowedValues = (a) => {
+    let c = a.constraints || {};
+    if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
+    return Array.isArray(c.allowedValues) ? c.allowedValues : [];
+  };
+  const appRole = subjectAttrs.find((a) => a.key === 'app_role' && getAllowedValues(a).length > 0);
+  if (appRole) return appRole;
+  return subjectAttrs.find((a) => /(_role|^role)$/i.test(a.key) && getAllowedValues(a).length > 0);
+}
+
 function getTabCellValues(tabAttr, allActionAttrs) {
   let c = tabAttr.constraints || {};
   if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
@@ -1169,11 +1185,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
     // split them into separate state fields — one for the matrix, one for the
     // condition builder — keeping the two UIs independent.
     const subjectAttrs = attributeDefs.filter(a => a.namespace === 'subject');
-    const roleDef = subjectAttrs.find(a => {
-      let c = a.constraints || {};
-      if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
-      return /(_role|^role)$/i.test(a.key) && Array.isArray(c.allowedValues) && c.allowedValues.length > 0;
-    });
+    const roleDef = findRoleDef(subjectAttrs);
     const actionAttrs = attributeDefs.filter(a => a.namespace === 'action');
     const tabAttrs = actionAttrs.filter(a => {
       let c = a.constraints || {};
@@ -1519,11 +1531,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, appKey, attributeDefs }
 
           {(() => {
             const subjectAttrs = attributeDefs.filter(a => a.namespace === 'subject');
-            const roleDef = subjectAttrs.find(a => {
-              let c = a.constraints || {};
-              if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
-              return /(_role|^role)$/i.test(a.key) && Array.isArray(c.allowedValues) && c.allowedValues.length > 0;
-            });
+            const roleDef = findRoleDef(subjectAttrs);
             const actionAttrs = attributeDefs.filter(a => a.namespace === 'action');
             const tabAttrs = actionAttrs.filter(a => { let c = a.constraints || {}; if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } } return !!c.action_tab; });
             const selectedTabKeys = (form.actions ?? []).filter(k => tabAttrs.some(a => a.key === k));
@@ -1787,11 +1795,7 @@ function PolicyCreatePanel({ appKey, createTitle = 'New Global Policy', onClose,
 
           {(() => {
             const subjectAttrs = attributeDefs.filter(a => a.namespace === 'subject');
-            const roleDef = subjectAttrs.find(a => {
-              let c = a.constraints || {};
-              if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
-              return /(_role|^role)$/i.test(a.key) && Array.isArray(c.allowedValues) && c.allowedValues.length > 0;
-            });
+            const roleDef = findRoleDef(subjectAttrs);
             const actionAttrs = attributeDefs.filter(a => a.namespace === 'action');
             const tabAttrs = actionAttrs.filter(a => { let c = a.constraints || {}; if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } } return !!c.action_tab; });
             const selectedTabKeys = (form.actions ?? []).filter(k => tabAttrs.some(a => a.key === k));

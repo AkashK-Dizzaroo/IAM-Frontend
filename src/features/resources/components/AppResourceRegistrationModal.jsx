@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { resourceService } from "../api/resourceService";
+import { appAttributeService } from "@/features/app-attributes/api/appAttributeService";
 import { useResourceForm } from "../hooks/useResourceForm";
+import { QK } from "@/lib/queryKeys";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Lock, Plus, X } from "lucide-react";
+import { Lock } from "lucide-react";
 import { L2ContainerSelect } from "./L2ContainerSelect";
+import { AttributeGroupEditor } from "@/components/attributes/AttributeGroupEditor";
 
 const MAX_DESCRIPTION = 500;
 
@@ -28,7 +31,8 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
   const queryClient = useQueryClient();
   const [nameError, setNameError] = useState("");
   const [nameAvailable, setNameAvailable] = useState(null);
-  const [attributeRows, setAttributeRows] = useState([]);
+  const [attrValues, setAttrValues] = useState({}); // { [attributeDefId]: value }
+  const [appAttrValues, setAppAttrValues] = useState({}); // { [attributeDefId]: value }
 
   const {
     creationLevel,
@@ -55,15 +59,26 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
   }, [open, appId]);
 
   const { data: attrDefsResponse } = useQuery({
-    queryKey: ["resource-attribute-definitions"],
+    queryKey: QK.resourceAttrDefs,
     queryFn: () => resourceService.listAttributeDefinitions(),
     enabled: open,
     staleTime: 5 * 60_000,
   });
   const attrDefs = attrDefsResponse?.data ?? [];
 
+  const { data: appAttrDefsResponse } = useQuery({
+    queryKey: [...QK.appAttributes(application?.key), 'resourceDefs'],
+    queryFn: () =>
+      appAttributeService.list(application.key).then(
+        (r) => (r?.data?.data ?? r?.data ?? []).filter((d) => d.namespace === "resource"),
+      ),
+    enabled: open && !!application?.key,
+    staleTime: 5 * 60_000,
+  });
+  const appAttrDefs = appAttrDefsResponse ?? [];
+
   const { data: appResourcesResponse } = useQuery({
-    queryKey: ["resources-by-app-modal", appId],
+    queryKey: QK.resourcesByApp(appId),
     queryFn: () => resourceService.getResourcesByApplication(appId),
     enabled: open && !!appId,
   });
@@ -88,25 +103,20 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
     reset();
     setNameError("");
     setNameAvailable(null);
-    setAttributeRows([]);
+    setAttrValues({});
+    setAppAttrValues({});
     if (onOpenChange) onOpenChange(false);
   };
 
-  const addAttributeRow = () => {
-    const firstDefId = attrDefs[0]?.id ?? "";
-    if (!firstDefId) return;
-    setAttributeRows((prev) => [...prev, { attributeDefId: firstDefId, value: "" }]);
-  };
-  const updateAttributeRow = (index, patch) =>
-    setAttributeRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  const removeAttributeRow = (index) =>
-    setAttributeRows((prev) => prev.filter((_, i) => i !== index));
-
   const createMutation = useMutation({
     mutationFn: async (payload) => {
-      const entries = attributeRows
-        .filter((row) => row.attributeDefId && row.value !== "" && row.value !== undefined)
-        .map((row) => ({ attributeDefId: row.attributeDefId, value: row.value }));
+      const commonEntries = Object.entries(attrValues)
+        .filter(([, value]) => value !== undefined && value !== "")
+        .map(([attributeDefId, value]) => ({ attributeDefId, value }));
+      const appEntries = Object.entries(appAttrValues)
+        .filter(([, value]) => value !== undefined && value !== "")
+        .map(([attributeDefId, value]) => ({ attributeDefId, value, applicationId: appId }));
+      const entries = [...commonEntries, ...appEntries];
       const result = await resourceService.createResource(
         entries.length > 0 ? { ...payload, attributeEntries: entries } : payload
       );
@@ -115,9 +125,8 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Resource created successfully" });
-      queryClient.invalidateQueries({ queryKey: ["resources"] });
-      queryClient.invalidateQueries({ queryKey: ["resources-by-app", application?._id ?? application?.id] });
-      queryClient.invalidateQueries({ queryKey: ["all-resources-modal"] });
+      queryClient.invalidateQueries({ queryKey: QK.resourcesAll });
+      queryClient.invalidateQueries({ queryKey: QK.resourcesByApp(appId) });
       onSuccess?.();
       handleClose();
     },
@@ -270,83 +279,34 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
             </div>
           </div>
 
-          {/* Section 3: Attributes */}
-          {attrDefs.length > 0 && (
+          {/* Section 3: Attributes — common first, then app-specific resource attributes */}
+          {(attrDefs.length > 0 || appAttrDefs.length > 0) && (
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">3. Attributes</h3>
-              <div className="space-y-3">
-                {attributeRows.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No attributes added.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {attributeRows.map((row, i) => {
-                      const def = attrDefs.find((d) => d.id === row.attributeDefId);
-                      return (
-                        <div key={i} className="flex items-start gap-2 p-3 rounded-md border border-gray-100 bg-gray-50">
-                          <div className="flex-1 grid grid-cols-2 gap-2">
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Attribute Key</p>
-                              <select
-                                className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                                value={row.attributeDefId}
-                                onChange={(e) => updateAttributeRow(i, { attributeDefId: e.target.value, value: "" })}
-                              >
-                                {attrDefs.map((d) => <option key={d.id} value={d.id}>{d.displayName}</option>)}
-                              </select>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Value</p>
-                              {def?.dataType === "boolean" ? (
-                                <select
-                                  className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                                  value={row.value === undefined ? "" : String(row.value)}
-                                  onChange={(e) => updateAttributeRow(i, { value: e.target.value === "" ? "" : e.target.value === "true" })}
-                                >
-                                  <option value="">— not set —</option>
-                                  <option value="true">true</option>
-                                  <option value="false">false</option>
-                                </select>
-                              ) : def?.dataType === "enum" && def?.constraints?.allowedValues?.length > 0 ? (
-                                <select
-                                  className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                                  value={row.value ?? ""}
-                                  onChange={(e) => updateAttributeRow(i, { value: e.target.value })}
-                                >
-                                  <option value="">— not set —</option>
-                                  {def.constraints.allowedValues.map((v) => <option key={v} value={v}>{v}</option>)}
-                                </select>
-                              ) : def?.dataType === "datetime" ? (
-                                <Input className="h-8 text-xs" type="datetime-local" value={row.value ?? ""} onChange={(e) => updateAttributeRow(i, { value: e.target.value })} />
-                              ) : def?.dataType === "list" ? (
-                                <Input
-                                  className="h-8 text-xs" type="text" placeholder="a, b, c"
-                                  value={Array.isArray(row.value) ? row.value.join(", ") : (row.value ?? "")}
-                                  onChange={(e) => updateAttributeRow(i, { value: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-                                />
-                              ) : (
-                                <Input
-                                  className="h-8 text-xs"
-                                  type={def?.dataType === "number" ? "number" : "text"}
-                                  value={row.value ?? ""}
-                                  onChange={(e) => updateAttributeRow(i, { value: def?.dataType === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value })}
-                                  placeholder="Enter value..."
-                                />
-                              )}
-                            </div>
-                          </div>
-                          <button type="button" onClick={() => removeAttributeRow(i)} className="mt-5 text-gray-400 hover:text-red-500 shrink-0">
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <Button type="button" variant="outline" size="sm" onClick={addAttributeRow}>
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Add Attribute
-                </Button>
-              </div>
+
+              {attrDefs.length > 0 && (
+                <AttributeGroupEditor
+                  defs={attrDefs}
+                  values={attrValues}
+                  onChange={(defId, val) => setAttrValues((p) => ({ ...p, [defId]: val }))}
+                  title="Common Attributes"
+                  description="These values apply across all assigned applications."
+                  emptyLabel="No attributes added."
+                />
+              )}
+
+              {appAttrDefs.length > 0 && (
+                <div className={attrDefs.length > 0 ? "pt-3 border-t border-gray-100" : ""}>
+                  <AttributeGroupEditor
+                    defs={appAttrDefs}
+                    values={appAttrValues}
+                    onChange={(defId, val) => setAppAttrValues((p) => ({ ...p, [defId]: val }))}
+                    title={`${appName} Resource Attributes`}
+                    description={`Attributes specific to ${appName}.`}
+                    emptyLabel="No attributes added."
+                  />
+                </div>
+              )}
             </div>
           )}
 

@@ -232,8 +232,8 @@ export function AppResourcesTab({ application }) {
     setIsBulkUnlinking(false);
     setBulkUnlinkOpen(false);
     setSelectedIds(new Set());
-    queryClient.invalidateQueries({ queryKey: ["resources-by-app", applicationId] });
-    queryClient.invalidateQueries({ queryKey: ["resources"] });
+    queryClient.invalidateQueries({ queryKey: QK.resourcesByApp(applicationId) });
+    queryClient.invalidateQueries({ queryKey: QK.resourcesAll });
     if (failed > 0) {
       toast({ title: `${ids.length - failed} unlinked, ${failed} failed`, variant: 'destructive' });
     } else {
@@ -707,8 +707,8 @@ export function AppResourcesTab({ application }) {
         resource={editingResource}
         onSuccess={() => {
           setEditingResource(null);
-          queryClient.invalidateQueries({ queryKey: ["resources-by-app", applicationId] });
-          queryClient.invalidateQueries({ queryKey: ["resources"] });
+          queryClient.invalidateQueries({ queryKey: QK.resourcesByApp(applicationId) });
+          queryClient.invalidateQueries({ queryKey: QK.resourcesAll });
         }}
       />
     </div>
