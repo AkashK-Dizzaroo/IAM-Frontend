@@ -26,7 +26,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Search, Plus, Pencil, Users, Trash2, AlertCircle, Check, X } from 'lucide-react';
+import { Search, Plus, Pencil, Users, Trash2, AlertCircle, Check, X, RotateCcw, Flame } from 'lucide-react';
 import { UserForm, validateUserFormFields } from '@/features/users/components/UserForm';
 
 // ─── table cell helpers ───────────────────────────────────────────────────────
@@ -46,16 +46,16 @@ function getHubAttr(user, key) {
 const USER_STATUS_STYLES = {
   active:            'bg-green-100 text-green-700 border-green-200',
   inactive:          'bg-gray-100 text-gray-500 border-gray-200',
-  suspended:         'bg-red-100 text-red-700 border-red-200',
-  pending_approval:  'bg-yellow-100 text-yellow-700 border-yellow-200',
+  deleted:           'bg-red-100 text-red-700 border-red-200',
+  pending:           'bg-yellow-100 text-yellow-700 border-yellow-200',
 };
 
 const STATUS_FILTER_OPTIONS = [
   { value: 'all', label: 'All statuses' },
   { value: 'active', label: 'Active' },
   { value: 'inactive', label: 'Inactive' },
-  { value: 'suspended', label: 'Suspended' },
-  { value: 'pending_approval', label: 'Pending Approval' },
+  { value: 'deleted', label: 'Deleted' },
+  { value: 'pending', label: 'Pending' },
 ];
 
 const ROLE_FILTER_OPTIONS = [
@@ -260,6 +260,11 @@ export function AbacUsersPage() {
   const [submitted, setSubmitted] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [userToRestore, setUserToRestore] = useState(null);
+  const [showPurgeDialog, setShowPurgeDialog] = useState(false);
+  const [userToPurge, setUserToPurge] = useState(null);
+  const [purgeConfirmText, setPurgeConfirmText] = useState('');
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -482,6 +487,39 @@ export function AbacUsersPage() {
   const handleDelete = () => {
     if (!userToDelete) return;
     deleteMutation.mutate(userToDelete.id || userToDelete._id);
+  };
+
+  const restoreMutation = useMutation({
+    mutationFn: (id) => abacUserService.restore(id),
+    onSuccess: () => {
+      toast({ title: 'User restored' });
+      setShowRestoreDialog(false);
+      setUserToRestore(null);
+      refetch();
+    },
+    onError: (err) => toast({ title: 'Error', description: apiErrorDescription(err), variant: 'destructive' }),
+  });
+
+  const handleRestore = () => {
+    if (!userToRestore) return;
+    restoreMutation.mutate(userToRestore.id || userToRestore._id);
+  };
+
+  const purgeMutation = useMutation({
+    mutationFn: (id) => abacUserService.purge(id),
+    onSuccess: () => {
+      toast({ title: 'User permanently deleted' });
+      setShowPurgeDialog(false);
+      setUserToPurge(null);
+      setPurgeConfirmText('');
+      refetch();
+    },
+    onError: (err) => toast({ title: 'Error', description: apiErrorDescription(err), variant: 'destructive' }),
+  });
+
+  const handlePurge = () => {
+    if (!userToPurge) return;
+    purgeMutation.mutate(userToPurge.id || userToPurge._id);
   };
 
   const handleSave = () => {
@@ -817,18 +855,45 @@ export function AbacUsersPage() {
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{formatLastLogin(lastLogin)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(user)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        {currentUser?.id !== (user.id || user._id) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="hover:bg-red-50 hover:text-red-600"
-                            onClick={() => { setUserToDelete(user); setShowDeleteDialog(true); }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                          </Button>
+                        {statusFilter === 'deleted' ? (
+                          currentUser?.id !== (user.id || user._id) && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="hover:bg-green-50 hover:text-green-600"
+                                title="Restore user"
+                                onClick={() => { setUserToRestore(user); setShowRestoreDialog(true); }}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5 text-green-600" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="bg-red-50 hover:bg-red-100 text-red-700"
+                                title="Permanently delete user"
+                                onClick={() => { setUserToPurge(user); setPurgeConfirmText(''); setShowPurgeDialog(true); }}
+                              >
+                                <Flame className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          )
+                        ) : (
+                          <>
+                            <Button variant="ghost" size="sm" onClick={() => openEdit(user)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            {currentUser?.id !== (user.id || user._id) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="hover:bg-red-50 hover:text-red-600"
+                                onClick={() => { setUserToDelete(user); setShowDeleteDialog(true); }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>
@@ -861,6 +926,75 @@ export function AbacUsersPage() {
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Restore Confirmation Dialog ── */}
+      <Dialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restore User</DialogTitle>
+            <DialogDescription>
+              Restore{' '}
+              <strong>{`${userToRestore?.firstName ?? ''} ${userToRestore?.lastName ?? ''}`.trim() || userToRestore?.email}</strong>{' '}
+              ({userToRestore?.email}) to active status? Their Hub attributes (organization, roles, etc.) were
+              cleared when they were deleted and will not be restored.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRestoreDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRestore} disabled={restoreMutation.isPending}>
+              {restoreMutation.isPending ? 'Restoring...' : 'Restore'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Permanent Delete Confirmation Dialog ── */}
+      <Dialog
+        open={showPurgeDialog}
+        onOpenChange={(open) => { setShowPurgeDialog(open); if (!open) setPurgeConfirmText(''); }}
+      >
+        <DialogContent className="border-red-300">
+          <DialogHeader>
+            <DialogTitle className="text-red-700 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              Permanently Delete User
+            </DialogTitle>
+            <DialogDescription>
+              <span className="block font-medium text-red-700 mb-2">
+                Warning: This action is permanent and cannot be undone.
+              </span>
+              This will completely purge{' '}
+              <strong>{`${userToPurge?.firstName ?? ''} ${userToPurge?.lastName ?? ''}`.trim() || userToPurge?.email}</strong>{' '}
+              ({userToPurge?.email}) from the database and revoke all assigned application access.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="purge-confirm">
+              Type <strong>{userToPurge?.email}</strong> to confirm
+            </Label>
+            <Input
+              id="purge-confirm"
+              value={purgeConfirmText}
+              onChange={(e) => setPurgeConfirmText(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPurgeDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handlePurge}
+              disabled={purgeMutation.isPending || purgeConfirmText !== userToPurge?.email}
+            >
+              {purgeMutation.isPending ? 'Deleting...' : 'Permanently Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

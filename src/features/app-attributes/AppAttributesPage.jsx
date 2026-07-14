@@ -816,12 +816,15 @@ export function AppAttributesPage() {
               key: node.key,
               displayName: node.displayName,
               description: node.displayName,
-              dataType: "boolean",
+              dataType: "enum",
               isRequired: null,
               isMultiValued: null,
               isUserRequestable: null,
               parentId: realParentId,
-              constraints: { defaultValue: "true", action_tab: true },
+              constraints: {
+                allowedValues: node.allowedValues ?? [],
+                action_tab: true,
+              },
             },
           };
         });

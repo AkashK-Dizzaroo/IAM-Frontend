@@ -21,12 +21,13 @@ import { secureRandomId } from '@/lib/random';
 
 /**
  * @typedef {Object} ParsedNode
- * @property {string}      id           Temporary client-side UUID.
- * @property {string}      originalName Raw name as it appeared in the file.
- * @property {number}      depth        0-based depth in the hierarchy.
- * @property {string|null} parentId     Temporary UUID of the parent (null for roots).
- * @property {string}      displayName  Human-readable display name (same as originalName).
- * @property {string}      key          Snake-case key derived from displayName (used internally for duplicate detection).
+ * @property {string}      id            Temporary client-side UUID.
+ * @property {string}      originalName  Raw name as it appeared in the file.
+ * @property {number}      depth         0-based depth in the hierarchy.
+ * @property {string|null} parentId      Temporary UUID of the parent (null for roots).
+ * @property {string}      displayName   Human-readable display name (text before the `:`).
+ * @property {string}      key           Snake-case key derived from displayName (used internally for duplicate detection).
+ * @property {string[]}    allowedValues Enum allowed values parsed from the text after `:`, split on `|`.
  */
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,7 +52,19 @@ function parseHierarchy(text) {
 
   for (const rawLine of lines) {
     const leading = rawLine.match(/^[\s-]*/)[0];
-    const name = rawLine.slice(leading.length).trim();
+    const content = rawLine.slice(leading.length).trim();
+    if (!content) continue;
+
+    const colonIdx = content.indexOf(':');
+    const name = colonIdx === -1 ? content : content.slice(0, colonIdx).trim();
+    const allowedValues =
+      colonIdx === -1
+        ? []
+        : content
+            .slice(colonIdx + 1)
+            .split('|')
+            .map((v) => v.trim())
+            .filter(Boolean);
     if (!name) continue;
 
     let depthScore = 0;
@@ -70,7 +83,7 @@ function parseHierarchy(text) {
     const displayName = name;
     const key = toSnakeCase(displayName);
 
-    nodes.push({ id, originalName: name, depth, parentId, displayName, key });
+    nodes.push({ id, originalName: name, depth, parentId, displayName, key, allowedValues });
     stack.push({ depth, id });
   }
   return nodes;
@@ -152,6 +165,11 @@ function TreeNodeRow({
             placeholder="Display name"
           />
           {isDup && <p className="text-[11px] text-red-600">Duplicate name</p>}
+          {node.allowedValues?.length > 0 && (
+            <p className="text-[11px] text-gray-500 truncate">
+              Enum: {node.allowedValues.join(', ')}
+            </p>
+          )}
         </div>
 
         {/* Action buttons */}
@@ -299,6 +317,7 @@ export function BulkImportDialog({
         parentId,
         displayName: 'New Attribute',
         key: `new_attribute_${newId.slice(0, 4)}`,
+        allowedValues: [],
       };
 
       const descendantIds = new Set([parentId]);
@@ -336,6 +355,7 @@ export function BulkImportDialog({
         parentId: null,
         displayName: 'New Attribute',
         key: `new_attribute_${newId.slice(0, 4)}`,
+        allowedValues: [],
       },
     ]);
     setExpandedIds((ids) => new Set([...ids, newId]));
@@ -441,7 +461,8 @@ export function BulkImportDialog({
                 )}
                 <p className="text-xs text-gray-400">
                   Each line becomes an attribute. Indent with spaces or tabs to create child attributes.
-                  All attributes are created with type <span className="font-mono">boolean</span>, default value <span className="font-mono">true</span>, and tagged as <span className="font-mono">action_tab</span>.
+                  Add <span className="font-mono">:value1 | value2</span> after a name to set its enum allowed values, e.g. <span className="font-mono">Dashboard:open | read</span>.
+                  All attributes are created with type <span className="font-mono">enum</span> and tagged as <span className="font-mono">action_tab</span>.
                 </p>
               </div>
             </div>

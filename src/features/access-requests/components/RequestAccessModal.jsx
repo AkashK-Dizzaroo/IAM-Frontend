@@ -28,7 +28,7 @@ const EMPTY_ROW = { role: "", resourceId: "" };
 
 // ── Dynamic attribute input based on dataType ──────────────────────────────
 
-function AttributeInput({ attr, value, onChange }) {
+function AttributeInput({ attr, value, onChange, hasError }) {
   const constraints = attr.constraints ?? {};
 
   if (attr.dataType === "boolean") {
@@ -49,7 +49,7 @@ function AttributeInput({ attr, value, onChange }) {
   if (attr.dataType === "enum" && Array.isArray(constraints.allowedValues)) {
     return (
       <Select value={value ?? ""} onValueChange={onChange}>
-        <SelectTrigger className="w-full">
+        <SelectTrigger className={`w-full ${hasError ? "border-red-400 bg-red-50" : ""}`}>
           <SelectValue placeholder="Select a value…" />
         </SelectTrigger>
         <SelectContent>
@@ -70,7 +70,9 @@ function AttributeInput({ attr, value, onChange }) {
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
       placeholder={`Enter ${attr.displayName}…`}
-      className="w-full border border-input rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-ring"
+      className={`w-full border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-ring transition-colors ${
+        hasError ? "border-red-400 bg-red-50" : "border-input"
+      }`}
     />
   );
 }
@@ -90,6 +92,7 @@ export function RequestAccessModal({
 
   // Tab 2: app attribute values keyed by attributeDefId
   const [attrValues, setAttrValues] = useState({});
+  const [attrErrors, setAttrErrors] = useState({});
 
   const {
     register,
@@ -128,8 +131,28 @@ export function RequestAccessModal({
   const handleClose = () => {
     reset();
     setAttrValues({});
+    setAttrErrors({});
     setActiveTab("roles");
     onClose();
+  };
+
+  // Returns true if all required app attributes have a non-empty value.
+  // Populates attrErrors for any required attribute the user left blank.
+  const validateAttributes = () => {
+    const nextErrors = {};
+    for (const attr of requestableDefs) {
+      if (!attr.isRequired) continue;
+      const val = attrValues[attr.id];
+      const isEmpty =
+        val === undefined ||
+        val === null ||
+        (typeof val === "string" && val.trim() === "");
+      if (isEmpty) {
+        nextErrors[attr.id] = `${attr.displayName} is required`;
+      }
+    }
+    setAttrErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
   // Validate Tab 1 fields then advance to Tab 2
@@ -146,6 +169,12 @@ export function RequestAccessModal({
     // This catches any submission path that bypasses the footer button
     // (Enter key, programmatic submit, etc.).
     if (activeTab === "roles" && hasRequestableAttrs) {
+      setActiveTab("attributes");
+      return;
+    }
+
+    // GUARD: required app attributes left blank — block submit and surface errors on Tab 2.
+    if (!validateAttributes()) {
       setActiveTab("attributes");
       return;
     }
@@ -367,10 +396,21 @@ export function RequestAccessModal({
                       <AttributeInput
                         attr={attr}
                         value={attrValues[attr.id]}
-                        onChange={(val) =>
-                          setAttrValues((prev) => ({ ...prev, [attr.id]: val }))
-                        }
+                        hasError={Boolean(attrErrors[attr.id])}
+                        onChange={(val) => {
+                          setAttrValues((prev) => ({ ...prev, [attr.id]: val }));
+                          if (attrErrors[attr.id]) {
+                            setAttrErrors((prev) => {
+                              const next = { ...prev };
+                              delete next[attr.id];
+                              return next;
+                            });
+                          }
+                        }}
                       />
+                      {attrErrors[attr.id] && (
+                        <p className="text-xs text-red-500 mt-1">{attrErrors[attr.id]}</p>
+                      )}
                     </div>
                   ))
                 )}

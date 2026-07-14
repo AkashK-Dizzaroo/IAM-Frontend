@@ -14,6 +14,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Users,
   Plus,
   Pencil,
@@ -980,34 +987,18 @@ export const ExternalUsersPage = () => {
         </>
       )}
 
-      {/* ── Create / Edit Slide Panel ──────────────────────────────────────── */}
-      {panel !== null && (
-        <>
-          {/* NOSONAR: decorative backdrop; the panel's close button is the
-              keyboard-accessible equivalent for dismissing this panel */}
-          <div
-            aria-hidden="true"
-            className="fixed inset-0 bg-black/20 z-40"
-            onClick={closePanel}
-          />
-          <div className="fixed right-0 top-0 h-full w-full max-w-[520px] z-50 bg-white border-l border-gray-200 shadow-xl flex flex-col">
-            {/* Panel header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-              <div className="flex items-center gap-2.5">
-                <UserCircle2 className="h-5 w-5 text-gray-400" />
-                <h2 className="font-semibold text-gray-900 text-base">
-                  {panel === "create"
-                    ? "Add External User"
-                    : `Edit — ${panel.firstName} ${panel.lastName}`}
-                </h2>
-              </div>
-              <Button variant="ghost" size="sm" onClick={closePanel}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+      {/* ── Create / Edit Dialog ──────────────────────────────────────── */}
+      <Dialog open={panel !== null} onOpenChange={(open) => !open && closePanel()}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {panel === "create"
+                ? "Add External User"
+                : panel && `Edit — ${panel.firstName} ${panel.lastName}`}
+            </DialogTitle>
+          </DialogHeader>
 
-            {/* Panel body */}
-            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-7">
+          <div className="space-y-7 py-4">
               {/* Section: Identity */}
               <div>
                 <h3 className="text-sm font-medium text-gray-900 mb-3">
@@ -1273,24 +1264,22 @@ export const ExternalUsersPage = () => {
                   </Select>
                 </div>
               </div>
-            </div>
-
-            {/* Panel footer */}
-            <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2 flex-shrink-0">
-              <Button variant="outline" onClick={closePanel} disabled={saving}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmit} disabled={saving}>
-                {saving
-                  ? "Saving…"
-                  : panel === "create"
-                    ? "Add User"
-                    : "Save Changes"}
-              </Button>
-            </div>
           </div>
-        </>
-      )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closePanel} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={saving}>
+              {saving
+                ? "Saving…"
+                : panel === "create"
+                  ? "Add User"
+                  : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

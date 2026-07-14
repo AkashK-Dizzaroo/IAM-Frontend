@@ -92,7 +92,10 @@ export function ApplicationMultiSelect({
             onKeyDown={(e) => e.stopPropagation()}
           />
         </div>
-        <div className="max-h-[200px] overflow-y-auto p-1">
+        <div
+          className="overflow-y-auto p-1"
+          style={{ maxHeight: "300px" }}
+        >
           {filteredApps.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted-foreground">
               No applications found

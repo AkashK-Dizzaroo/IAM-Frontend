@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Building2,
@@ -623,25 +624,16 @@ export const FacilitiesPage = () => {
         </>
       )}
 
-      {/* Create / Edit slide panel */}
-      {panel !== null && (
-        <>
-          {/* NOSONAR: decorative backdrop; the panel's close button is the
-              keyboard-accessible equivalent for dismissing this panel */}
-          <div aria-hidden="true" className="fixed inset-0 bg-black/20 z-40" onClick={closePanel} />
-          <div className="fixed right-0 top-0 h-full w-full max-w-[520px] z-50 bg-white border-l border-gray-200 shadow-xl flex flex-col">
-            {/* Panel header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-              <h2 className="font-semibold text-gray-900 text-base">
-                {panel === 'create' ? 'Add Facility' : 'Edit Facility'}
-              </h2>
-              <Button variant="ghost" size="sm" onClick={closePanel}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+      {/* Create / Edit dialog */}
+      <Dialog open={panel !== null} onOpenChange={(open) => !open && closePanel()}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {panel === 'create' ? 'Add Facility' : 'Edit Facility'}
+            </DialogTitle>
+          </DialogHeader>
 
-            {/* Panel body */}
-            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-7">
+          <div className="space-y-7 py-4">
 
               {/* Section: Basic info */}
               <div>
@@ -784,18 +776,16 @@ export const FacilitiesPage = () => {
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Panel footer */}
-            <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2 flex-shrink-0">
-              <Button variant="outline" onClick={closePanel} disabled={saving}>Cancel</Button>
-              <Button onClick={handleSubmit} disabled={saving}>
-                {saving ? 'Saving...' : panel === 'create' ? 'Create Facility' : 'Save Changes'}
-              </Button>
-            </div>
           </div>
-        </>
-      )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closePanel} disabled={saving}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={saving}>
+              {saving ? 'Saving...' : panel === 'create' ? 'Create Facility' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

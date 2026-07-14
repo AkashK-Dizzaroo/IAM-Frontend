@@ -10,4 +10,6 @@ export const abacUserService = {
   listHubUserAttrs: (userId) => apiClient.get(v1(`/users/${userId}/hub-attributes`)),
   setHubUserAttr: (userId, data) => apiClient.post(v1(`/users/${userId}/hub-attributes`), data),
   deleteHubUserAttr: (userId, attributeKey) => apiClient.delete(v1(`/users/${userId}/hub-attributes/${encodeURIComponent(attributeKey)}`)),
+  restore: (id) => apiClient.patch(v1(`/users/${id}/restore`)),
+  purge: (id) => apiClient.delete(v1(`/users/${id}`)),
 };
