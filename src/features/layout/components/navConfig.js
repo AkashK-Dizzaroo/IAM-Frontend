@@ -44,8 +44,8 @@ export function buildNavGroups({ effectiveRoles, isGlobalScope, isAppScope, sele
     { id: "app-attributes", label: "App Attributes", icon: Layers, path: "/app-attributes", show: showApp },
     { id: "app-user-attributes", label: "App Users", icon: UserCog, path: "/app-user-attributes", show: showApp },
     { id: "app-policies", label: "App Policies", icon: FileText, path: "/app-policies", show: showApp },
-    { id: "policy-tester", label: "Policy Tester", icon: FlaskConical, path: "/policy-tester", show: showApp },
-    { id: "coverage-gaps", label: "Coverage Gaps", icon: AlertTriangle, path: "/coverage-gaps", show: showApp },
+    { id: "policy-tester", label: "Policy Tester", icon: FlaskConical, path: "/policy-tester", show: showApp, badge: "Dev" },
+    { id: "coverage-gaps", label: "Coverage Gaps", icon: AlertTriangle, path: "/coverage-gaps", show: showApp, badge: "Dev" },
     { id: "app-resources", label: "App Resources", icon: Boxes, path: "/app-resources", show: showApp },
   ];
 

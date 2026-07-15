@@ -39,7 +39,12 @@ const NavItem = memo(({ tab, isActive, onClick, sidebarCollapsed }) => {
       {!sidebarCollapsed && (
         <>
           <span className="flex-1 truncate">{tab.label}</span>
-          {isActive && (
+          {tab.badge && (
+            <span className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 flex-shrink-0">
+              {tab.badge}
+            </span>
+          )}
+          {isActive && !tab.badge && (
             <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
           )}
         </>

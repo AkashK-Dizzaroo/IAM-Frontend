@@ -926,7 +926,12 @@ export function PolicyTesterPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-6xl mx-auto flex gap-8 h-[calc(100vh-8rem)]">
+    <div className="max-w-6xl mx-auto flex flex-col gap-3 h-[calc(100vh-8rem)]">
+      <div className="px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium flex-shrink-0">
+        This page is under development. Results may be incomplete or change without notice.
+      </div>
+
+      <div className="flex gap-8 flex-1 min-h-0">
 
       {/* ── Input Panel ─────────────────────────────────────────────────── */}
       <div className="w-1/2 flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
@@ -1299,6 +1304,7 @@ export function PolicyTesterPage() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
