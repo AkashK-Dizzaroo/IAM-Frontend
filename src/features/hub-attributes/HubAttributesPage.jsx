@@ -37,20 +37,22 @@ const NAMESPACE_TAB_LABEL = {
   environment: 'Environment',
 };
 
+// Brand-mapped tints only (primary blue, accent teal/green, semantic amber,
+// neutrals) — no ad-hoc palette colors.
 const NAMESPACE_BADGE = {
-  subject:     'bg-blue-50 text-blue-700 border-blue-200',
-  resource:    'bg-purple-50 text-purple-700 border-purple-200',
-  action:      'bg-teal-50 text-teal-700 border-teal-200',
-  environment: 'bg-gray-100 text-gray-600 border-gray-200',
+  subject:     'bg-primary/10 text-primary border-primary/25',
+  resource:    'bg-accent-teal/10 text-accent-teal border-accent-teal/25',
+  action:      'bg-success-soft text-success border-success/25',
+  environment: 'bg-muted text-muted-foreground border-border',
 };
 
 const DATA_TYPE_COLORS = {
-  string: 'bg-blue-100 text-blue-700 border-blue-200',
-  number: 'bg-purple-100 text-purple-700 border-purple-200',
-  boolean: 'bg-green-100 text-green-700 border-green-200',
-  enum: 'bg-amber-100 text-amber-700 border-amber-200',
-  list: 'bg-orange-100 text-orange-700 border-orange-200',
-  datetime: 'bg-pink-100 text-pink-700 border-pink-200',
+  string: 'bg-primary/10 text-primary border-primary/25',
+  number: 'bg-accent-teal/10 text-accent-teal border-accent-teal/25',
+  boolean: 'bg-success-soft text-success border-success/25',
+  enum: 'bg-warning-soft text-warning border-warning/25',
+  list: 'bg-accent-green/15 text-success border-accent-green/40',
+  datetime: 'bg-muted text-muted-foreground border-border',
 };
 
 const EMPTY_FORM = {
@@ -343,7 +345,7 @@ export function HubAttributesPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 p-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -419,9 +421,9 @@ export function HubAttributesPage() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
                     {/* Column header row */}
-                    <div className="flex items-center py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <div className="flex min-w-[720px] items-center py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       {/* Select-all checkbox */}
                       <div className="w-6 shrink-0 mr-2 flex items-center justify-center">
                         <Checkbox
@@ -454,7 +456,7 @@ export function HubAttributesPage() {
                       return (
                         <div
                           key={id}
-                          className="flex items-center py-2 px-3 hover:bg-gray-50 border-b border-gray-100 transition-colors group"
+                          className="flex min-w-[720px] items-center py-2 px-3 hover:bg-gray-50 border-b border-gray-100 transition-colors group"
                         >
                           {/* Row checkbox — hidden until hover or any selection is active */}
                           <div className="w-6 shrink-0 mr-2 flex items-center justify-center">
@@ -481,7 +483,9 @@ export function HubAttributesPage() {
                               </span>
                             </div>
                             {isPolicyReferenced && (
-                              <span className="text-[10px] text-green-700 font-medium">● in active policy</span>
+                              <span className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-md border border-success/25 bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
+                                <span aria-hidden="true">●</span> In active policy
+                              </span>
                             )}
                           </div>
 
@@ -500,7 +504,7 @@ export function HubAttributesPage() {
                           {/* Required flag */}
                           <div className="w-[90px] shrink-0">
                             {def.isRequired ? (
-                              <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] w-fit">Required</Badge>
+                              <Badge variant="warning" className="text-[10px] w-fit">Required</Badge>
                             ) : (
                               <span className="text-gray-300 text-xs">—</span>
                             )}
@@ -511,7 +515,7 @@ export function HubAttributesPage() {
                             {isDeleting ? (
                               <div className="flex items-center justify-end gap-1.5 flex-wrap">
                                 {isPolicyReferenced && (
-                                  <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                                  <span className="rounded-md border border-warning/25 bg-warning-soft px-1.5 py-0.5 text-[10px] text-warning">
                                     ⚠ used in policy
                                   </span>
                                 )}
@@ -539,7 +543,7 @@ export function HubAttributesPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  className="h-7 w-7 text-primary hover:text-primary-600 hover:bg-primary/10"
                                   title="Edit attribute"
                                   onClick={() => openEdit(def)}
                                 >

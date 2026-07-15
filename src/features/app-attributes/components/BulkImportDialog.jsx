@@ -178,7 +178,7 @@ function TreeNodeRow({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+            className="h-7 w-7 text-primary hover:bg-primary/10 hover:text-primary"
             title="Add child"
             disabled={isImporting}
             onClick={() => onAddChild(node.id)}
@@ -444,8 +444,8 @@ export function BulkImportDialog({
                     onDrop={handleDrop}
                     className={`flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed px-6 py-14 text-center transition-colors ${
                       isDragging
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-300 hover:border-indigo-400 hover:bg-gray-50'
+                        ? 'border-primary bg-primary/10'
+                        : 'border-gray-300 hover:border-primary/60 hover:bg-gray-50'
                     }`}
                   >
                     <Upload className="mb-2 h-6 w-6 text-gray-400" />
@@ -516,7 +516,7 @@ export function BulkImportDialog({
               </div>
 
               {importStatus && (
-                <div className="mt-3 flex items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+                <div className="mt-3 flex items-center gap-2 rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-sm text-primary">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>{importStatus}</span>
                 </div>

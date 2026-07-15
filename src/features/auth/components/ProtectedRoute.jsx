@@ -29,7 +29,7 @@ export const ProtectedRoute = ({ children, requiredRoles = [] }) => {
   if (!isAuthenticated || !user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-2 text-gray-600">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600" />
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary" />
         <p className="text-sm">Redirecting to sign in…</p>
       </div>
     );

@@ -240,7 +240,7 @@ export function RequestAccessModal({
               >
                 2 — Application Attributes
                 {hasRequestableAttrs && (
-                  <span className="ml-1.5 text-[10px] bg-indigo-100 text-indigo-700 rounded-full px-1.5 py-0.5 font-semibold">
+                  <span className="ml-1.5 text-[10px] bg-primary/10 text-primary rounded-full px-1.5 py-0.5 font-semibold">
                     {requestableDefs.length}
                   </span>
                 )}
@@ -331,7 +331,7 @@ export function RequestAccessModal({
                 <button
                   type="button"
                   onClick={() => append({ ...EMPTY_ROW })}
-                  className="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium py-1 px-1 rounded transition-colors hover:bg-indigo-50"
+                  className="flex items-center gap-1.5 text-sm text-primary hover:text-primary font-medium py-1 px-1 rounded transition-colors hover:bg-primary/10"
                 >
                   <Plus className="w-4 h-4" />
                   Add role &amp; resource

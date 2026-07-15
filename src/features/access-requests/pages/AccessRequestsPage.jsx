@@ -10,10 +10,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const STATUS_BADGE = {
-  pending:   'bg-yellow-100 text-yellow-800 border-yellow-200',
-  approved:  'bg-green-100  text-green-800  border-green-200',
-  rejected:  'bg-red-100    text-red-800    border-red-200',
-  cancelled: 'bg-gray-100   text-gray-600   border-gray-200',
+  pending:   'bg-warning-soft text-warning border-warning/30',
+  approved:  'bg-success-soft text-success border-success/25',
+  rejected:  'bg-destructive-soft text-destructive border-destructive/25',
+  cancelled: 'bg-muted text-muted-foreground border-border',
 };
 
 const STATUS_ICON = {
@@ -49,16 +49,76 @@ function formatAttrValue(value) {
 
 // ── Review modal ──────────────────────────────────────────────────────────────
 
-function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab = 'app_attributes', preservedNotes = '' }) {
+function StepChip({ done }) {
+  return done ? (
+    <span className="inline-flex items-center gap-1 rounded-md border border-success/25 bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success">
+      <CheckCircle className="h-3 w-3" /> Approved
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 rounded-md border border-warning/30 bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning">
+      <Clock className="h-3 w-3" /> Pending approval
+    </span>
+  );
+}
+
+// Unified stacked review section — replaces the old tab-per-step modal so
+// reviewers see every pending sub-approval at once. Pending sections are
+// highlighted with the warning token; approved ones settle to neutral.
+function ReviewSection({ title, done, children }) {
+  return (
+    <section
+      className={`space-y-3 rounded-md border p-4 ${
+        done ? 'border-gray-200 bg-white' : 'border-warning/40 bg-warning-soft/40'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
+        <StepChip done={done} />
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ReviewNotesField({ id, value, onChange }) {
+  return (
+    <div className="space-y-1 pt-1">
+      <label htmlFor={id} className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
+      <textarea
+        id={id}
+        className="w-full resize-none rounded-md border border-input px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        rows={2}
+        placeholder="Any notes for the requester…"
+        value={value}
+        onChange={onChange}
+      />
+    </div>
+  );
+}
+
+function ApprovedBanner({ label, approvedAt }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-success/25 bg-success-soft px-3 py-2.5">
+      <CheckCircle className="h-4 w-4 shrink-0 text-success" />
+      <span className="text-sm font-medium text-success">{label}</span>
+      {approvedAt && (
+        <span className="ml-auto text-xs text-success/80">
+          {new Date(approvedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ReviewModal({ request, action, onConfirm, onCancel, loading, preservedNotes = '' }) {
   const [notes, setNotes] = useState(preservedNotes);
-  const [activeTab, setActiveTab] = useState(initialTab);
 
   const isApprove = action === 'approve';
   const appAttributes = request.pendingAppAttributes ?? null;
   const hasAppAttrs = appAttributes && Object.keys(appAttributes).length > 0;
   const hasPendingAttrs = hasAppAttrs && Object.values(appAttributes).some(m => m.status === 'PENDING_APPROVAL');
-  const resourceApproved = Boolean(request.requestedAttributes?._iamApprovalProgress?.resourceApprovedAt);
-  const appAttributesApproved = Boolean(request.requestedAttributes?._iamApprovalProgress?.appAttributesApprovedAt);
+  const progress = request.requestedAttributes?._iamApprovalProgress;
+  const resourceApproved = Boolean(progress?.resourceApprovedAt);
   const hasResourceStep = Boolean(
     request.requestedResource ||
     request.requestedAttributes?.role ||
@@ -66,28 +126,28 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
   );
   const isTwoStep = hasAppAttrs && hasResourceStep;
 
-  // For reject: simple single-panel layout (no tabs needed)
+  const requesterName = [request.requester?.firstName, request.requester?.lastName].filter(Boolean).join(' ') || request.requester?.email || '—';
+
+  // For reject: simple single-panel layout
   if (!isApprove) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-transparent">
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 p-6 space-y-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="w-full max-w-lg space-y-4 rounded-lg bg-white p-6 shadow-lg">
           <div className="flex items-start justify-between gap-4">
-            <h3 className="text-lg font-semibold text-red-700">Reject Access Request</h3>
+            <h3 className="text-lg font-semibold text-destructive">Reject Access Request</h3>
             <button
               type="button"
               onClick={onCancel}
-              className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Close"
               disabled={loading}
             >
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="bg-gray-50 border rounded-lg p-4 space-y-2.5">
+          <div className="space-y-2.5 rounded-md border bg-gray-50 p-4">
             <InfoRow label="Requester">
-              <span className="font-medium">
-                {[request.requester?.firstName, request.requester?.lastName].filter(Boolean).join(' ') || request.requester?.email || '—'}
-              </span>
+              <span className="font-medium">{requesterName}</span>
             </InfoRow>
             <InfoRow label="Application">{request.application?.name || request.application?.key || '—'}</InfoRow>
             <InfoRow label="Resource">
@@ -100,7 +160,7 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
             <label htmlFor="reject-notes" className="text-sm font-medium text-gray-700">Reason for rejection (optional)</label>
             <textarea
               id="reject-notes"
-              className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400"
+              className="w-full resize-none rounded-md border border-input px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-destructive focus:ring-offset-2"
               rows={2}
               placeholder="Reason for rejection…"
               value={notes}
@@ -108,13 +168,19 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel} disabled={loading}>Cancel</button>
             <button
-              className="px-4 py-2 text-sm rounded-lg text-white font-medium bg-red-600 hover:bg-red-700 flex items-center gap-2 disabled:opacity-60"
+              className="h-10 rounded-md border border-input px-4 text-sm hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+              onClick={onCancel}
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-destructive px-4 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
               onClick={() => onConfirm(notes, {}, null)}
               disabled={loading}
             >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               Reject
             </button>
           </div>
@@ -123,25 +189,21 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
     );
   }
 
-  // Approve: two-tab layout
-  const requesterName = [request.requester?.firstName, request.requester?.lastName].filter(Boolean).join(' ') || request.requester?.email || '—';
-  const requestedRole = request.requestedAttributes?.role || request.requestedAttributes?.requestedRole;
-  const resource = request.requestedResource;
-
+  // Approve: unified vertically stacked sections — no tab fishing.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-transparent">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="max-h-[85vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-lg bg-white p-6 shadow-lg">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-lg font-semibold text-green-700">Approve Access Request</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <h3 className="text-lg font-semibold text-gray-900">Approve Access Request</h3>
+            <p className="mt-0.5 text-xs text-gray-500">
               {requesterName} · {request.application?.name || request.application?.key || '—'}
             </p>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Close"
             disabled={loading}
           >
@@ -149,240 +211,122 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, initialTab
           </button>
         </div>
 
-        {/* Two-step progress header — only shown when request has both attr and resource steps */}
-        {isTwoStep && (
-          <div className="flex items-center gap-3 px-1 py-2 bg-gray-50 rounded-lg border">
-            <div className="flex items-center gap-1.5">
-              {!hasPendingAttrs && hasAppAttrs ? (
-                <span className="w-5 h-5 rounded-full bg-green-100 border border-green-300 flex items-center justify-center">
-                  <CheckCircle className="w-3 h-3 text-green-600" />
-                </span>
-              ) : (
-                <span className="w-5 h-5 rounded-full bg-yellow-100 border border-yellow-300 flex items-center justify-center">
-                  <Clock className="w-3 h-3 text-yellow-600" />
-                </span>
-              )}
-              <span className={`text-xs font-medium ${(!hasPendingAttrs && hasAppAttrs) ? 'text-green-700' : 'text-yellow-700'}`}>
-                App Attributes
-              </span>
-              {appAttributesApproved && (
-                <span className="text-[10px] text-green-500">
-                  · {new Date(request.requestedAttributes._iamApprovalProgress.appAttributesApprovedAt)
-                    .toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                </span>
-              )}
+        {/* ── Step 1: Application Attributes ── */}
+        {hasAppAttrs && (
+          <ReviewSection
+            title={isTwoStep ? 'Step 1 · Application Attributes' : 'Application Attributes'}
+            done={!hasPendingAttrs}
+          >
+            <p className="text-xs text-gray-500">
+              App-specific attributes submitted by the user. Approving will promote any pending ones to active.
+            </p>
+            <div className="space-y-2.5 rounded-md border bg-white/70 p-4">
+              {Object.entries(appAttributes).map(([key, meta]) => {
+                const isPending = meta.status === 'PENDING_APPROVAL';
+                const isApproved = meta.status === 'APPROVED';
+                return (
+                  <div key={key} className="flex items-center gap-3">
+                    <span className="w-36 shrink-0 text-[10px] font-semibold uppercase text-gray-500">
+                      {meta.displayName || key}
+                      <span className="ml-1 font-mono font-normal text-gray-400">({meta.dataType})</span>
+                    </span>
+                    <span className="flex-1 truncate text-sm font-medium text-gray-900" title={formatAttrValue(meta.value)}>
+                      {formatAttrValue(meta.value)}
+                    </span>
+                    <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-semibold ${
+                      isPending  ? 'border-warning/30 bg-warning-soft text-warning' :
+                      isApproved ? 'border-success/25 bg-success-soft text-success' :
+                                   'border-border bg-muted text-muted-foreground'
+                    }`}>
+                      {isPending ? 'Pending' : isApproved ? 'Approved' : meta.status}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex-1 h-px bg-gray-300" />
-            <div className="flex items-center gap-1.5">
-              {resourceApproved ? (
-                <span className="w-5 h-5 rounded-full bg-green-100 border border-green-300 flex items-center justify-center">
-                  <CheckCircle className="w-3 h-3 text-green-600" />
-                </span>
-              ) : (
-                <span className="w-5 h-5 rounded-full bg-yellow-100 border border-yellow-300 flex items-center justify-center">
-                  <Clock className="w-3 h-3 text-yellow-600" />
-                </span>
-              )}
-              <span className={`text-xs font-medium ${resourceApproved ? 'text-green-700' : 'text-yellow-700'}`}>
-                Resource Access
-              </span>
-              {resourceApproved && request.requestedAttributes?._iamApprovalProgress?.resourceApprovedAt && (
-                <span className="text-[10px] text-green-500">
-                  · {new Date(request.requestedAttributes._iamApprovalProgress.resourceApprovedAt)
-                    .toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                </span>
-              )}
-            </div>
-          </div>
+            {hasPendingAttrs ? (
+              <>
+                <ReviewNotesField id="review-notes-attrs" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                <div className="flex justify-end pt-1">
+                  <button
+                    className="inline-flex h-10 items-center gap-2 rounded-md bg-success px-4 text-sm font-medium text-success-foreground hover:bg-success/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+                    onClick={() => onConfirm(notes, {}, 'app_attributes')}
+                    disabled={loading}
+                  >
+                    {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                    <CheckCircle className="h-4 w-4" />
+                    Approve Application Attributes
+                  </button>
+                </div>
+              </>
+            ) : (
+              <ApprovedBanner label="Application attributes approved" approvedAt={progress?.appAttributesApprovedAt} />
+            )}
+          </ReviewSection>
         )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full">
-            <TabsTrigger value="app_attributes" className="flex-1">
-              Application Attributes
-              {hasAppAttrs && (
-                <span className="ml-1.5 text-[10px] bg-indigo-100 text-indigo-700 rounded-full px-1.5 py-0.5 font-semibold">
-                  {Object.keys(appAttributes).length}
+        {/* ── Step 2: Resource Access ── */}
+        <ReviewSection
+          title={isTwoStep ? 'Step 2 · Resource Access' : 'Resource Access'}
+          done={resourceApproved}
+        >
+          <p className="text-xs text-gray-500">
+            Role and resource details from the request. Approving will sync these to the user&apos;s app attributes and mark the request as approved.
+          </p>
+          <div className="space-y-2.5 rounded-md border bg-white/70 p-4">
+            <InfoRow label="Requester">
+              <span className="font-medium">{requesterName}</span>
+            </InfoRow>
+            <InfoRow label="Application">
+              {request.application?.name || request.application?.key || '—'}
+            </InfoRow>
+            <InfoRow label="Requested Role">
+              {(request.requestedAttributes?.role || request.requestedAttributes?.requestedRole)
+                ? <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">{request.requestedAttributes?.role || request.requestedAttributes?.requestedRole}</span>
+                : <span className="text-gray-400 italic">—</span>}
+            </InfoRow>
+            <InfoRow label="Resource">
+              {request.requestedResource
+                ? <span className="break-all">{request.requestedResource.name || request.requestedResource.resourceExternalId}{request.requestedResource.level ? ` (L${request.requestedResource.level})` : ''}</span>
+                : <span className="text-gray-400 italic">Global Access</span>}
+            </InfoRow>
+            {request.requestedAttributes?.justification && (
+              <InfoRow label="Justification">
+                <span className="line-clamp-3 text-gray-600" title={request.requestedAttributes.justification}>
+                  {request.requestedAttributes.justification}
                 </span>
-              )}
-              {hasPendingAttrs ? (
-                <span className="ml-1 text-[10px] bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5 font-semibold">pending</span>
-              ) : (hasAppAttrs && (
-                <span className="ml-1 text-[10px] bg-green-100 text-green-700 rounded-full px-1.5 py-0.5 font-semibold">approved</span>
-              ))}
-            </TabsTrigger>
-            <TabsTrigger value="resource" className="flex-1">
-              Resource Details
-              {resourceApproved && (
-                <span className="ml-1 text-[10px] bg-green-100 text-green-700 rounded-full px-1.5 py-0.5 font-semibold">approved</span>
-              )}
-            </TabsTrigger>
-          </TabsList>
-
-          {/* ── Tab 1: Application Attributes ── */}
-          <TabsContent value="app_attributes" className="mt-4 min-h-[160px]">
-            {hasAppAttrs ? (
-              <div className="space-y-2">
-                <p className="text-xs text-gray-500 mb-3">
-                  App-specific attributes submitted by the user. Approving will promote any pending ones to active.
-                </p>
-                <div className="bg-gray-50 border rounded-lg p-4 space-y-2.5">
-                  {Object.entries(appAttributes).map(([key, meta]) => {
-                    const isPending = meta.status === 'PENDING_APPROVAL';
-                    const isApproved = meta.status === 'APPROVED';
-                    return (
-                      <div key={key} className="flex items-center gap-3">
-                        <span className="w-36 text-[10px] uppercase font-semibold text-gray-500 shrink-0">
-                          {meta.displayName || key}
-                          <span className="ml-1 font-mono font-normal text-gray-400">({meta.dataType})</span>
-                        </span>
-                        <span className="flex-1 text-sm text-gray-900 font-medium">{formatAttrValue(meta.value)}</span>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
-                          isPending  ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                          isApproved ? 'bg-green-50 text-green-700 border-green-200' :
-                                       'bg-gray-100 text-gray-500 border-gray-200'
-                        }`}>
-                          {isPending ? 'Pending' : isApproved ? 'Approved' : meta.status}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                {hasPendingAttrs && (
-                  <>
-                    <div className="space-y-1 pt-2">
-                      <label htmlFor="review-notes-attrs" className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
-                      <textarea
-                        id="review-notes-attrs"
-                        className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        rows={2}
-                        placeholder="Any notes for the requester…"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex justify-end gap-3 pt-2">
-                      <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel} disabled={loading}>Cancel</button>
-                      <button
-                        className="px-4 py-2 text-sm rounded-lg text-white font-medium bg-green-600 hover:bg-green-700 flex items-center gap-2 disabled:opacity-60"
-                        onClick={() => onConfirm(notes, {}, 'app_attributes')}
-                        disabled={loading}
-                      >
-                        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                        <CheckCircle className="w-4 h-4" />
-                        Approve Application Request
-                      </button>
-                    </div>
-                  </>
-                )}
-                {!hasPendingAttrs && (
-                  <div className="pt-2 space-y-3">
-                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200">
-                      <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
-                      <span className="text-sm font-medium text-green-700">Application attributes approved</span>
-                      {request.requestedAttributes?._iamApprovalProgress?.appAttributesApprovedAt && (
-                        <span className="ml-auto text-xs text-green-500">
-                          {new Date(request.requestedAttributes._iamApprovalProgress.appAttributesApprovedAt)
-                            .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </span>
-                      )}
-                    </div>
-                    {hasResourceStep && !resourceApproved && (
-                      <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
-                        Resource access is still pending approval. Switch to the Resource Details tab to complete the request.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-10 text-gray-400">
-                <p className="text-sm">No app-specific attributes for this request.</p>
-                <p className="text-xs mt-1">The user did not submit any app-specific attributes.</p>
-              </div>
+              </InfoRow>
             )}
-          </TabsContent>
-
-          {/* ── Tab 2: Resource Details ── */}
-          <TabsContent value="resource" className="mt-4 min-h-[160px]">
-            <div className="space-y-2">
-              <p className="text-xs text-gray-500 mb-3">
-                Role and resource details from the request. Approving will sync these to the user's app attributes and mark the request as approved.
-              </p>
-              <div className="bg-gray-50 border rounded-lg p-4 space-y-2.5">
-                <InfoRow label="Requester">
-                  <span className="font-medium">{requesterName}</span>
-                </InfoRow>
-                <InfoRow label="Application">
-                  {request.application?.name || request.application?.key || '—'}
-                </InfoRow>
-                <InfoRow label="Requested Role">
-                  {requestedRole
-                    ? <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded font-mono text-xs font-semibold">{requestedRole}</span>
-                    : <span className="text-gray-400 italic">—</span>}
-                </InfoRow>
-                <InfoRow label="Resource">
-                  {resource
-                    ? <span>{resource.name || resource.resourceExternalId}{resource.level ? ` (L${resource.level})` : ''}</span>
-                    : <span className="text-gray-400 italic">Global Access</span>}
-                </InfoRow>
-                {request.requestedAttributes?.justification && (
-                  <InfoRow label="Justification">
-                    <span className="text-gray-600">{request.requestedAttributes.justification}</span>
-                  </InfoRow>
-                )}
+          </div>
+          {resourceApproved ? (
+            <ApprovedBanner label="Resource access approved" approvedAt={progress?.resourceApprovedAt} />
+          ) : (
+            <>
+              <ReviewNotesField id="review-notes-resource" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <div className="flex justify-end pt-1">
+                <button
+                  className="inline-flex h-10 items-center gap-2 rounded-md bg-success px-4 text-sm font-medium text-success-foreground hover:bg-success/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+                  onClick={() => onConfirm(notes, {}, 'resource')}
+                  disabled={loading}
+                >
+                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  <CheckCircle className="h-4 w-4" />
+                  Approve Resource Access
+                </button>
               </div>
-              {resourceApproved ? (
-                /* Resource step already done — show status, no action button */
-                <div className="pt-2 space-y-3">
-                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200">
-                    <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
-                    <span className="text-sm font-medium text-green-700">Resource access approved</span>
-                    {request.requestedAttributes?._iamApprovalProgress?.resourceApprovedAt && (
-                      <span className="ml-auto text-xs text-green-500">
-                        {new Date(request.requestedAttributes._iamApprovalProgress.resourceApprovedAt)
-                          .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </span>
-                    )}
-                  </div>
-                  {hasPendingAttrs && (
-                    <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
-                      Application attributes are still pending approval. Switch to the Application Attributes tab to complete the request.
-                    </p>
-                  )}
-                  <div className="pt-1" />
-                </div>
-              ) : (
-                /* Resource step pending — show notes + approve button */
-                <>
-                  <div className="space-y-1 pt-2">
-                    <label htmlFor="review-notes-resource" className="text-sm font-medium text-gray-700">Review Notes (optional)</label>
-                    <textarea
-                      id="review-notes-resource"
-                      className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      rows={2}
-                      placeholder="Any notes for the requester…"
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" onClick={onCancel} disabled={loading}>Cancel</button>
-                    <button
-                      className="px-4 py-2 text-sm rounded-lg text-white font-medium bg-green-600 hover:bg-green-700 flex items-center gap-2 disabled:opacity-60"
-                      onClick={() => onConfirm(notes, {}, 'resource')}
-                      disabled={loading}
-                    >
-                      {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                      <CheckCircle className="w-4 h-4" />
-                      Approve Resource Request
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+            </>
+          )}
+        </ReviewSection>
+
+        <div className="flex justify-end pt-1">
+          <button
+            className="h-10 rounded-md border border-input px-4 text-sm hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -579,9 +523,9 @@ export const AccessRequestsPage = () => {
                     <tr key={req.id} className="hover:bg-gray-50">
                       {/* Requester */}
                       <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{requesterName}</p>
+                        <p className="max-w-[180px] truncate font-medium text-gray-900" title={requesterName}>{requesterName}</p>
                         {req.requester?.email && (
-                          <p className="text-xs text-gray-400">{req.requester.email}</p>
+                          <p className="max-w-[180px] truncate text-xs text-gray-400" title={req.requester.email}>{req.requester.email}</p>
                         )}
                       </td>
 
@@ -591,9 +535,16 @@ export const AccessRequestsPage = () => {
                       </td>
 
                       {/* Resource */}
-                      <td className="px-4 py-3 text-gray-600 text-xs">
+                      <td className="px-4 py-3 text-gray-600 text-xs max-w-[180px]">
                         {req.requestedResource
-                          ? req.requestedResource.name || req.requestedResource.resourceExternalId
+                          ? (
+                            <span
+                              className="block truncate"
+                              title={req.requestedResource.name || req.requestedResource.resourceExternalId}
+                            >
+                              {req.requestedResource.name || req.requestedResource.resourceExternalId}
+                            </span>
+                          )
                           : <span className="text-gray-400 italic">All</span>}
                       </td>
 
@@ -640,14 +591,14 @@ export const AccessRequestsPage = () => {
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => setModal({ request: req, action: 'approve' })}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-green-600 text-white text-xs hover:bg-green-700"
+                              className="inline-flex items-center gap-1 rounded-md border border-success/30 bg-success-soft px-3 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success hover:text-success-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
                               <CheckCircle className="w-3.5 h-3.5" />
                               Approve
                             </button>
                             <button
                               onClick={() => setModal({ request: req, action: 'reject' })}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-red-600 text-white text-xs hover:bg-red-700"
+                              className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive-soft px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
                               <XCircle className="w-3.5 h-3.5" />
                               Reject

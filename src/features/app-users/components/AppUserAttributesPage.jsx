@@ -34,7 +34,7 @@ function getUserId(u) {
 
 const NAMESPACE_STYLES = {
   subject:     { badge: 'bg-blue-50 text-blue-700 border-blue-200',   dot: 'bg-blue-500',   label: 'Subject' },
-  resource:    { badge: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500', label: 'Resource' },
+  resource:    { badge: 'bg-accent-teal/10 text-accent-teal border-accent-teal/25', dot: 'bg-accent-teal', label: 'Resource' },
   action:      { badge: 'bg-teal-50 text-teal-700 border-teal-200',   dot: 'bg-teal-500',   label: 'Action' },
   environment: { badge: 'bg-gray-100 text-gray-600 border-gray-200',  dot: 'bg-gray-400',   label: 'Environment' },
 };
@@ -340,7 +340,7 @@ function AttributeRow({ def, existingAttr, isReferenced, onSave, onRemove, isSav
         <div className="flex items-center gap-1 shrink-0">
           <Badge variant="outline" className="text-xs capitalize shrink-0">{def.dataType}</Badge>
           {def.isMultiValued && (
-            <Badge variant="outline" className="text-xs text-purple-700 border-purple-300 shrink-0">multi</Badge>
+            <Badge variant="outline" className="text-xs text-accent-teal border-accent-teal/40 shrink-0">multi</Badge>
           )}
         </div>
       </div>
@@ -616,7 +616,7 @@ export function AppUserAttributesPage() {
     : null;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 p-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-gray-900">
           {selectedAppName || selectedAppKey} — User Attributes

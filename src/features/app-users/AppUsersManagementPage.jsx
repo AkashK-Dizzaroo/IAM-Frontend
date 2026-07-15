@@ -286,7 +286,7 @@ export function AppUsersManagementPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -426,9 +426,9 @@ export function AppUsersManagementPage() {
                             </span>
                           )}
                           {isHubOwner && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border bg-purple-50 text-purple-800 border-purple-200">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border bg-accent-teal/10 text-accent-teal border-accent-teal/25">
                               Hub Owner{" "}
-                              <span className="text-[10px] font-normal text-purple-700">· full access</span>
+                              <span className="text-[10px] font-normal text-accent-teal">· full access</span>
                             </span>
                           )}
                         </div>

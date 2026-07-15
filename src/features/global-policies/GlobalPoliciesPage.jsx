@@ -46,7 +46,7 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
 
   return (
     <div className="
-      flex items-center gap-2 p-2.5 rounded-lg
+      flex items-center gap-2 p-3 rounded-md
       bg-gray-50 border border-gray-200
       group
     ">
@@ -59,9 +59,9 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
           // Usually better to leave it so user can change it if they want.
         }}
         className="
-          text-xs border border-gray-200 rounded px-2 py-1.5
+          h-10 text-sm border border-input rounded-md px-3
           bg-white text-gray-700 focus:outline-none
-          focus:ring-1 focus:ring-primary/30 focus:border-primary
+          focus:ring-2 focus:ring-ring/40 focus:border-primary
         "
       >
         {NAMESPACES.map(ns => (
@@ -75,11 +75,11 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
           value={condition.key}
           onChange={e => onChange('key', e.target.value)}
           className="
-            flex-1 min-w-0 text-xs border border-gray-200
-            rounded px-2 py-1.5 font-mono
+            flex-1 min-w-0 h-10 text-sm border border-input
+            rounded-md px-3 font-mono
             bg-white text-gray-900
-            focus:outline-none focus:ring-1
-            focus:ring-primary/30 focus:border-primary
+            focus:outline-none focus:ring-2
+            focus:ring-ring/40 focus:border-primary
           "
         >
           <option value="">Select attribute...</option>
@@ -97,11 +97,11 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
           value={condition.key}
           onChange={e => onChange('key', e.target.value)}
           className="
-            flex-1 min-w-0 text-xs border border-gray-200
-            rounded px-2 py-1.5 font-mono
+            flex-1 min-w-0 h-10 text-sm border border-input
+            rounded-md px-3 font-mono
             bg-white text-gray-900 placeholder-gray-400
-            focus:outline-none focus:ring-1
-            focus:ring-primary/30 focus:border-primary
+            focus:outline-none focus:ring-2
+            focus:ring-ring/40 focus:border-primary
           "
         />
       )}
@@ -123,9 +123,9 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
           onChange('op', newOp);
         }}
         className="
-          text-xs border border-gray-200 rounded px-2 py-1.5
+          h-10 text-sm border border-input rounded-md px-3
           bg-white text-gray-700 focus:outline-none
-          focus:ring-1 focus:ring-primary/30 focus:border-primary
+          focus:ring-2 focus:ring-ring/40 focus:border-primary
         "
       >
         {OPERATORS.map(op => (
@@ -161,11 +161,11 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
               value={condition.value ?? ''}
               onChange={e => onChange('value', e.target.value)}
               className="
-                flex-1 min-w-0 text-xs border border-gray-200
-                rounded px-2 py-1.5
+                flex-1 min-w-0 h-10 text-sm border border-input
+                rounded-md px-3
                 bg-white text-gray-900
-                focus:outline-none focus:ring-1
-                focus:ring-primary/30 focus:border-primary
+                focus:outline-none focus:ring-2
+                focus:ring-ring/40 focus:border-primary
               "
             >
               <option value="">Select value...</option>
@@ -183,11 +183,11 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
               value={String(condition.value ?? '')}
               onChange={e => onChange('value', e.target.value === 'true')}
               className="
-                flex-1 min-w-0 text-xs border border-gray-200
-                rounded px-2 py-1.5
+                flex-1 min-w-0 h-10 text-sm border border-input
+                rounded-md px-3
                 bg-white text-gray-900
-                focus:outline-none focus:ring-1
-                focus:ring-primary/30 focus:border-primary
+                focus:outline-none focus:ring-2
+                focus:ring-ring/40 focus:border-primary
               "
             >
               <option value="">Select...</option>
@@ -223,11 +223,11 @@ function ConditionRow({ condition, onChange, onRemove, canRemove, disabled, attr
               }
             }}
             className="
-              flex-1 min-w-0 text-xs border border-gray-200
-              rounded px-2 py-1.5 font-mono
+              flex-1 min-w-0 h-10 text-sm border border-input
+              rounded-md px-3 font-mono
               bg-white text-gray-900 placeholder-gray-400
-              focus:outline-none focus:ring-1
-              focus:ring-primary/30 focus:border-primary
+              focus:outline-none focus:ring-2
+              focus:ring-ring/40 focus:border-primary
             "
           />
         );
@@ -296,7 +296,7 @@ function PolicyPriorityEffectFields({ priority, onPriorityChange, effect, onEffe
         <Label className="text-xs text-gray-500 uppercase tracking-wider">
           Effect
         </Label>
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+        <div className="flex w-fit rounded-md border border-gray-200 overflow-hidden">
           {['ALLOW', 'DENY'].map(eff => (
             <button
               key={eff}
@@ -304,13 +304,13 @@ function PolicyPriorityEffectFields({ priority, onPriorityChange, effect, onEffe
               disabled={disabled}
               onClick={() => onEffectChange(eff)}
               className={`
-                px-4 py-2 text-sm font-semibold
+                inline-flex w-24 items-center justify-center py-2 text-sm font-semibold
                 transition-colors
                 disabled:opacity-50 disabled:cursor-not-allowed
                 ${effect === eff
                   ? eff === 'ALLOW'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-red-600 text-white'
+                    ? 'bg-success text-success-foreground'
+                    : 'bg-destructive text-destructive-foreground'
                   : 'bg-white text-gray-600 hover:bg-gray-50'
                 }
               `}
@@ -480,6 +480,11 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
         <div className="flex items-center gap-2 flex-shrink-0 ml-4">
           {policy.status !== 'archived' && (
             <>
+              {isDirty && policy.status === 'active' && (
+                <div className="text-xs text-warning bg-warning-soft border border-warning/30 rounded-md px-3 py-1.5 mr-1">
+                  Editing a live policy — changes take effect immediately on save
+                </div>
+              )}
               {isDirty && (
                 <Button
                   size="sm"
@@ -500,7 +505,11 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
                 onClick={handleSave}
                 disabled={updateMutation.isPending}
               >
-                {updateMutation.isPending ? 'Saving...' : 'Save Draft'}
+                {updateMutation.isPending
+                  ? 'Saving...'
+                  : policy.status === 'active'
+                  ? 'Save Changes'
+                  : 'Save Draft'}
               </Button>
             </>
           )}
@@ -508,7 +517,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
           {policy.status === 'draft' && (
             <Button
               size="sm"
-              className="bg-green-600 hover:bg-green-700 text-white"
+              className="bg-success hover:bg-success/90 text-success-foreground"
               onClick={() => statusMutation.mutate('active')}
               disabled={statusMutation.isPending}
             >
@@ -519,7 +528,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
             <Button
               size="sm"
               variant="outline"
-              className="text-amber-600 border-amber-200 hover:bg-amber-50"
+              className="text-warning border-warning/30 hover:bg-warning-soft"
               onClick={() => statusMutation.mutate('archived')}
               disabled={statusMutation.isPending}
             >
@@ -531,7 +540,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
               <Button
                 size="sm"
                 variant="outline"
-                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                className="text-destructive border-destructive/30 hover:bg-destructive-soft"
                 onClick={() => {
                   if (window.confirm('Are you sure you want to permanently delete this policy? This cannot be undone.')) {
                     deleteMutation.mutate();
@@ -544,7 +553,7 @@ function PolicyEditorPanel({ policy, versions, onDelete, attributeDefs }) {
               <Button
                 size="sm"
                 variant="outline"
-                className="text-green-600 border-green-200 hover:bg-green-50"
+                className="text-success border-success/30 hover:bg-success-soft"
                 onClick={() => statusMutation.mutate('active')}
                 disabled={statusMutation.isPending}
               >

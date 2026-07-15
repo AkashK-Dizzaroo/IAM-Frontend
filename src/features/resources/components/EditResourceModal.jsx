@@ -396,7 +396,7 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
                             }
                           }}
                           disabled={isPending}
-                          className="rounded-sm p-0.5 text-muted-foreground hover:text-amber-600 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                          className="rounded-sm p-0.5 text-muted-foreground hover:text-warning hover:bg-warning-soft transition-colors disabled:opacity-50"
                           aria-label={`Unlink ${app.name ?? app.key}`}
                           title="Unlink from this resource"
                         >
@@ -411,10 +411,10 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
                     <Badge
                       key={appId}
                       variant="outline"
-                      className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 text-xs font-medium bg-green-50 text-green-700 border-green-200"
+                      className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 text-xs font-medium bg-success-soft text-success border-success/25"
                     >
                       {app.name ?? app.key}
-                      <span className="text-[10px] font-normal text-green-500">new</span>
+                      <span className="text-[10px] font-normal text-success">new</span>
                       <button
                         type="button"
                         onClick={() =>
@@ -423,7 +423,7 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
                           )
                         }
                         disabled={isPending}
-                        className="rounded-sm p-0.5 text-green-600 hover:text-destructive hover:bg-red-50 transition-colors disabled:opacity-50"
+                        className="rounded-sm p-0.5 text-success hover:text-destructive hover:bg-destructive-soft transition-colors disabled:opacity-50"
                         aria-label={`Remove ${app.name ?? app.key}`}
                         title="Undo"
                       >
@@ -531,11 +531,11 @@ export function EditResourceModal({ open, onOpenChange, resource, onSuccess }) {
               This application will be removed from <strong>{resource?.name}</strong> on save.
             </p>
             {removeAppChildren.length > 0 && (
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 min-w-0">
-                <p className="text-xs font-medium text-amber-800 mb-1.5">
+              <div className="rounded-md bg-warning-soft border border-warning/25 p-3 min-w-0">
+                <p className="text-xs font-medium text-warning mb-1.5">
                   All {removeAppChildren.length} sub-resource{removeAppChildren.length === 1 ? '' : 's'} under this container will also be unlinked:
                 </p>
-                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto min-w-0">
+                <ul className="text-xs text-warning space-y-0.5 max-h-32 overflow-y-auto min-w-0">
                   {removeAppChildren.slice(0, 10).map((c) => (
                     <li key={c._id ?? c.id} className="break-words">• {c.name}</li>
                   ))}

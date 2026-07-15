@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Dizzaroo Web UI Addendum v0.1 — theme variables.
+ * Values are HSL triplets consumed by tailwind.config.js (`hsl(var(--token))`).
+ *
+ * Brand sources of truth (Brand Manual 2024):
+ *   --primary       #1E73BE  → 208 73% 43%
+ *   --primary-600   #1E6091  → 206 66% 34%
+ *   --accent-green  #76C893  → 141 43% 62%
+ *   --accent-teal   #168AAD  → 194 77% 38%
+ */
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -10,19 +20,39 @@
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 263.4 70% 50.4%;
-    --primary-foreground: 210 40% 98%;
+
+    /* Brand — Deep Blue primary, white text on primary actions */
+    --primary: 208 73% 43%;
+    --primary-600: 206 66% 34%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Brand accents */
+    --accent-green: 141 43% 62%;
+    --accent-teal: 194 77% 38%;
+
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+
+    /* Semantic feedback — solid fill + white text; `soft` = light tint surface */
+    --success: 142 71% 32%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 141 60% 95%;
+    --warning: 32 95% 40%;
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 45 96% 94%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 0 78% 96%;
+
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 263.4 70% 50.4%;
+    --ring: 208 73% 43%;
+
+    /* radius.md (8px) — buttons, inputs, chips, small cards */
     --radius: 0.5rem;
   }
 
@@ -33,19 +63,34 @@
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 263.4 70% 50.4%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --primary: 208 70% 52%;
+    --primary-600: 208 66% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --accent-green: 141 43% 55%;
+    --accent-teal: 194 70% 45%;
+
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
+
+    --success: 142 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 143 45% 12%;
+    --warning: 35 92% 48%;
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 36 45% 12%;
+    --destructive: 0 63% 45%;
     --destructive-foreground: 210 40% 98%;
+    --destructive-soft: 0 45% 14%;
+
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 263.4 70% 50.4%;
+    --ring: 208 70% 52%;
   }
 }
 
@@ -54,8 +99,28 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    @apply bg-background text-foreground font-sans;
   }
 }
 
+/* Slim, unobtrusive scrollbars for the sidebar and other scroll panes. */
+@layer utilities {
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: hsl(var(--border));
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.4);
+  }
+}

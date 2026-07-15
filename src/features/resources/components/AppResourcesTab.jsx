@@ -30,8 +30,8 @@ import {
   Link2,
   ChevronDown,
   ChevronRight,
-  FolderOpen,
-  ShieldCheck,
+  Folder,
+  FileText,
 } from "lucide-react";
 import { EditResourceModal } from "./EditResourceModal";
 import { LinkResourceModal } from "./LinkResourceModal";
@@ -269,7 +269,7 @@ export function AppResourcesTab({ application }) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+          className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
           title="Edit resource (changes saved globally)"
           onClick={() => { setEditingResource(r); setEditModalOpen(true); }}
         >
@@ -280,7 +280,7 @@ export function AppResourcesTab({ application }) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+          className="h-8 w-8 text-warning hover:text-warning hover:bg-warning-soft"
           title="Unlink from this application"
           onClick={() => handleUnlink(r)}
           disabled={unlinkingId === id}
@@ -330,8 +330,8 @@ export function AppResourcesTab({ application }) {
 
             <div className="flex items-center gap-2 min-w-0">
               {isL2
-                ? <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0" />
-                : <FolderOpen className="w-4 h-4 text-green-500 shrink-0" />}
+                ? <Folder className="w-4 h-4 text-accent-teal shrink-0" />
+                : <FileText className="w-4 h-4 text-muted-foreground shrink-0" />}
               <span className="truncate text-sm text-gray-700">{node.name}</span>
               <Badge variant="outline" className="text-[10px] px-1 h-4 bg-white shrink-0">
                 L{node.level}
@@ -350,8 +350,8 @@ export function AppResourcesTab({ application }) {
             </div>
             <div className="w-[80px]">
               {active
-                ? <Badge className="bg-green-100 text-green-800 border-green-200 text-[10px] h-5 px-1.5">Active</Badge>
-                : <Badge className="bg-red-100 text-red-800 border-red-200 text-[10px] h-5 px-1.5">Inactive</Badge>}
+                ? <Badge className="bg-success-soft text-success border-success/25 text-[10px] h-5 px-1.5">Active</Badge>
+                : <Badge className="bg-destructive-soft text-destructive border-destructive/25 text-[10px] h-5 px-1.5">Inactive</Badge>}
             </div>
             <div className="flex-1 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
               <RowActions r={node} />
@@ -456,7 +456,7 @@ export function AppResourcesTab({ application }) {
 
       {/* Errors */}
       {error && (
-        <div className="rounded-md bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
+        <div className="rounded-md bg-destructive-soft border border-destructive/25 text-destructive px-4 py-3 text-sm">
           {error?.message ?? "Failed to load resources"}
         </div>
       )}
@@ -519,7 +519,7 @@ export function AppResourcesTab({ application }) {
                       .filter(Boolean);
                     const classification = r.metadata?.classification ?? null;
                     return (
-                      <tr key={id} className={`group ${selectedIds.has(id) ? 'bg-blue-50/40' : ''}`}>
+                      <tr key={id} className={`group ${selectedIds.has(id) ? 'bg-primary/10/40' : ''}`}>
                         <td className="pl-4 pr-2 py-3 w-10">
                           <Checkbox
                             checked={selectedIds.has(id)}
@@ -545,8 +545,8 @@ export function AppResourcesTab({ application }) {
                         </td>
                         <td className="px-4 py-3">
                           {active
-                            ? <Badge className="bg-green-100 text-green-800 border-green-200">Active</Badge>
-                            : <Badge className="bg-red-100 text-red-800 border-red-200">Inactive</Badge>}
+                            ? <Badge className="bg-success-soft text-success border-success/25">Active</Badge>
+                            : <Badge className="bg-destructive-soft text-destructive border-destructive/25">Inactive</Badge>}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <RowActions r={r} />
@@ -618,7 +618,7 @@ export function AppResourcesTab({ application }) {
                   const id = r._id ?? r.id;
                   return (
                     <li key={id} className="flex items-start gap-2">
-                      <Unlink className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                      <Unlink className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
                       <span className="break-words min-w-0 flex-1">{r.name}</span>
                       <Badge variant="outline" className="text-[10px] shrink-0">L{r.level}</Badge>
                     </li>
@@ -629,11 +629,11 @@ export function AppResourcesTab({ application }) {
               )}
             </ul>
             {bulkCascadedChildren.length > 0 && (
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 min-w-0">
-                <p className="text-xs font-medium text-amber-800 mb-1.5">
+              <div className="rounded-md bg-warning-soft border border-warning/25 p-3 min-w-0">
+                <p className="text-xs font-medium text-warning mb-1.5">
                   {bulkCascadedChildren.length} sub-resource{bulkCascadedChildren.length === 1 ? '' : 's'} under the selected container{selectedIds.size === 1 ? '' : 's'} will also be unlinked:
                 </p>
-                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto min-w-0">
+                <ul className="text-xs text-warning space-y-0.5 max-h-32 overflow-y-auto min-w-0">
                   {bulkCascadedChildren.slice(0, 10).map((c) => (
                     <li key={c._id ?? c.id} className="break-words">• {c.name}</li>
                   ))}
@@ -664,11 +664,11 @@ export function AppResourcesTab({ application }) {
               This resource will be removed from <strong>{application?.name ?? application?.key}</strong> but will still exist globally.
             </p>
             {unlinkTargetChildren.length > 0 && (
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 min-w-0">
-                <p className="text-xs font-medium text-amber-800 mb-1.5">
+              <div className="rounded-md bg-warning-soft border border-warning/25 p-3 min-w-0">
+                <p className="text-xs font-medium text-warning mb-1.5">
                   All {unlinkTargetChildren.length} sub-resource{unlinkTargetChildren.length === 1 ? '' : 's'} under this container will also be unlinked:
                 </p>
-                <ul className="text-xs text-amber-700 space-y-0.5 max-h-32 overflow-y-auto min-w-0">
+                <ul className="text-xs text-warning space-y-0.5 max-h-32 overflow-y-auto min-w-0">
                   {unlinkTargetChildren.slice(0, 10).map((c) => (
                     <li key={c._id ?? c.id} className="break-words">• {c.name}</li>
                   ))}

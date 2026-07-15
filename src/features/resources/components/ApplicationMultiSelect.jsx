@@ -115,7 +115,7 @@ export function ApplicationMultiSelect({
                   />
                   {!appSupportsL2(app) && (
                     <span
-                      className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                      className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-warning-soft text-warning"
                       title="L2 not supported — Level 3 will use Unassigned Level 2"
                     >
                       No L2 Support

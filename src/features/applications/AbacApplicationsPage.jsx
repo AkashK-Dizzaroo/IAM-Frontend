@@ -388,7 +388,7 @@ export function AbacApplicationsPage() {
       );
     }
     return (
-      <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 font-normal">
+      <Badge className="bg-primary/10 text-primary border-primary/25 font-normal">
         first_applicable
       </Badge>
     );

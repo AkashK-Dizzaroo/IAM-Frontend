@@ -42,7 +42,7 @@ const NAMESPACES = ["subject", "resource", "action", "environment"];
 
 const NAMESPACE_BADGE = {
   subject: "bg-blue-50 text-blue-700 border-blue-200",
-  resource: "bg-purple-50 text-purple-700 border-purple-200",
+  resource: "bg-accent-teal/10 text-accent-teal border-accent-teal/25",
   action: "bg-teal-50 text-teal-700 border-teal-200",
   environment: "bg-gray-100 text-gray-600 border-gray-200",
 };
@@ -453,7 +453,7 @@ function AttributeForm({
                 value="true"
                 checked={form.is_user_requestable === true}
                 onChange={() => setForm({ ...form, is_user_requestable: true })}
-                className="accent-indigo-600"
+                className="accent-primary"
               />
               <span className="text-sm">Yes</span>
             </label>
@@ -466,7 +466,7 @@ function AttributeForm({
                 onChange={() =>
                   setForm({ ...form, is_user_requestable: false })
                 }
-                className="accent-indigo-600"
+                className="accent-primary"
               />
               <span className="text-sm">No</span>
             </label>
@@ -939,7 +939,7 @@ export function AppAttributesPage() {
   const bulkDeleteOverflow = selectedIds.size > 5 ? selectedIds.size - 5 : 0;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1402,12 +1402,12 @@ function AttributeTreeNode({
               </Badge>
             )}
             {node.isMultiValued && (
-              <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px]">
+              <Badge className="bg-accent-teal/10 text-accent-teal border-accent-teal/25 text-[10px]">
                 Multi
               </Badge>
             )}
             {node.isUserRequestable && (
-              <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">
+              <Badge className="bg-primary/10 text-primary border-primary/25 text-[10px]">
                 Requestable
               </Badge>
             )}

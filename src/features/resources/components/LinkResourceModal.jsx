@@ -18,8 +18,8 @@ import {
   Link2,
   ChevronDown,
   ChevronRight,
-  FolderOpen,
-  ShieldCheck,
+  Folder,
+  FileText,
   RefreshCw,
 } from "lucide-react";
 
@@ -193,8 +193,8 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
 
           {/* Icon */}
           {isL2
-            ? <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0" />
-            : <FolderOpen className="w-4 h-4 text-green-500 shrink-0" />}
+            ? <Folder className="w-4 h-4 text-accent-teal shrink-0" />
+            : <FileText className="w-4 h-4 text-muted-foreground shrink-0" />}
 
           {/* Name + meta */}
           <div className="flex-1 min-w-0">
@@ -202,7 +202,7 @@ export function LinkResourceModal({ open, onOpenChange, applicationId, onSuccess
               <span className="text-sm font-medium text-gray-900 truncate">{node.name}</span>
               <Badge variant="outline" className="text-[10px] px-1 h-4 shrink-0">L{node.level}</Badge>
               {(node.resource_status ?? node.metadata?.resource_status) === 'inactive' && (
-                <Badge className="bg-red-100 text-red-700 text-[10px] px-1 h-4 shrink-0">Inactive</Badge>
+                <Badge className="bg-destructive-soft text-destructive text-[10px] px-1 h-4 shrink-0">Inactive</Badge>
               )}
             </div>
             <p className="text-[11px] text-gray-400 font-mono mt-0.5 truncate">{uid}</p>

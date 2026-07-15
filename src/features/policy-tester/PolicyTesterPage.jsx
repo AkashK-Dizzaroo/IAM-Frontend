@@ -203,7 +203,7 @@ function ResourceSearchPicker({ onSelect, applicationId }) {
       )}
       renderItem={(r) => (
         <div className="flex items-center gap-3 px-3 py-2.5">
-          <span className="flex-shrink-0 w-6 h-6 rounded bg-purple-100 text-purple-600 flex items-center justify-center text-[9px] font-bold">
+          <span className="flex-shrink-0 w-6 h-6 rounded bg-accent-teal/15 text-accent-teal flex items-center justify-center text-[9px] font-bold">
             L{r.level ?? '?'}
           </span>
           <div className="flex-1 min-w-0">
@@ -283,7 +283,7 @@ function SubjectAttributesPreview({ userId, appKey }) {
                 <AttrList label="Hub Attributes" color="text-blue-600" attrs={hubAttrs} />
               )}
               {appAttrs.length > 0 && (
-                <AttrList label="App Attributes" color="text-purple-600" attrs={appAttrs} />
+                <AttrList label="App Attributes" color="text-accent-teal" attrs={appAttrs} />
               )}
               <p className="text-[10px] text-gray-400 italic">Hub attrs take precedence on key collision.</p>
             </>
@@ -318,11 +318,11 @@ function ResourceAttributesPreview({ resourceId }) {
   if (!resourceId) return null;
 
   return (
-    <div className="border border-purple-200 rounded-md bg-purple-50 overflow-hidden mt-2">
+    <div className="border border-accent-teal/25 rounded-md bg-accent-teal/10 overflow-hidden mt-2">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-accent-teal hover:bg-accent-teal/15 transition-colors"
       >
         <span className="flex items-center gap-1.5">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -336,18 +336,18 @@ function ResourceAttributesPreview({ resourceId }) {
       </button>
 
       {open && (
-        <div className="border-t border-purple-200 px-3 py-2.5">
+        <div className="border-t border-accent-teal/25 px-3 py-2.5">
           {isFetching ? (
-            <p className="text-xs text-purple-400 text-center py-2">Loading…</p>
+            <p className="text-xs text-accent-teal/70 text-center py-2">Loading…</p>
           ) : entries.length === 0 ? (
-            <p className="text-xs text-purple-400 italic">No attributes stored for this resource.</p>
+            <p className="text-xs text-accent-teal/70 italic">No attributes stored for this resource.</p>
           ) : (
             <div className="space-y-1">
               {entries.map(([k, v]) => (
                 <div key={k} className="flex items-center gap-2 text-xs">
-                  <span className="font-mono text-purple-600 flex-shrink-0">{k}</span>
-                  <span className="text-purple-300">→</span>
-                  <span className="font-mono text-purple-900 truncate">
+                  <span className="font-mono text-accent-teal flex-shrink-0">{k}</span>
+                  <span className="text-accent-teal/50">→</span>
+                  <span className="font-mono text-foreground truncate">
                     {Array.isArray(v) ? v.join(', ') : String(v ?? '')}
                   </span>
                 </div>
@@ -403,9 +403,9 @@ function AttrList({ label, color, attrs }) {
 
 const TYPE_BADGE = {
   string:   'bg-blue-50 text-blue-600',
-  number:   'bg-purple-50 text-purple-600',
-  boolean:  'bg-green-50 text-green-600',
-  enum:     'bg-amber-50 text-amber-600',
+  number:   'bg-accent-teal/10 text-accent-teal',
+  boolean:  'bg-success-soft text-success',
+  enum:     'bg-warning-soft text-warning',
   list:     'bg-orange-50 text-orange-600',
   datetime: 'bg-pink-50 text-pink-600',
 };
@@ -437,11 +437,11 @@ function ListTagInput({ value, onChange, allowedValues, placeholder }) {
   };
 
   return (
-    <div className="flex-1 min-w-0 flex flex-wrap gap-1 items-center border border-gray-200 rounded px-2 py-1 bg-white focus-within:ring-1 focus-within:ring-primary/30 focus-within:border-primary min-h-[32px]">
+    <div className="flex-1 min-w-0 flex flex-wrap gap-1 items-center border border-input rounded-md px-3 py-1 bg-white focus-within:ring-2 focus-within:ring-ring/40 focus-within:border-primary min-h-10">
       {tags.map((t) => (
         <span key={t} className="flex items-center gap-1 bg-orange-100 text-orange-800 text-[10px] font-semibold px-1.5 py-0.5 rounded">
           {t}
-          <button type="button" onClick={() => removeTag(t)} className="hover:text-red-600 leading-none">×</button>
+          <button type="button" onClick={() => removeTag(t)} className="hover:text-destructive leading-none">×</button>
         </span>
       ))}
       {allowedValues?.length > 0 ? (
@@ -507,8 +507,8 @@ function ActionAttrRow({ attr, attrDefs, onChange, onRemove }) {
               className={`text-xs px-2.5 py-1 rounded font-semibold border transition-colors ${
                 attr.value === v
                   ? v === 'true'
-                    ? 'bg-green-500 text-white border-green-500'
-                    : 'bg-red-400 text-white border-red-400'
+                    ? 'bg-success text-success-foreground border-success'
+                    : 'bg-destructive text-destructive-foreground border-destructive'
                   : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
               }`}
             >
@@ -523,7 +523,7 @@ function ActionAttrRow({ attr, attrDefs, onChange, onRemove }) {
         <select
           value={attr.value}
           onChange={(e) => onChange({ ...attr, value: e.target.value })}
-          className="flex-1 min-w-0 text-xs border border-gray-200 rounded px-2 py-1.5 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary"
+          className="flex-1 min-w-0 h-10 text-sm border border-input rounded-md px-3 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary"
         >
           <option value="">Select…</option>
           {allowedValues.map((v) => <option key={v} value={v}>{v}</option>)}
@@ -550,7 +550,7 @@ function ActionAttrRow({ attr, attrDefs, onChange, onRemove }) {
             <select
               value={attr.key}
               onChange={(e) => handleKeyChange(e.target.value)}
-              className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 font-mono bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary pr-5"
+              className="w-full h-10 text-sm border border-input rounded-md px-3 font-mono bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary pr-5"
             >
               <option value="">Select…</option>
               {attrDefs.map((d) => (
@@ -596,7 +596,7 @@ function ActionAttrRow({ attr, attrDefs, onChange, onRemove }) {
           />
         )}
 
-        <Button variant="ghost" size="icon" onClick={onRemove} className="text-gray-400 hover:text-red-500 flex-shrink-0">
+        <Button variant="ghost" size="icon" onClick={onRemove} className="text-gray-400 hover:text-destructive flex-shrink-0">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
           </svg>
@@ -683,7 +683,7 @@ function ActionSection({ form, setForm, actionDefs }) {
         <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</Label>
         {actionDefs.length > 0 && (
           <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-            {hasTabDefs && <span className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded font-medium">tab access</span>}
+            {hasTabDefs && <span className="bg-success-soft text-success px-1.5 py-0.5 rounded font-medium">tab access</span>}
             {hasListDefs && <span className="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded font-medium">child actions</span>}
           </div>
         )}
@@ -721,7 +721,7 @@ function ActionSection({ form, setForm, actionDefs }) {
         </button>
 
         {actionDefs.length === 0 && (
-          <p className="text-[11px] text-amber-600">
+          <p className="text-[11px] text-warning">
             No action attributes defined for this app yet.
           </p>
         )}
@@ -741,7 +741,7 @@ function ResolvedAttributesPanel({ attrs, defaultOpen = false }) {
 
   const namespaces = [
     { label: 'Subject',     key: 'subject',    color: 'text-blue-700'   },
-    { label: 'Resource',    key: 'resource',   color: 'text-purple-700' },
+    { label: 'Resource',    key: 'resource',   color: 'text-accent-teal' },
     { label: 'Action',      key: 'action',     color: 'text-teal-700'   },
     { label: 'Environment', key: 'environment', color: 'text-gray-700'  },
   ];
@@ -926,8 +926,8 @@ export function PolicyTesterPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-6xl mx-auto flex flex-col gap-3 h-[calc(100vh-8rem)]">
-      <div className="px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium flex-shrink-0">
+    <div className="flex flex-col gap-3 h-[calc(100vh-8rem)]">
+      <div className="px-3 py-2 rounded-md bg-warning-soft border border-warning/25 text-warning text-xs font-medium flex-shrink-0">
         This page is under development. Results may be incomplete or change without notice.
       </div>
 
@@ -967,7 +967,7 @@ export function PolicyTesterPage() {
                 <button
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, selectedUser: null }))}
-                  className="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors"
+                  className="text-gray-400 hover:text-destructive flex-shrink-0 transition-colors"
                   title="Remove user"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1012,20 +1012,20 @@ export function PolicyTesterPage() {
 
             {form.selectedResource ? (
               /* Selected resource card */
-              <div className="flex items-center gap-2.5 px-3 py-2.5 bg-purple-50 border border-purple-200 rounded-md">
-                <span className="flex items-center justify-center w-7 h-7 rounded bg-purple-100 text-purple-700 text-[10px] font-bold flex-shrink-0">
+              <div className="flex items-center gap-2.5 px-3 py-2.5 bg-accent-teal/10 border border-accent-teal/25 rounded-md">
+                <span className="flex items-center justify-center w-7 h-7 rounded bg-accent-teal/15 text-accent-teal text-[10px] font-bold flex-shrink-0">
                   L{form.selectedResource.level ?? '?'}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-purple-800 truncate">{form.selectedResource.name}</p>
+                  <p className="text-sm font-semibold text-accent-teal truncate">{form.selectedResource.name}</p>
                   {form.selectedResource.externalId && (
-                    <p className="text-[10px] text-purple-400 font-mono truncate">{form.selectedResource.externalId}</p>
+                    <p className="text-[10px] text-accent-teal/70 font-mono truncate">{form.selectedResource.externalId}</p>
                   )}
                 </div>
                 <button
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, selectedResource: null }))}
-                  className="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors"
+                  className="text-gray-400 hover:text-destructive flex-shrink-0 transition-colors"
                   title="Remove resource"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1077,7 +1077,7 @@ export function PolicyTesterPage() {
                       list[i] = { key: e.target.value, value: '' };
                       setForm((f) => ({ ...f, environmentAttrs: list }));
                     }}
-                    className="w-40 flex-shrink-0 text-xs border border-gray-200 rounded px-2 py-1.5 font-mono bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                    className="w-40 flex-shrink-0 h-10 text-sm border border-input rounded-md px-3 font-mono bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-ring/40"
                   >
                     <option value="">Select…</option>
                     {environmentDefs.map((d) => (
@@ -1111,7 +1111,7 @@ export function PolicyTesterPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setForm((f) => ({ ...f, environmentAttrs: f.environmentAttrs.filter((_, idx) => idx !== i) }))}
-                  className="text-gray-400 hover:text-red-500 flex-shrink-0"
+                  className="text-gray-400 hover:text-destructive flex-shrink-0"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
@@ -1143,7 +1143,7 @@ export function PolicyTesterPage() {
             </Button>
             <Button
               variant="outline"
-              className="flex-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+              className="flex-1 border-warning/40 text-warning hover:bg-warning-soft"
               onClick={() => handleTest(true)}
               disabled={!canEvaluate}
               title="Includes draft policies without writing to audit logs"
@@ -1169,20 +1169,20 @@ export function PolicyTesterPage() {
 
               {/* Decision banner */}
               <div className={`p-6 rounded-lg border flex items-center justify-between ${
-                result.effect === 'PERMIT' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                result.effect === 'PERMIT' ? 'bg-success-soft border-success/25' : 'bg-destructive-soft border-destructive/25'
               }`}>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className={`text-2xl font-bold ${result.effect === 'PERMIT' ? 'text-green-700' : 'text-red-700'}`}>
+                    <h3 className={`text-2xl font-bold ${result.effect === 'PERMIT' ? 'text-success' : 'text-destructive'}`}>
                       {result.effect}
                     </h3>
                     {result.dryRun && (
-                      <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 border border-amber-300 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-warning-soft text-warning border border-warning/40 px-2 py-0.5 rounded-full">
                         Simulation
                       </span>
                     )}
                   </div>
-                  <p className={`text-sm mt-1 ${result.effect === 'PERMIT' ? 'text-green-600' : 'text-red-700'}`}>
+                  <p className={`text-sm mt-1 ${result.effect === 'PERMIT' ? 'text-success' : 'text-destructive'}`}>
                     {result.reason || (result.effect === 'PERMIT' ? 'Decision reached.' : 'No matching PERMIT policy.')}
                   </p>
                 </div>
@@ -1210,23 +1210,23 @@ export function PolicyTesterPage() {
                         <div
                           key={`${p.scope}-${p.policyId ?? i}`}
                           className={`p-3 rounded text-sm flex justify-between items-center shadow-sm border ${
-                            isDecisiveDeny ? 'bg-red-50 border-red-300' : 'bg-white border-gray-200'
+                            isDecisiveDeny ? 'bg-destructive-soft border-destructive/40' : 'bg-white border-gray-200'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            {isDecisiveDeny && <span className="text-red-500 text-xs shrink-0">▶</span>}
-                            <span className={`font-medium truncate ${isDecisiveDeny ? 'text-red-800' : 'text-gray-800'}`}>
+                            {isDecisiveDeny && <span className="text-destructive text-xs shrink-0">▶</span>}
+                            <span className={`font-medium truncate ${isDecisiveDeny ? 'text-destructive' : 'text-gray-800'}`}>
                               {p.policyName ?? p.name ?? 'Policy'}
                             </span>
-                            {isDecisiveDeny && <span className="text-[10px] text-red-600 font-semibold shrink-0">decisive</span>}
+                            {isDecisiveDeny && <span className="text-[10px] text-destructive font-semibold shrink-0">decisive</span>}
                           </div>
                           <div className="flex items-center gap-2 shrink-0 ml-2">
                             {p.isDraft && (
-                              <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded uppercase">draft</span>
+                              <span className="text-[10px] font-semibold bg-warning-soft text-warning border border-warning/25 px-2 py-0.5 rounded uppercase">draft</span>
                             )}
                             <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded uppercase">{p.scope}</span>
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                              p.effect === 'PERMIT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              p.effect === 'PERMIT' ? 'bg-success-soft text-success' : 'bg-destructive-soft text-destructive'
                             }`}>{p.effect}</span>
                           </div>
                         </div>
@@ -1245,7 +1245,7 @@ export function PolicyTesterPage() {
                       <div key={`cf-${p.policyId ?? i}`} className="bg-white border border-gray-200 p-3 rounded text-sm flex justify-between items-center opacity-60">
                         <span className="font-medium text-gray-700">{p.policyName ?? 'Policy'}</span>
                         <div className="flex items-center gap-2">
-                          {p.isDraft && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded uppercase">draft</span>}
+                          {p.isDraft && <span className="text-[10px] font-semibold bg-warning-soft text-warning border border-warning/25 px-2 py-0.5 rounded uppercase">draft</span>}
                           <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded uppercase">{p.scope}</span>
                           <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-2 py-0.5 rounded uppercase">cond. failed</span>
                         </div>
@@ -1265,7 +1265,7 @@ export function PolicyTesterPage() {
               {result.obligations?.length > 0 && (
                 <div>
                   <Label className="text-gray-500 uppercase text-xs tracking-wider mb-3 block">Obligations Triggered</Label>
-                  <pre className="bg-gray-800 text-green-400 p-4 rounded text-xs font-mono overflow-x-auto shadow-inner">
+                  <pre className="bg-gray-800 text-accent-green p-4 rounded text-xs font-mono overflow-x-auto shadow-inner">
                     {JSON.stringify(result.obligations, null, 2)}
                   </pre>
                 </div>
@@ -1275,14 +1275,14 @@ export function PolicyTesterPage() {
               {result.skippedDraftPolicies?.length > 0 && (
                 <div>
                   <Label className="text-gray-500 uppercase text-xs tracking-wider mb-3 block">Draft Policies Skipped</Label>
-                  <div className="bg-amber-50 border border-amber-200 rounded p-3 space-y-2">
-                    <p className="text-xs text-amber-700 font-medium">
+                  <div className="bg-warning-soft border border-warning/25 rounded p-3 space-y-2">
+                    <p className="text-xs text-warning font-medium">
                       Use <span className="font-bold">Dry-run</span> to include these in evaluation.
                     </p>
-                    <ul className="text-sm text-amber-800 space-y-1">
+                    <ul className="text-sm text-warning space-y-1">
                       {result.skippedDraftPolicies.map((p) => (
                         <li key={p.policyId} className="flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-warning flex-shrink-0" />
                           {p.policyName}
                         </li>
                       ))}
@@ -1295,7 +1295,7 @@ export function PolicyTesterPage() {
               {result.coverageGaps?.length > 0 && (
                 <div>
                   <Label className="text-gray-500 uppercase text-xs tracking-wider mb-3 block">Coverage Gaps</Label>
-                  <ul className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded p-3 space-y-1">
+                  <ul className="text-sm text-warning bg-warning-soft border border-warning/25 rounded p-3 space-y-1">
                     {result.coverageGaps.map((g, i) => <li key={i}>{g}</li>)}
                   </ul>
                 </div>

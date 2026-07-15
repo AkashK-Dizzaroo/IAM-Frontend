@@ -88,7 +88,7 @@ export function MultiValueDropdown({ allowedValues = [], selectedValues = [], on
           type="button"
           variant="outline"
           disabled={disabled}
-          className="flex-1 min-w-0 h-8 px-2 justify-between text-xs font-normal"
+          className="flex-1 min-w-0 h-10 px-3 justify-between text-sm font-normal"
         >
           <span className="truncate text-left">{summary}</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
@@ -280,14 +280,14 @@ export function ConditionGroupRenderer({
 
       <div className="space-y-2">
         {tree.conditions.length === 0 && (
-          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-xs text-gray-400 text-center">
+          <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-xs text-gray-400 text-center">
             No conditions — add one below.
           </div>
         )}
         {tree.conditions.map((child, i) => {
           if (child && typeof child === 'object' && 'operator' in child && 'conditions' in child) {
             return (
-              <div key={i} className="rounded-lg border border-gray-200 bg-white p-2.5">
+              <div key={i} className="rounded-md border border-gray-200 bg-white p-3">
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <ConditionGroupRenderer tree={child} onChange={newGroup => updateChild(i, newGroup)}
@@ -448,7 +448,7 @@ export function ConditionJsonEditor({ tree, onChange, disabled }) {
                 className="
                   w-full px-3 py-3 text-[11px] font-mono
                   text-gray-900 bg-white resize-none
-                  focus:outline-none focus:ring-1 focus:ring-primary/30
+                  focus:outline-none focus:ring-2 focus:ring-ring/40
                   min-h-[120px] max-h-64
                 "
                 placeholder='Paste condition JSON here, e.g. {"operator":"AND","conditions":[...]}'
@@ -583,8 +583,8 @@ export function EmptyEditorState({ onNewPolicy }) {
                     justify-center text-center p-8">
       <div className="w-12 h-12 rounded-full bg-gray-100
                       flex items-center justify-center mb-4">
-        <svg width="24" height="24" fill="none"
-          stroke="#9CA3AF" strokeWidth="1.5" viewBox="0 0 24 24">
+        <svg width="24" height="24" fill="none" className="text-muted-foreground"
+          stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12
                    a2 2 0 002-2V8z"/>
           <polyline points="14 2 14 8 20 8"/>

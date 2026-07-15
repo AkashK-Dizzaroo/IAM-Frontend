@@ -43,11 +43,11 @@ function getHubAttr(user, key) {
   return v != null ? String(v) : null;
 }
 
-const USER_STATUS_STYLES = {
-  active:            'bg-green-100 text-green-700 border-green-200',
-  inactive:          'bg-gray-100 text-gray-500 border-gray-200',
-  deleted:           'bg-red-100 text-red-700 border-red-200',
-  pending:           'bg-yellow-100 text-yellow-700 border-yellow-200',
+const USER_STATUS_VARIANTS = {
+  active:   'success',
+  inactive: 'neutral',
+  deleted:  'error',
+  pending:  'warning',
 };
 
 const STATUS_FILTER_OPTIONS = [
@@ -67,9 +67,52 @@ const ROLE_FILTER_OPTIONS = [
 
 function UserStatusBadge({ status }) {
   const s = (status || '').toLowerCase();
-  const cls = USER_STATUS_STYLES[s] ?? 'bg-gray-100 text-gray-500 border-gray-200';
+  const variant = USER_STATUS_VARIANTS[s] ?? 'neutral';
   const label = s ? s.replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
-  return <Badge className={cls}>{label}</Badge>;
+  return <Badge variant={variant}>{label}</Badge>;
+}
+
+// Inline badge wrap for the Assigned Applications column — shows up to
+// MAX_VISIBLE_APPS chips, then collapses the rest into a "+N more" chip whose
+// tooltip lists the hidden applications, keeping row heights uniform.
+const MAX_VISIBLE_APPS = 3;
+
+function AssignedAppsCell({ apps }) {
+  if (apps.length === 0) {
+    return <span className="text-xs italic text-gray-400">No access</span>;
+  }
+  const visible = apps.slice(0, MAX_VISIBLE_APPS);
+  const hidden = apps.slice(MAX_VISIBLE_APPS);
+  return (
+    <div className="flex max-w-xs flex-wrap items-center gap-1">
+      {visible.map((app) => (
+        <span
+          key={app.name}
+          title={app.isOwner ? `${app.name} (Owner)` : app.name}
+          className={`inline-flex max-w-[140px] items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${
+            app.isOwner
+              ? 'border-warning/25 bg-warning-soft text-warning'
+              : 'border-border bg-muted text-muted-foreground'
+          }`}
+        >
+          <span className="truncate">{app.name}</span>
+          {app.isOwner && (
+            <span className="inline-flex shrink-0 items-center rounded bg-warning/15 px-1 text-[10px] font-semibold uppercase tracking-wide">
+              Owner
+            </span>
+          )}
+        </span>
+      ))}
+      {hidden.length > 0 && (
+        <span
+          title={hidden.map((a) => (a.isOwner ? `${a.name} (Owner)` : a.name)).join('\n')}
+          className="inline-flex cursor-default items-center rounded-md border border-primary/25 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+        >
+          +{hidden.length} more
+        </span>
+      )}
+    </div>
+  );
 }
 
 function formatLastLogin(value) {
@@ -688,7 +731,7 @@ export function AbacUsersPage() {
 
   // ── render ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6">
+    <div>
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -773,17 +816,17 @@ export function AbacUsersPage() {
       )}
 
       {!isLoading && filteredUsers.length > 0 && (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="border border-gray-200 rounded-lg overflow-x-auto">
+          <table className="w-full min-w-[900px] text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-left">
-                <th className="px-4 py-3 font-medium text-gray-600">User</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Organization</th>
-                <th className="px-4 py-3 font-medium text-gray-600">HUB Role</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Assigned Applications</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Status</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Last Login</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Actions</th>
+              <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <th className="px-4 py-3">User</th>
+                <th className="px-4 py-3">Organization</th>
+                <th className="px-4 py-3">HUB Role</th>
+                <th className="px-4 py-3">Assigned Applications</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Last Login</th>
+                <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -809,45 +852,18 @@ export function AbacUsersPage() {
                     <td className="px-4 py-3 text-sm text-gray-700">{org ?? '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
-                        {globalRoles.map((r) => {
-                          let cls = 'bg-gray-100 text-gray-700 border-gray-200'; // Default: USER
-                          if (r === 'HUB_OWNER') cls = 'bg-purple-100 text-purple-800 border-purple-200';
-
-                          return (
-                            <span key={r} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
-                              {r.replaceAll('_', ' ')}
-                            </span>
-                          );
-                        })}
+                        {globalRoles.map((r) => (
+                          <Badge key={r} variant={r === 'HUB_OWNER' ? 'info' : 'neutral'} className="font-medium">
+                            {r.replaceAll('_', ' ')}
+                          </Badge>
+                        ))}
                         {globalRoles.length === 0 && (
                           <span className="text-xs text-gray-400 italic">No roles</span>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      {assignedApps.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {assignedApps.map((app) => (
-                            <span
-                              key={app.name}
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${
-                                app.isOwner
-                                  ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                  : 'bg-gray-100 text-gray-700 border-gray-200'
-                              }`}
-                            >
-                              {app.name}
-                              {app.isOwner && (
-                                <span className="ml-0.5 inline-flex items-center rounded bg-amber-200/70 px-1 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
-                                  Owner
-                                </span>
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400 italic">No access</span>
-                      )}
+                      <AssignedAppsCell apps={assignedApps} />
                     </td>
                     <td className="px-4 py-3">
                       <UserStatusBadge status={userStatus} />

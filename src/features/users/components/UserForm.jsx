@@ -512,7 +512,7 @@ export function UserForm({
               <button
                 type="button"
                 onClick={() => setAttrPickerOpen((o) => !o)}
-                className="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium py-1 px-1 rounded transition-colors hover:bg-indigo-50"
+                className="flex items-center gap-1.5 text-sm text-primary hover:text-primary font-medium py-1 px-1 rounded transition-colors hover:bg-primary/10"
               >
                 <Plus className="w-4 h-4" />
                 Add attribute

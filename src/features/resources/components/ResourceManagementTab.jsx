@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Plus, Search, RefreshCw, Pencil, Trash2, ShieldCheck,
-  ChevronDown, ChevronRight, FolderOpen, AlertTriangle,
+  ChevronDown, ChevronRight, AppWindow, Folder, FileText, AlertTriangle,
 } from "lucide-react";
 import { ResourceRegistrationModal } from "./ResourceRegistrationModal";
 import { EditResourceModal } from "./EditResourceModal";
@@ -375,7 +375,7 @@ export function ResourceManagementTab() {
       return (
         <>
           <div
-            className="group flex items-center py-2 px-4 bg-amber-50/60 border-b border-amber-100 transition-colors"
+            className="group flex items-center py-2 px-4 bg-warning-soft/60 border-b border-warning/25 transition-colors"
             style={{ paddingLeft: `${level * 24 + 16}px` }}
           >
             <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -384,26 +384,26 @@ export function ResourceManagementTab() {
                   <button
                     type="button"
                     onClick={() => toggleExpand(node.treeId)}
-                    className="p-1 hover:bg-amber-200 rounded transition-colors"
+                    className="p-1 hover:bg-warning/20 rounded transition-colors"
                   >
                     {isExpanded
-                      ? <ChevronDown className="w-4 h-4 text-amber-600" />
-                      : <ChevronRight className="w-4 h-4 text-amber-600" />}
+                      ? <ChevronDown className="w-4 h-4 text-warning" />
+                      : <ChevronRight className="w-4 h-4 text-warning" />}
                   </button>
                 ) : (
                   <div className="w-4 h-4" />
                 )}
               </div>
               <div className="flex items-center gap-2 min-w-0">
-                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                <span className="truncate text-sm font-bold text-amber-800">{node.name}</span>
-                <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px] px-1.5 h-4">
+                <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
+                <span className="truncate text-sm font-bold text-warning">{node.name}</span>
+                <Badge className="bg-warning-soft text-warning border-warning/25 text-[10px] px-1.5 h-4">
                   {node.children.length}
                 </Badge>
               </div>
             </div>
             <div className="w-[500px]">
-              <span className="text-[10px] text-amber-600 italic">Not linked to any application</span>
+              <span className="text-[10px] text-warning italic">Not linked to any application</span>
             </div>
           </div>
           {isExpanded && hasChildren && (
@@ -449,9 +449,9 @@ export function ResourceManagementTab() {
             </div>
 
             <div className="flex items-center gap-2 min-w-0">
-              {isApp && <FolderOpen className="w-4 h-4 text-blue-500 shrink-0" />}
-              {isL2 && <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0" />}
-              {isL3 && <RefreshCw className="w-4 h-4 text-green-500 shrink-0" />}
+              {isApp && <AppWindow className="w-4 h-4 text-primary shrink-0" />}
+              {isL2 && <Folder className="w-4 h-4 text-accent-teal shrink-0" />}
+              {isL3 && <FileText className="w-4 h-4 text-muted-foreground shrink-0" />}
 
               <span className={`truncate text-sm ${isApp ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
                 {node.name}
@@ -486,9 +486,9 @@ export function ResourceManagementTab() {
             <div className="w-[80px]">
               {!isApp && (
                 active ? (
-                  <Badge className="bg-green-100 text-green-800 border-green-200 text-[10px] h-5 px-1.5">Active</Badge>
+                  <Badge className="bg-success-soft text-success border-success/25 text-[10px] h-5 px-1.5">Active</Badge>
                 ) : (
-                  <Badge className="bg-red-100 text-red-800 border-red-200 text-[10px] h-5 px-1.5">Inactive</Badge>
+                  <Badge className="bg-destructive-soft text-destructive border-destructive/25 text-[10px] h-5 px-1.5">Inactive</Badge>
                 )
               )}
             </div>
@@ -503,7 +503,7 @@ export function ResourceManagementTab() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        className="h-7 w-7 text-primary hover:text-primary hover:bg-primary/10"
                         onClick={() => {
                           setEditingResource(node);
                           setEditModalOpen(true);
@@ -514,7 +514,7 @@ export function ResourceManagementTab() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50"
+                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive-soft"
                         onClick={() => handleDelete(node)}
                         disabled={deletingId === rid}
                       >
@@ -641,7 +641,7 @@ export function ResourceManagementTab() {
       </div>
 
       {error && (
-        <div className="rounded-md bg-red-50 border border-red-200 text-red-700 px-4 py-3">
+        <div className="rounded-md bg-destructive-soft border border-destructive/25 text-destructive px-4 py-3">
           {error?.message ?? "Failed to load resources"}
         </div>
       )}
@@ -709,7 +709,7 @@ export function ResourceManagementTab() {
                     const classification = r.metadata?.classification ?? null;
 
                     return (
-                      <tr key={rid} className={`group ${selectedIds.has(rid) ? 'bg-blue-50/40' : ''}`}>
+                      <tr key={rid} className={`group ${selectedIds.has(rid) ? 'bg-primary/10/40' : ''}`}>
                         {isHubOwner && (
                           <td className="pl-4 pr-2 py-3 w-10">
                             <Checkbox
@@ -757,11 +757,11 @@ export function ResourceManagementTab() {
                         </td>
                         <td className="px-4 py-3">
                           {active ? (
-                            <Badge className="bg-green-100 text-green-800 border-green-200">
+                            <Badge className="bg-success-soft text-success border-success/25">
                               Active
                             </Badge>
                           ) : (
-                            <Badge className="bg-red-100 text-red-800 border-red-200">
+                            <Badge className="bg-destructive-soft text-destructive border-destructive/25">
                               Inactive
                             </Badge>
                           )}
@@ -774,7 +774,7 @@ export function ResourceManagementTab() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                    className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
                                     title="Edit resource"
                                     onClick={() => {
                                       setEditingResource(r);
@@ -786,7 +786,7 @@ export function ResourceManagementTab() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive-soft"
                                     title="Delete resource"
                                     onClick={() => handleDelete(r)}
                                     disabled={deletingId === rid}
@@ -881,15 +881,15 @@ export function ResourceManagementTab() {
           </DialogHeader>
 
           {deleteLinkedApps.length > 0 && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-2">
-              <p className="text-sm font-medium text-amber-800 flex items-center gap-1.5">
+            <div className="rounded-md border border-warning/25 bg-warning-soft p-3 space-y-2">
+              <p className="text-sm font-medium text-warning flex items-center gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 Unlink from these applications first:
               </p>
               <ul className="space-y-1">
                 {deleteLinkedApps.map((app) => (
-                  <li key={app.id} className="text-sm text-amber-700 flex items-center gap-2">
-                    <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                  <li key={app.id} className="text-sm text-warning flex items-center gap-2">
+                    <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-warning/70" />
                     {app.name}
                     <Badge variant="outline" className="text-[10px] ml-auto">{app.key}</Badge>
                   </li>

@@ -248,7 +248,7 @@ export function AppResourceRegistrationModal({ open, onOpenChange, application, 
               {nameError ? (
                 <p className="text-sm text-destructive mt-1">{nameError}</p>
               ) : nameAvailable === true ? (
-                <p className="text-xs text-green-600 mt-1">✓ Name is available</p>
+                <p className="text-xs text-success mt-1">✓ Name is available</p>
               ) : nameAvailable === false ? (
                 <p className="text-xs text-destructive mt-1">✗ Name already taken</p>
               ) : (

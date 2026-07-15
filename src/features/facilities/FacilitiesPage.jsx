@@ -188,8 +188,8 @@ function statusBadge(status) {
 function typeBadge(type) {
   const colors = {
     HOSPITAL: 'bg-blue-100 text-blue-800 border-blue-200',
-    CLINIC: 'bg-purple-100 text-purple-800 border-purple-200',
-    RESEARCH_CENTER: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    CLINIC: 'bg-accent-teal/15 text-accent-teal border-accent-teal/25',
+    RESEARCH_CENTER: 'bg-primary/10 text-primary border-primary/25',
     PHYSICIAN_OFFICE: 'bg-teal-100 text-teal-800 border-teal-200',
     OTHER: 'bg-gray-100 text-gray-700 border-gray-200',
   };

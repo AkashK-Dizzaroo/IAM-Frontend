@@ -118,7 +118,7 @@ export function AuditPage() {
   const rows = (Array.isArray(body?.data) ? body.data : []).map(toViewModel);
 
   return (
-    <div className="max-w-7xl mx-auto flex flex-col h-full gap-4 pb-6">
+    <div className="flex flex-col h-full gap-4 pb-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Audit Trail</h1>
         <p className="text-sm text-gray-500 mt-1">

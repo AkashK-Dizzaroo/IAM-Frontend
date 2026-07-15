@@ -25,6 +25,7 @@ export const DashboardPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return localStorage.getItem("iam_sidebar_collapsed") === "true";
@@ -101,9 +102,11 @@ export const DashboardPage = () => {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
       <TopHeader
+        user={user}
         effectiveRoles={effectiveRoles}
         onBackToHub={handleBackToHub}
         onLogout={() => logout()}
+        onToggleMobileNav={() => setMobileNavOpen((v) => !v)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -123,10 +126,12 @@ export const DashboardPage = () => {
           navigate={navigate}
           location={location}
           user={user}
+          mobileOpen={mobileNavOpen}
+          onMobileClose={() => setMobileNavOpen(false)}
         />
 
         <main className="flex-1 overflow-y-auto bg-gray-50 min-h-0 transition-all duration-200">
-          <div className="p-6 max-w-6xl mx-auto">
+          <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
             <Outlet />
           </div>
         </main>

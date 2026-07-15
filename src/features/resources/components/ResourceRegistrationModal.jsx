@@ -413,7 +413,7 @@ export function ResourceRegistrationModal({
               {nameError ? (
                 <p className="text-sm text-destructive mt-1">{nameError}</p>
               ) : nameAvailable === true ? (
-                <p className="text-xs text-green-600 mt-1">✓ Name is available</p>
+                <p className="text-xs text-success mt-1">✓ Name is available</p>
               ) : nameAvailable === false ? (
                 <p className="text-xs text-destructive mt-1">✗ Name already taken</p>
               ) : (
@@ -619,7 +619,7 @@ export function ResourceRegistrationModal({
                             <button
                               type="button"
                               onClick={() => removeOverride(i)}
-                              className="mt-5 text-gray-400 hover:text-red-500 shrink-0"
+                              className="mt-5 text-gray-400 hover:text-destructive shrink-0"
                             >
                               <X className="h-4 w-4" />
                             </button>

@@ -26,7 +26,7 @@ function parseAttrRef(message) {
 
 const NAMESPACE_COLORS = {
   subject: 'bg-blue-50 text-blue-700 border-blue-200',
-  resource: 'bg-purple-50 text-purple-700 border-purple-200',
+  resource: 'bg-accent-teal/10 text-accent-teal border-accent-teal/25',
   action: 'bg-teal-50 text-teal-700 border-teal-200',
   environment: 'bg-gray-100 text-gray-600 border-gray-200',
 };
@@ -90,7 +90,7 @@ export function CoverageGapsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium">
         This page is under development. Results may be incomplete or change without notice.
       </div>

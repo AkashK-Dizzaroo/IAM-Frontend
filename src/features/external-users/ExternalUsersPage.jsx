@@ -349,7 +349,7 @@ const USER_TYPE_META = {
   },
   CRO_USER: {
     label: "CRO User",
-    cls: "bg-purple-100 text-purple-800 border-purple-200",
+    cls: "bg-accent-teal/15 text-accent-teal border-accent-teal/25",
   },
   VENDOR_USER: {
     label: "Vendor User",
@@ -361,7 +361,7 @@ const USER_TYPE_META = {
   },
   SPONSOR_USER: {
     label: "Sponsor Partner",
-    cls: "bg-indigo-100 text-indigo-800 border-indigo-200",
+    cls: "bg-primary/10 text-primary border-primary/25",
   },
   AUDITOR_USER: {
     label: "Auditor & Inspector",
