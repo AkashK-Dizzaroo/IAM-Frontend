@@ -53,6 +53,8 @@ export const QK = {
   applicationsModal: ['resources', 'applicationsModal'],
   // App list fetched for study-access resource resolution (stable, shared across panels).
   appsForStudyAccess: ['abac', 'applications', 'forStudyAccess'],
+  // App categories used to group the Hub tile grid (AbacApplicationsPage category admin + app picker).
+  appCategories: ['applications', 'categories'],
 
   // ── Study resources ────────────────────────────────────────────────────────
   // Active resources for a specific app (used in user-attribute panels for study pickers).

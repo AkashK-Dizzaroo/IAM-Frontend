@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/apiClient';
 import { applicationService } from './api/applicationService';
+import { categoryService } from './api/categoryService';
 import { QK } from '@/lib/queryKeys';
 import { useAuth } from '@/features/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -11,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { AppWindow, Pencil, Plus, Copy, Check, RefreshCw } from 'lucide-react';
+import { AppWindow, Pencil, Plus, Copy, Check, RefreshCw, FolderTree, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -95,6 +96,8 @@ export function AbacApplicationsPage() {
     features: '',
     combiningStrategy: 'deny_overrides',
     ssoRedirectUris: '',
+    categoryId: '',
+    categorySortOrder: 0,
   });
 
   // Owner selection state
@@ -148,8 +151,15 @@ export function AbacApplicationsPage() {
     staleTime: 2 * 60_000,
   });
 
+  const { data: categoriesRes } = useQuery({
+    queryKey: QK.appCategories,
+    queryFn: categoryService.getCategories,
+    staleTime: 60_000,
+  });
+
   const apps = useMemo(() => normalizeList(mongoRes), [mongoRes]);
   const abacApps = useMemo(() => normalizeList(abacRes), [abacRes]);
+  const categories = useMemo(() => normalizeList(categoriesRes), [categoriesRes]);
 
   const mergedApps = useMemo(() => {
     return apps.map((app) => {
@@ -181,6 +191,8 @@ export function AbacApplicationsPage() {
       features: '',
       combiningStrategy: 'deny_overrides',
       ssoRedirectUris: '',
+      categoryId: '',
+      categorySortOrder: 0,
     });
     setSelectedOwners([]);
     setOwnerSearch('');
@@ -206,6 +218,8 @@ export function AbacApplicationsPage() {
       ssoRedirectUris: Array.isArray(app.ssoRedirectUris)
         ? app.ssoRedirectUris.join('\n')
         : '',
+      categoryId: app.categoryId ?? '',
+      categorySortOrder: app.categorySortOrder ?? 0,
     });
     setSelectedOwners(
       Array.isArray(app.owners)
@@ -229,6 +243,7 @@ export function AbacApplicationsPage() {
       queryClient.invalidateQueries({ queryKey: QK.applicationsRaw });
       queryClient.invalidateQueries({ queryKey: QK.applications });
       queryClient.invalidateQueries({ queryKey: QK.users() });
+      queryClient.invalidateQueries({ queryKey: QK.appCategories });
       refetch();
       closePanel();
       setCreatedCredentials({
@@ -253,6 +268,7 @@ export function AbacApplicationsPage() {
       queryClient.invalidateQueries({ queryKey: QK.applicationsRaw });
       queryClient.invalidateQueries({ queryKey: QK.applications });
       queryClient.invalidateQueries({ queryKey: QK.users() });
+      queryClient.invalidateQueries({ queryKey: QK.appCategories });
       refetch();
       closePanel();
     },
@@ -263,6 +279,106 @@ export function AbacApplicationsPage() {
         variant: 'destructive',
       }),
   });
+
+  // ── Category management ──
+  const [categoryPanel, setCategoryPanel] = useState(null); // null | 'create' | category object
+  const [categoryForm, setCategoryForm] = useState({ key: '', label: '', description: '', sortOrder: 0 });
+
+  const closeCategoryPanel = () => setCategoryPanel(null);
+
+  const openCreateCategory = () => {
+    setCategoryForm({ key: '', label: '', description: '', sortOrder: categories.length });
+    setCategoryPanel('create');
+  };
+
+  const openEditCategory = (category) => {
+    setCategoryForm({
+      key: category.key ?? '',
+      label: category.label ?? '',
+      description: category.description ?? '',
+      sortOrder: category.sortOrder ?? 0,
+    });
+    setCategoryPanel(category);
+  };
+
+  const createCategoryMutation = useMutation({
+    mutationFn: (payload) => apiClient.post('/app-categories', payload),
+    onSuccess: () => {
+      toast({ title: 'Category created' });
+      queryClient.invalidateQueries({ queryKey: QK.appCategories });
+      closeCategoryPanel();
+    },
+    onError: (err) =>
+      toast({
+        title: 'Error',
+        description: err.response?.data?.error || err.message,
+        variant: 'destructive',
+      }),
+  });
+
+  const updateCategoryMutation = useMutation({
+    mutationFn: ({ id, payload }) => apiClient.patch(`/app-categories/${id}`, payload),
+    onSuccess: () => {
+      toast({ title: 'Category updated' });
+      queryClient.invalidateQueries({ queryKey: QK.appCategories });
+      closeCategoryPanel();
+    },
+    onError: (err) =>
+      toast({
+        title: 'Error',
+        description: err.response?.data?.error || err.message,
+        variant: 'destructive',
+      }),
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (id) => apiClient.delete(`/app-categories/${id}`),
+    onSuccess: () => {
+      toast({ title: 'Category deleted' });
+      queryClient.invalidateQueries({ queryKey: QK.appCategories });
+    },
+    onError: (err) =>
+      toast({
+        title: 'Error',
+        description: err.response?.data?.error || err.message,
+        variant: 'destructive',
+      }),
+  });
+
+  const handleCategorySubmit = () => {
+    if (!categoryForm.label?.trim()) {
+      toast({ title: 'Validation', description: 'Label is required', variant: 'destructive' });
+      return;
+    }
+    if (categoryPanel === 'create') {
+      const key = categoryForm.key.trim().toLowerCase();
+      if (!key || !/^[a-z0-9-]+$/.test(key)) {
+        toast({
+          title: 'Validation',
+          description: 'Key is required and may only contain lowercase letters, numbers, and hyphens',
+          variant: 'destructive',
+        });
+        return;
+      }
+      createCategoryMutation.mutate({
+        key,
+        label: categoryForm.label.trim(),
+        description: categoryForm.description?.trim() || undefined,
+        sortOrder: Number(categoryForm.sortOrder) || 0,
+      });
+    } else if (categoryPanel) {
+      updateCategoryMutation.mutate({
+        id: categoryPanel.id,
+        payload: {
+          label: categoryForm.label.trim(),
+          description: categoryForm.description?.trim() || undefined,
+          sortOrder: Number(categoryForm.sortOrder) || 0,
+        },
+      });
+    }
+  };
+
+  const categorySaving = createCategoryMutation.isPending || updateCategoryMutation.isPending;
 
   const handleSubmit = () => {
     if (!form.name?.trim()) {
@@ -281,10 +397,10 @@ export function AbacApplicationsPage() {
       });
       return;
     }
-    if (form.baseUrl?.trim() && !/^https?:\/\/.+/.test(form.baseUrl.trim())) {
+    if (form.isActive && !/^https?:\/\/.+/.test(form.baseUrl?.trim() ?? '')) {
       toast({
         title: 'Validation',
-        description: 'Base URL must start with http:// or https://',
+        description: 'Base URL must start with http:// or https:// for active applications',
         variant: 'destructive',
       });
       return;
@@ -326,6 +442,8 @@ export function AbacApplicationsPage() {
           .split('\n')
           .map((u) => u.trim())
           .filter(Boolean),
+        categoryId: form.categoryId || undefined,
+        categorySortOrder: form.categorySortOrder,
       });
     } else if (panel && panel !== 'create') {
       const id = panel._id || panel.id;
@@ -349,6 +467,8 @@ export function AbacApplicationsPage() {
             .split('\n')
             .map((u) => u.trim())
             .filter(Boolean),
+          categoryId: form.categoryId || null,
+          categorySortOrder: form.categorySortOrder,
         },
       });
     }
@@ -411,6 +531,65 @@ export function AbacApplicationsPage() {
         )}
       </div>
 
+      <div className="mb-8 border border-gray-200 rounded-lg overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <FolderTree className="h-4 w-4 text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-900">Hub categories</h2>
+            <span className="text-xs text-gray-500">Groups shown on the Application Hub tile grid</span>
+          </div>
+          {isHubOwner && (
+            <Button variant="outline" size="sm" onClick={openCreateCategory}>
+              <Plus className="h-3.5 w-3.5" />
+              Create Category
+            </Button>
+          )}
+        </div>
+        {categories.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-gray-500 text-center">
+            No categories yet — apps will appear under &quot;Other Applications&quot; on the Hub until you create one.
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {categories
+              .slice()
+              .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+              .map((category) => (
+                <div key={category.id} className="px-4 py-2.5 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-900 text-sm">{category.label}</span>
+                      <Badge variant="outline" className="text-xs font-normal text-gray-500">
+                        {category.appCount ?? 0} app{category.appCount === 1 ? '' : 's'}
+                      </Badge>
+                      <span className="text-xs text-gray-400">order: {category.sortOrder ?? 0}</span>
+                    </div>
+                    {category.description && (
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{category.description}</p>
+                    )}
+                  </div>
+                  {isHubOwner && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="ghost" size="sm" onClick={() => openEditCategory(category)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={(category.appCount ?? 0) > 0 || deleteCategoryMutation.isPending}
+                        title={(category.appCount ?? 0) > 0 ? 'Reassign its apps before deleting' : 'Delete category'}
+                        onClick={() => deleteCategoryMutation.mutate(category.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+
       {isLoading && (
         <div className="space-y-2">
           {[...new Array(6)].map((_, i) => (
@@ -455,6 +634,7 @@ export function AbacApplicationsPage() {
                 <th className="px-4 py-3 font-medium text-gray-600">
                   Combining strategy
                 </th>
+                <th className="px-4 py-3 font-medium text-gray-600">Category</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Owners</th>
                 <th className="px-4 py-3 font-medium text-gray-600">Actions</th>
               </tr>
@@ -487,6 +667,16 @@ export function AbacApplicationsPage() {
                   </td>
                   <td className="px-4 py-3">
                     {strategyBadge(app.combiningStrategy)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const cat = categories.find((c) => c.id === app.categoryId);
+                      return cat ? (
+                        <Badge variant="outline" className="font-normal text-gray-600">{cat.label}</Badge>
+                      ) : (
+                        <span className="text-xs text-gray-400">Uncategorized</span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 max-w-[220px]">
                     {Array.isArray(app.owners) && app.owners.length > 0 ? (
@@ -615,13 +805,18 @@ export function AbacApplicationsPage() {
                   <div className="space-y-1.5">
                     <Label>Base URL</Label>
                     <Input
-                      type="url"
+                      type="text"
                       value={form.baseUrl}
                       onChange={(e) =>
                         setForm((p) => ({ ...p, baseUrl: e.target.value }))
                       }
                       placeholder="https://"
                     />
+                    {!form.isActive && (
+                      <p className="text-xs text-gray-500">
+                        App is inactive — a placeholder like &quot;#&quot; is fine until it has a real URL
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -684,6 +879,35 @@ export function AbacApplicationsPage() {
                     />
                     <p className="text-xs text-gray-500">
                       Comma-separated, e.g. Data Collection, CRF Design
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Category</Label>
+                    <select
+                      value={form.categoryId}
+                      onChange={(e) => setForm((p) => ({ ...p, categoryId: e.target.value }))}
+                      className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">Uncategorized (Other Applications)</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500">
+                      Which Hub tile-grid group this app appears under
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Position within category</Label>
+                    <Input
+                      type="number"
+                      value={form.categorySortOrder}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, categorySortOrder: Number(e.target.value) || 0 }))
+                      }
+                    />
+                    <p className="text-xs text-gray-500">
+                      Lower numbers appear first within the category
                     </p>
                   </div>
                 </div>
@@ -851,6 +1075,73 @@ export function AbacApplicationsPage() {
             </Button>
             <Button onClick={handleSubmit} disabled={saving}>
               {panel === 'create' ? 'Register' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={categoryPanel !== null} onOpenChange={(o) => { if (!o) closeCategoryPanel(); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {categoryPanel === 'create' ? 'Create Category' : 'Edit Category'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 mt-2">
+            <div className="space-y-1.5">
+              <Label>Key</Label>
+              <Input
+                value={categoryForm.key}
+                onChange={(e) =>
+                  setCategoryForm((p) => ({
+                    ...p,
+                    key: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+                  }))
+                }
+                className="font-mono"
+                disabled={categoryPanel !== 'create'}
+                placeholder="study-design"
+              />
+              <p className="text-xs text-gray-500">
+                Lowercase letters, numbers, and hyphens only — cannot be changed after creation
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Label</Label>
+              <Input
+                value={categoryForm.label}
+                onChange={(e) => setCategoryForm((p) => ({ ...p, label: e.target.value }))}
+                placeholder="Study Design & Documentation Setup"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Textarea
+                rows={2}
+                value={categoryForm.description}
+                onChange={(e) => setCategoryForm((p) => ({ ...p, description: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Sort order</Label>
+              <Input
+                type="number"
+                value={categoryForm.sortOrder}
+                onChange={(e) =>
+                  setCategoryForm((p) => ({ ...p, sortOrder: Number(e.target.value) || 0 }))
+                }
+              />
+              <p className="text-xs text-gray-500">Lower numbers appear first on the Hub</p>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={closeCategoryPanel} disabled={categorySaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleCategorySubmit} disabled={categorySaving}>
+              {categoryPanel === 'create' ? 'Create' : 'Save'}
             </Button>
           </DialogFooter>
         </DialogContent>

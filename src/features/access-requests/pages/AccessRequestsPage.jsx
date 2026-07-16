@@ -266,57 +266,59 @@ function ReviewModal({ request, action, onConfirm, onCancel, loading, preservedN
         )}
 
         {/* ── Step 2: Resource Access ── */}
-        <ReviewSection
-          title={isTwoStep ? 'Step 2 · Resource Access' : 'Resource Access'}
-          done={resourceApproved}
-        >
-          <p className="text-xs text-gray-500">
-            Role and resource details from the request. Approving will sync these to the user&apos;s app attributes and mark the request as approved.
-          </p>
-          <div className="space-y-2.5 rounded-md border bg-white/70 p-4">
-            <InfoRow label="Requester">
-              <span className="font-medium">{requesterName}</span>
-            </InfoRow>
-            <InfoRow label="Application">
-              {request.application?.name || request.application?.key || '—'}
-            </InfoRow>
-            <InfoRow label="Requested Role">
-              {(request.requestedAttributes?.role || request.requestedAttributes?.requestedRole)
-                ? <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">{request.requestedAttributes?.role || request.requestedAttributes?.requestedRole}</span>
-                : <span className="text-gray-400 italic">—</span>}
-            </InfoRow>
-            <InfoRow label="Resource">
-              {request.requestedResource
-                ? <span className="break-all">{request.requestedResource.name || request.requestedResource.resourceExternalId}{request.requestedResource.level ? ` (L${request.requestedResource.level})` : ''}</span>
-                : <span className="text-gray-400 italic">Global Access</span>}
-            </InfoRow>
-            {request.requestedAttributes?.justification && (
-              <InfoRow label="Justification">
-                <span className="line-clamp-3 text-gray-600" title={request.requestedAttributes.justification}>
-                  {request.requestedAttributes.justification}
-                </span>
+        {hasResourceStep && (
+          <ReviewSection
+            title={isTwoStep ? 'Step 2 · Resource Access' : 'Resource Access'}
+            done={resourceApproved}
+          >
+            <p className="text-xs text-gray-500">
+              Role and resource details from the request. Approving will sync these to the user&apos;s app attributes and mark the request as approved.
+            </p>
+            <div className="space-y-2.5 rounded-md border bg-white/70 p-4">
+              <InfoRow label="Requester">
+                <span className="font-medium">{requesterName}</span>
               </InfoRow>
+              <InfoRow label="Application">
+                {request.application?.name || request.application?.key || '—'}
+              </InfoRow>
+              <InfoRow label="Requested Role">
+                {(request.requestedAttributes?.role || request.requestedAttributes?.requestedRole)
+                  ? <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">{request.requestedAttributes?.role || request.requestedAttributes?.requestedRole}</span>
+                  : <span className="text-gray-400 italic">—</span>}
+              </InfoRow>
+              <InfoRow label="Resource">
+                {request.requestedResource
+                  ? <span className="break-all">{request.requestedResource.name || request.requestedResource.resourceExternalId}{request.requestedResource.level ? ` (L${request.requestedResource.level})` : ''}</span>
+                  : <span className="text-gray-400 italic">Global Access</span>}
+              </InfoRow>
+              {request.requestedAttributes?.justification && (
+                <InfoRow label="Justification">
+                  <span className="line-clamp-3 text-gray-600" title={request.requestedAttributes.justification}>
+                    {request.requestedAttributes.justification}
+                  </span>
+                </InfoRow>
+              )}
+            </div>
+            {resourceApproved ? (
+              <ApprovedBanner label="Resource access approved" approvedAt={progress?.resourceApprovedAt} />
+            ) : (
+              <>
+                <ReviewNotesField id="review-notes-resource" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                <div className="flex justify-end pt-1">
+                  <button
+                    className="inline-flex h-10 items-center gap-2 rounded-md bg-success px-4 text-sm font-medium text-success-foreground hover:bg-success/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+                    onClick={() => onConfirm(notes, {}, 'resource')}
+                    disabled={loading}
+                  >
+                    {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                    <CheckCircle className="h-4 w-4" />
+                    Approve Resource Access
+                  </button>
+                </div>
+              </>
             )}
-          </div>
-          {resourceApproved ? (
-            <ApprovedBanner label="Resource access approved" approvedAt={progress?.resourceApprovedAt} />
-          ) : (
-            <>
-              <ReviewNotesField id="review-notes-resource" value={notes} onChange={(e) => setNotes(e.target.value)} />
-              <div className="flex justify-end pt-1">
-                <button
-                  className="inline-flex h-10 items-center gap-2 rounded-md bg-success px-4 text-sm font-medium text-success-foreground hover:bg-success/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
-                  onClick={() => onConfirm(notes, {}, 'resource')}
-                  disabled={loading}
-                >
-                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  <CheckCircle className="h-4 w-4" />
-                  Approve Resource Access
-                </button>
-              </div>
-            </>
-          )}
-        </ReviewSection>
+          </ReviewSection>
+        )}
 
         <div className="flex justify-end pt-1">
           <button

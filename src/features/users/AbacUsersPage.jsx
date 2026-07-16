@@ -802,7 +802,6 @@ export function AbacUsersPage() {
           <div className="rounded-full bg-gray-100 p-4 mb-4"><Users className="h-8 w-8 text-gray-400" /></div>
           <h3 className="text-base font-medium text-gray-900 mb-1">No users yet</h3>
           <p className="text-sm text-gray-500 mb-4">Create a user to assign Hub attributes</p>
-          <Button onClick={openCreate}><Plus className="h-4 w-4" />New User</Button>
         </div>
       )}
 
