@@ -31,6 +31,17 @@ import {
 import { ResourceRegistrationModal } from "./ResourceRegistrationModal";
 import { EditResourceModal } from "./EditResourceModal";
 
+/**
+ * Identifies the system-managed Level-1 "application" resource row that the
+ * backend auto-creates for every Application (`metadata.type === 'application'`).
+ * These rows are undeletable/uneditable via the resource API (backend returns 409
+ * `{ details: { type: 'application_resource' } }`), so the UI must not offer
+ * Edit/Delete/Unlink/Add-App actions or bulk-select for them.
+ * @param {object} r - a resource row
+ * @returns {boolean} true if the row is a system-managed application resource
+ */
+const isAppResource = (r) => r?.metadata?.type === 'application';
+
 export function ResourceManagementTab() {
   const { effectiveRoles } = useAuth();
   const isHubOwner = effectiveRoles?.isHubOwner;
@@ -175,8 +186,9 @@ export function ResourceManagementTab() {
     }
   };
 
-  // Bulk select helpers (table view only — only leaf/L3 and L2 resources, not app nodes)
-  const selectableResources = filteredResources.filter((r) => !r.isUnassignedNode);
+  // Bulk select helpers (table view only — only leaf/L3 and L2 resources, not app nodes
+  // and not the system-managed L1 application resource, which can never be deleted)
+  const selectableResources = filteredResources.filter((r) => !r.isUnassignedNode && !isAppResource(r));
   const allSelected = selectableResources.length > 0 && selectableResources.every((r) => selectedIds.has(r._id || r.id));
   const someSelected = selectableResources.some((r) => selectedIds.has(r._id || r.id)) && !allSelected;
 
@@ -232,6 +244,29 @@ export function ResourceManagementTab() {
     if (!resources || !applications) return [];
 
     const appMap = new Map();
+
+    // Seed the app-level tree node from each app's real L1 (system-managed "application")
+    // resource, so the row is backed by actual resource data (Universal ID, resourceId,
+    // metadata) instead of being a purely synthetic label — and so apps with no L2/L3
+    // resources at all (flat apps) still get a row instead of vanishing from the tree.
+    const l1s = resources.filter(r => r.level === 1 && isAppResource(r));
+    l1s.forEach(l1 => {
+      const assignedApps = l1.assignedApplications || [];
+      assignedApps.forEach(app => {
+        const appId = (app._id || app.id || app).toString();
+        if (appMap.has(appId)) return;
+        const fullApp = applications.find(a => (a._id || a.id).toString() === appId);
+        if (fullApp) {
+          appMap.set(appId, {
+            ...fullApp,
+            type: 'application',
+            treeId: `app-${appId}`,
+            l1Resource: l1,
+            children: new Map()
+          });
+        }
+      });
+    });
 
     const l2s = resources.filter(r => r.level === 2 && !r.isUnassignedNode);
     const l3s = resources.filter(r => r.level === 3);
@@ -347,12 +382,13 @@ export function ResourceManagementTab() {
     const orphanChildren = [...orphanL2Nodes, ...orphanRootL3s]
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
+    // Every app with an L1 resource gets a row, even with zero L2/L3 children —
+    // that's the whole point for flat apps that have no project/study hierarchy.
     const result = Array.from(appMap.values())
       .map(app => ({
         ...app,
         children: Array.from(app.children.values())
       }))
-      .filter(app => app.children.length > 0)
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
     if (orphanChildren.length > 0) {
@@ -421,8 +457,12 @@ export function ResourceManagementTab() {
     const isL2 = node.type === 'resource' && node.level === 2;
     const isL3 = node.type === 'resource' && node.level === 3;
 
-    const rid = node._id || node.id;
-    const universalId = node.resourceExternalId ?? node.externalId ?? "—";
+    // For an app row, "id" and "Universal ID" come from its real L1 resource, not the
+    // Application record itself — that's what ties this row to actual resource data.
+    const rid = isApp ? (node.l1Resource?._id ?? node.l1Resource?.id ?? node._id ?? node.id) : (node._id || node.id);
+    const universalId = isApp
+      ? (node.l1Resource?.resourceExternalId ?? node.l1Resource?.externalId ?? "—")
+      : (node.resourceExternalId ?? node.externalId ?? "—");
     const active = (node.resource_status ?? node.metadata?.resource_status ?? 'active') !== 'inactive';
     const missingAppId = isAppOwner ? getMissingAppId(node) : null;
     const classification = node.metadata?.classification ?? null;
@@ -458,17 +498,15 @@ export function ResourceManagementTab() {
                 {isApp && <span className="ml-2 text-xs font-normal text-gray-500">({node.key})</span>}
               </span>
 
-              {!isApp && (
-                <Badge variant="outline" className="text-[10px] px-1 h-4 bg-white">
-                  L{node.level}
-                </Badge>
-              )}
+              <Badge variant="outline" className="text-[10px] px-1 h-4 bg-white">
+                L{isApp ? 1 : node.level}
+              </Badge>
             </div>
           </div>
 
           <div className="flex items-center gap-6 text-xs text-gray-500 w-[500px]">
             <div className="w-[120px] truncate font-mono text-[10px]" title={universalId}>
-              {!isApp && universalId}
+              {universalId}
             </div>
 
             <div className="w-[150px]">
@@ -484,12 +522,10 @@ export function ResourceManagementTab() {
             </div>
 
             <div className="w-[80px]">
-              {!isApp && (
-                active ? (
-                  <Badge className="bg-success-soft text-success border-success/25 text-[10px] h-5 px-1.5">Active</Badge>
-                ) : (
-                  <Badge className="bg-destructive-soft text-destructive border-destructive/25 text-[10px] h-5 px-1.5">Inactive</Badge>
-                )
+              {active ? (
+                <Badge className="bg-success-soft text-success border-success/25 text-[10px] h-5 px-1.5">Active</Badge>
+              ) : (
+                <Badge className="bg-destructive-soft text-destructive border-destructive/25 text-[10px] h-5 px-1.5">Inactive</Badge>
               )}
             </div>
 
@@ -597,6 +633,7 @@ export function ResourceManagementTab() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Levels</SelectItem>
+                <SelectItem value="1">Level 1 (Application)</SelectItem>
                 <SelectItem value="2">Level 2 (Project/Site)</SelectItem>
                 <SelectItem value="3">Level 3 (Study)</SelectItem>
               </SelectContent>
@@ -712,19 +749,28 @@ export function ResourceManagementTab() {
                       <tr key={rid} className={`group ${selectedIds.has(rid) ? 'bg-primary/10/40' : ''}`}>
                         {isHubOwner && (
                           <td className="pl-4 pr-2 py-3 w-10">
-                            <Checkbox
-                              checked={selectedIds.has(rid)}
-                              onCheckedChange={() => toggleSelectOne(rid)}
-                              aria-label={`Select ${r.name}`}
-                              className={selectedIds.size === 0 ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}
-                            />
+                            {!isAppResource(r) && (
+                              <Checkbox
+                                checked={selectedIds.has(rid)}
+                                onCheckedChange={() => toggleSelectOne(rid)}
+                                aria-label={`Select ${r.name}`}
+                                className={selectedIds.size === 0 ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}
+                              />
+                            )}
                           </td>
                         )}
                         <td className="px-4 py-3 text-sm font-mono text-gray-700">
                           {universalId}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                          {r.name ?? "—"}
+                          <div className="flex items-center gap-2">
+                            {r.name ?? "—"}
+                            {isAppResource(r) && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 h-4 font-normal text-gray-400 border-gray-200">
+                                System
+                              </Badge>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           L{r.level ?? "—"}
@@ -769,43 +815,49 @@ export function ResourceManagementTab() {
                         {(isHubOwner || isAppOwner) && (
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-1">
-                              {isHubOwner && (
+                              {isAppResource(r) ? (
+                                <span className="text-[10px] text-gray-400">System</span>
+                              ) : (
                                 <>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
-                                    title="Edit resource"
-                                    onClick={() => {
-                                      setEditingResource(r);
-                                      setEditModalOpen(true);
-                                    }}
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive-soft"
-                                    title="Delete resource"
-                                    onClick={() => handleDelete(r)}
-                                    disabled={deletingId === rid}
-                                  >
-                                    {deletingId === rid
-                                      ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                      : <Trash2 className="w-3.5 h-3.5" />}
-                                  </Button>
+                                  {isHubOwner && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                                        title="Edit resource"
+                                        onClick={() => {
+                                          setEditingResource(r);
+                                          setEditModalOpen(true);
+                                        }}
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive-soft"
+                                        title="Delete resource"
+                                        onClick={() => handleDelete(r)}
+                                        disabled={deletingId === rid}
+                                      >
+                                        {deletingId === rid
+                                          ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                          : <Trash2 className="w-3.5 h-3.5" />}
+                                      </Button>
+                                    </>
+                                  )}
+                                  {isAppOwner && missingAppId && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleAddMyApp(rid, missingAppId)}
+                                      disabled={addingAppToResourceId === rid}
+                                    >
+                                      {addingAppToResourceId === rid ? "Adding…" : "+ Add my App"}
+                                    </Button>
+                                  )}
                                 </>
-                              )}
-                              {isAppOwner && missingAppId && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleAddMyApp(rid, missingAppId)}
-                                  disabled={addingAppToResourceId === rid}
-                                >
-                                  {addingAppToResourceId === rid ? "Adding…" : "+ Add my App"}
-                                </Button>
                               )}
                             </div>
                           </td>

@@ -206,6 +206,10 @@ function ResourceTreeSelect({ resources, selectedResourceId, onSelect }) {
     const isSelected = selectedResourceId === id;
     const hasChildren = node.children?.length > 0;
     const isExpanded = expandedIds.has(id);
+    // The Level-1 "application" resource represents the whole app — shown as "Full
+    // Application Access" rather than its raw name, matching the Hub-Frontend request
+    // flow's resource picker.
+    const isAppResource = node.level === 1;
 
     return (
       <div key={id}>
@@ -246,9 +250,13 @@ function ResourceTreeSelect({ resources, selectedResourceId, onSelect }) {
             }`}
           />
           <span className={`text-sm truncate ${isSelected ? 'font-medium text-primary' : 'text-gray-800'}`}>
-            {node.name}
+            {isAppResource ? 'Full Application Access' : node.name}
           </span>
-          {node.level && (
+          {isAppResource ? (
+            <span className="shrink-0 text-[10px] text-gray-400 font-normal">
+              (grants access to the entire application)
+            </span>
+          ) : node.level && (
             <span className="shrink-0 text-[10px] font-mono text-gray-400 bg-gray-100 border border-gray-200 rounded px-1">
               L{node.level}
             </span>
@@ -343,8 +351,10 @@ function ResourceRoleRow({ index, row, resources, roleOptions, onChange, onRemov
         >
           {selectedResource ? (
             <span className="flex items-center gap-2 min-w-0">
-              <span className="font-medium text-gray-900 truncate">{selectedResource.name}</span>
-              {selectedResource.level && (
+              <span className="font-medium text-gray-900 truncate">
+                {selectedResource.level === 1 ? 'Full Application Access' : selectedResource.name}
+              </span>
+              {selectedResource.level && selectedResource.level !== 1 && (
                 <span className="shrink-0 text-[10px] font-mono text-gray-400 bg-gray-100 border border-gray-200 rounded px-1">
                   L{selectedResource.level}
                 </span>

@@ -38,6 +38,17 @@ import { LinkResourceModal } from "./LinkResourceModal";
 import { AppResourceRegistrationModal } from "./AppResourceRegistrationModal";
 
 /**
+ * Identifies the system-managed Level-1 "application" resource row that the
+ * backend auto-creates for every Application (`metadata.type === 'application'`).
+ * These rows are undeletable/uneditable/unlinkable via the resource API (backend returns
+ * 409 `{ details: { type: 'application_resource' } }`), so the UI must not offer
+ * Edit/Unlink actions or bulk-select for them.
+ * @param {object} r - a resource row
+ * @returns {boolean} true if the row is a system-managed application resource
+ */
+const isAppResource = (r) => r?.metadata?.type === 'application';
+
+/**
  * Per-application resource management tab.
  * Shows only resources linked to the given application.
  * Actions: Edit (global save), Unlink (removes ResourceApplication), Delete (HUB_OWNER only, deactivates globally).
@@ -99,6 +110,9 @@ export function AppResourcesTab({ application }) {
   // ── Tree view ────────────────────────────────────────────────────────────
 
   const treeData = useMemo(() => {
+    // Note: L1 (system-managed application) resource rows are intentionally excluded
+    // from the tree — only L2/L3 resources are filtered in, so a `level === 1` row can
+    // never become a tree node here (it's still visible via the Table view).
     const l2s = resources.filter((r) => r.level === 2);
     const l3s = resources.filter((r) => r.level === 3);
     const l2IdSet = new Set(l2s.map((r) => (r._id ?? r.id).toString()));
@@ -198,14 +212,17 @@ export function AppResourcesTab({ application }) {
   const unlinkTargetChildren = unlinkTarget ? getLinkedChildren(unlinkTarget) : [];
 
   // ── Bulk select helpers (table view) ─────────────────────────────────────
-  const allSelected = resources.length > 0 && resources.every((r) => selectedIds.has(r._id ?? r.id));
-  const someSelected = resources.some((r) => selectedIds.has(r._id ?? r.id)) && !allSelected;
+  // Excludes the system-managed L1 application resource — it can never be unlinked
+  // (backend returns 409), so it must not be selectable for bulk unlink.
+  const selectableResources = useMemo(() => resources.filter((r) => !isAppResource(r)), [resources]);
+  const allSelected = selectableResources.length > 0 && selectableResources.every((r) => selectedIds.has(r._id ?? r.id));
+  const someSelected = selectableResources.some((r) => selectedIds.has(r._id ?? r.id)) && !allSelected;
 
   const toggleSelectAll = () => {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(resources.map((r) => r._id ?? r.id)));
+      setSelectedIds(new Set(selectableResources.map((r) => r._id ?? r.id)));
     }
   };
 
@@ -263,6 +280,17 @@ export function AppResourcesTab({ application }) {
 
   const RowActions = ({ r }) => {
     const id = r._id ?? r.id;
+
+    // The system-managed L1 application resource can't be edited or unlinked —
+    // the backend rejects both with a 409, so don't offer them here.
+    if (isAppResource(r)) {
+      return (
+        <div className="flex items-center justify-end gap-1">
+          <span className="text-[10px] text-gray-400">System</span>
+        </div>
+      );
+    }
+
     return (
       <div className="flex items-center justify-end gap-1">
         {/* Edit — available to hub owner and app owner */}
@@ -408,6 +436,7 @@ export function AppResourcesTab({ application }) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Levels</SelectItem>
+                <SelectItem value="1">Level 1 (Application)</SelectItem>
                 <SelectItem value="2">Level 2 (Container)</SelectItem>
                 <SelectItem value="3">Level 3 (Leaf)</SelectItem>
               </SelectContent>
@@ -521,15 +550,26 @@ export function AppResourcesTab({ application }) {
                     return (
                       <tr key={id} className={`group ${selectedIds.has(id) ? 'bg-primary/10/40' : ''}`}>
                         <td className="pl-4 pr-2 py-3 w-10">
-                          <Checkbox
-                            checked={selectedIds.has(id)}
-                            onCheckedChange={() => toggleSelectOne(id)}
-                            aria-label={`Select ${r.name}`}
-                            className={selectedIds.size === 0 ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}
-                          />
+                          {!isAppResource(r) && (
+                            <Checkbox
+                              checked={selectedIds.has(id)}
+                              onCheckedChange={() => toggleSelectOne(id)}
+                              aria-label={`Select ${r.name}`}
+                              className={selectedIds.size === 0 ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}
+                            />
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs font-mono text-gray-700">{uid}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">{r.name ?? "—"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                          <div className="flex items-center gap-2">
+                            {r.name ?? "—"}
+                            {isAppResource(r) && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 h-4 font-normal text-gray-400 border-gray-200">
+                                System
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-700">L{r.level ?? "—"}</td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
