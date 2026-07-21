@@ -32,6 +32,7 @@ import {
   Building2,
   Calendar,
   Globe,
+  AppWindow,
   Bell,
   MapPin,
   Shield,
@@ -544,7 +545,7 @@ export const MyProfilePage = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">
-                    <Globe className="w-5 h-5" />
+                    <AppWindow className="w-5 h-5" />
                     Assignments
                   </CardTitle>
                   <CardDescription>
@@ -660,7 +661,7 @@ export const MyProfilePage = () => {
                         >
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-2">
-                              <Globe className="w-4 h-4 text-primary flex-shrink-0" />
+                              <AppWindow className="w-4 h-4 text-primary flex-shrink-0" />
                               <div className="break-words whitespace-normal">
                                 <div className="font-medium text-gray-900">
                                   {assignment.application?.name || assignment.application?.key || assignment.appName || "Unknown Application"}

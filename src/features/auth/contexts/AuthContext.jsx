@@ -172,7 +172,9 @@ export function AuthProvider({ children }) {
       const hubBase = getValidHubUrl().replace(/\/$/, "");
       const logoutUrl = `${hubBase}/logout`;
 
-      /* Tell Hub tabs to drop React session immediately (cookies already cleared by API). */
+      /* Tell the Hub tab that opened this one to drop its React session immediately
+         (cookies already cleared by the API call above). The opener tab syncs itself
+         via its own in-app navigation — this tab never touches or closes it. */
       try {
         const hubOrigin = new URL(hubBase).origin;
         if (typeof window !== "undefined" && window.opener && !window.opener.closed) {
@@ -185,17 +187,9 @@ export function AuthProvider({ children }) {
         /* ignore */
       }
 
-      if (typeof window !== "undefined") {
-        if (window.opener && !window.opener.closed) {
-          try {
-            window.opener.location.href = logoutUrl;
-          } catch {
-            /* ignore */
-          }
-          window.close();
-        } else if (!window.closed) {
-          window.location.href = logoutUrl;
-        }
+      // Always navigate this (IAM) tab itself, regardless of whether it has an opener.
+      if (typeof window !== "undefined" && !window.closed) {
+        window.location.href = logoutUrl;
       }
     }
   }, [clearSession]);
